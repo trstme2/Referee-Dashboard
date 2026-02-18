@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { DB, Settings } from './types'
 import { loadDB, saveDB } from './storage'
 import { supabase, supabaseConfigured } from './supabaseClient'
@@ -124,6 +124,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const mode: DataMode = supabaseConfigured ? 'supabase' : 'local'
   const userId = session?.user?.id ?? null
+  const settingsRef = useRef(db.settings)
+
+  useEffect(() => {
+    settingsRef.current = db.settings
+  }, [db.settings])
 
   useEffect(() => {
     if (!supabase) return
@@ -138,7 +143,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!userId) return
     setLoading(true)
     try {
-      await ensureUserSettingsRow(userId, db.settings)
+      await ensureUserSettingsRow(userId, settingsRef.current)
       const remote = await fetchAll(userId)
       setDb(remote)
       saveDB(remote)
@@ -147,7 +152,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [mode, userId, db.settings])
+  }, [mode, userId])
 
   useEffect(() => {
     refresh()
