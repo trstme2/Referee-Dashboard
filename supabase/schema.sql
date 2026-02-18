@@ -126,15 +126,32 @@ create table if not exists public.calendar_events (
   updated_at timestamptz not null default now()
 );
 
-alter table public.games
-  add constraint if not exists games_calendar_event_fk
-  foreign key (calendar_event_id) references public.calendar_events(id)
-  on delete set null;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'games_calendar_event_fk'
+      and conrelid = 'public.games'::regclass
+  ) then
+    alter table public.games
+      add constraint games_calendar_event_fk
+      foreign key (calendar_event_id) references public.calendar_events(id)
+      on delete set null;
+  end if;
 
-alter table public.calendar_events
-  add constraint if not exists calendar_events_linked_game_fk
-  foreign key (linked_game_id) references public.games(id)
-  on delete set null;
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'calendar_events_linked_game_fk'
+      and conrelid = 'public.calendar_events'::regclass
+  ) then
+    alter table public.calendar_events
+      add constraint calendar_events_linked_game_fk
+      foreign key (linked_game_id) references public.games(id)
+      on delete set null;
+  end if;
+end $$;
 
 create table if not exists public.expenses (
   id uuid primary key default gen_random_uuid(),
@@ -230,7 +247,8 @@ alter table public.csv_imports enable row level security;
 alter table public.csv_import_rows enable row level security;
 
 do $$
-declare t text;
+declare
+  t text;
 begin
   foreach t in array array[
     'user_settings',
@@ -238,10 +256,17 @@ begin
     'requirement_instances','requirement_activities','csv_imports','csv_import_rows'
   ]
   loop
-    execute format('create policy if not exists "select_own_%1$s" on public.%1$s for select using (auth.uid() = user_id);', t);
-    execute format('create policy if not exists "insert_own_%1$s" on public.%1$s for insert with check (auth.uid() = user_id);', t);
-    execute format('create policy if not exists "update_own_%1$s" on public.%1$s for update using (auth.uid() = user_id) with check (auth.uid() = user_id);', t);
-    execute format('create policy if not exists "delete_own_%1$s" on public.%1$s for delete using (auth.uid() = user_id);', t);
+    execute format('drop policy if exists "select_own_%1$s" on public.%1$s;', t);
+    execute format('create policy "select_own_%1$s" on public.%1$s for select using (auth.uid() = user_id);', t);
+
+    execute format('drop policy if exists "insert_own_%1$s" on public.%1$s;', t);
+    execute format('create policy "insert_own_%1$s" on public.%1$s for insert with check (auth.uid() = user_id);', t);
+
+    execute format('drop policy if exists "update_own_%1$s" on public.%1$s;', t);
+    execute format('create policy "update_own_%1$s" on public.%1$s for update using (auth.uid() = user_id) with check (auth.uid() = user_id);', t);
+
+    execute format('drop policy if exists "delete_own_%1$s" on public.%1$s;', t);
+    execute format('create policy "delete_own_%1$s" on public.%1$s for delete using (auth.uid() = user_id);', t);
   end loop;
 end $$;
 

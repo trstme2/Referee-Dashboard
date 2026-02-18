@@ -25,7 +25,7 @@ export default function AuthPage() {
       <div className="grid">
         <section className="card">
           <h2>Supabase not configured</h2>
-          <p className="small">Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code>.</p>
+          <p className="small">Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> (or <code>VITE_SUPABASE_PUBLISHABLE_KEY</code>).</p>
         </section>
       </div>
     )
@@ -57,7 +57,7 @@ export default function AuthPage() {
       if (!supabase) throw new Error('Supabase client missing')
       const { error } = await supabase.auth.signInWithOtp({
         email: e,
-        options: { emailRedirectTo: window.location.origin }
+        options: { emailRedirectTo: `${window.location.origin}/auth` }
       })
       if (error) throw error
       setMsg('Magic link sent. Check your email.')

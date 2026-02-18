@@ -27,6 +27,16 @@ export function useData() {
 
 function nowISO(){ return new Date().toISOString() }
 
+async function ensureUserSettingsRow(userId: string, settings: Settings): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const client = supabase
+  const payload = settingsToRow(settings, userId)
+  const { error } = await client
+    .from('user_settings')
+    .upsert([payload], { onConflict: 'user_id', ignoreDuplicates: true })
+  if (error) throw new Error(`Ensure user_settings: ${error.message}`)
+}
+
 async function fetchAll(userId: string): Promise<DB> {
   if (!supabase) throw new Error('Supabase not configured')
   const client = supabase
@@ -126,6 +136,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!session?.user?.id) return
     setLoading(true)
     try {
+      await ensureUserSettingsRow(session.user.id, db.settings)
       const remote = await fetchAll(session.user.id)
       setDb(remote)
       saveDB(remote)
