@@ -42,7 +42,7 @@ export default function CalendarPage() {
       const d = yyyyMmDd(new Date(e.start))
       map.set(d, [...(map.get(d) ?? []), e])
     }
-    for (const [k,v] of map) v.sort((a,b) => (a.start < b.start ? -1 : 1))
+    for (const [, v] of map) v.sort((a,b) => (a.start < b.start ? -1 : 1))
     return map
   }, [db.calendarEvents])
 

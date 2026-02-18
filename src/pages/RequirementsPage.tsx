@@ -89,7 +89,7 @@ export default function RequirementsPage() {
     for (const a of db.requirementActivities) {
       m.set(a.instanceId, [...(m.get(a.instanceId) ?? []), a])
     }
-    for (const [k,v] of m) v.sort((a,b) => (a.activityDate < b.activityDate ? -1 : 1))
+    for (const [, v] of m) v.sort((a,b) => (a.activityDate < b.activityDate ? -1 : 1))
     return m
   }, [db.requirementActivities])
 
@@ -246,4 +246,3 @@ export default function RequirementsPage() {
     </div>
   )
 }
-

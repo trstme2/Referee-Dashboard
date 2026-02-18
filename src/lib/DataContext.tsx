@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { DB, Settings } from './types'
 import { loadDB, saveDB } from './storage'
 import { supabase, supabaseConfigured } from './supabaseClient'
@@ -19,6 +19,7 @@ type DataContextValue = {
 
 const Ctx = createContext<DataContextValue | null>(null)
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useData() {
   const v = useContext(Ctx)
   if (!v) throw new Error('useData must be used within DataProvider')
@@ -122,6 +123,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null)
 
   const mode: DataMode = supabaseConfigured ? 'supabase' : 'local'
+  const userId = session?.user?.id ?? null
 
   useEffect(() => {
     if (!supabase) return
@@ -130,14 +132,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return () => { sub.subscription.unsubscribe() }
   }, [])
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setError(null)
     if (mode !== 'supabase') return
-    if (!session?.user?.id) return
+    if (!userId) return
     setLoading(true)
     try {
-      await ensureUserSettingsRow(session.user.id, db.settings)
-      const remote = await fetchAll(session.user.id)
+      await ensureUserSettingsRow(userId, db.settings)
+      const remote = await fetchAll(userId)
       setDb(remote)
       saveDB(remote)
     } catch (e: any) {
@@ -145,34 +147,36 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [mode, userId, db.settings])
 
   useEffect(() => {
-    if (mode !== 'supabase') return
-    if (!session?.user?.id) return
     refresh()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, session?.user?.id])
+  }, [refresh])
 
-  const write = async (next: DB) => {
+  const write = useCallback(async (next: DB) => {
     setError(null)
     setDb(next)
     saveDB(next)
     if (mode !== 'supabase') return
-    if (!session?.user?.id) return
+    if (!userId) return
     setLoading(true)
     try {
-      await replaceAll(session.user.id, next)
+      await replaceAll(userId, next)
     } catch (e: any) {
       setError(String(e?.message ?? e))
     } finally {
       setLoading(false)
     }
-  }
+  }, [mode, userId])
 
-  const signOut = async () => { if (supabase) await supabase.auth.signOut() }
+  const signOut = useCallback(async () => {
+    if (supabase) await supabase.auth.signOut()
+  }, [])
 
-  const value = useMemo(() => ({ mode, session, db, loading, error, refresh, write, signOut }), [mode, session, db, loading, error])
+  const value = useMemo(
+    () => ({ mode, session, db, loading, error, refresh, write, signOut }),
+    [mode, session, db, loading, error, refresh, write, signOut]
+  )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 

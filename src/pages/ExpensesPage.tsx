@@ -4,11 +4,6 @@ import type { ExpenseCategory } from '../lib/types'
 import { upsertExpenseIn, deleteExpenseIn } from '../lib/mutate'
 import { formatMoney, safeNumber } from '../lib/utils'
 
-const categories: ExpenseCategory[] = [
-  'Mileage','Gear','Uniform','Dues/Registration',
-  'Tolls','Parking','Training','Meals','Lodging','Supplies','Phone/App','Other'
-]
-
 export default function ExpensesPage() {
   const { db, write, loading } = useData()
   const [form, setForm] = useState({
