@@ -106,13 +106,54 @@ async function replaceAll(userId: string, db: DB): Promise<void> {
   const { error: sErr } = await client.from(map.userSettings).insert([settingsPayload])
   if (sErr) throw new Error(`Insert user_settings: ${sErr.message}`)
 
-  const insertOrder = ['games','calendarEvents','expenses','requirementDefinitions','requirementInstances','requirementActivities','csvImports','csvImportRows'] as const
+  // Break circular FK between games.calendar_event_id and calendar_events.linked_game_id:
+  // insert both tables with link columns null, then backfill links once both sides exist.
+  const gameRows = toRows('games', userId, db.games as any[]) as any[]
+  const calendarRows = toRows('calendarEvents', userId, db.calendarEvents as any[]) as any[]
+  for (const row of gameRows) row.calendar_event_id = null
+  for (const row of calendarRows) row.linked_game_id = null
+
+  if (gameRows.length) {
+    const { error } = await client.from(map.games).insert(gameRows)
+    if (error) throw new Error(`Insert ${map.games}: ${error.message}`)
+  }
+  if (calendarRows.length) {
+    const { error } = await client.from(map.calendarEvents).insert(calendarRows)
+    if (error) throw new Error(`Insert ${map.calendarEvents}: ${error.message}`)
+  }
+
+  const insertOrder = ['expenses','requirementDefinitions','requirementInstances','requirementActivities','csvImports','csvImportRows'] as const
   for (const k of insertOrder) {
     const t = (map as any)[k]
     const payload = toRows(k as any, userId, (db as any)[k] ?? [])
     if (!payload.length) continue
     const { error } = await client.from(t).insert(payload)
     if (error) throw new Error(`Insert ${t}: ${error.message}`)
+  }
+
+  const gameIds = new Set(db.games.map(g => g.id))
+  const calendarIds = new Set(db.calendarEvents.map(e => e.id))
+
+  for (const g of db.games) {
+    if (!g.calendarEventId) continue
+    if (!calendarIds.has(g.calendarEventId)) continue
+    const { error } = await client
+      .from(map.games)
+      .update({ calendar_event_id: g.calendarEventId })
+      .eq('user_id', userId)
+      .eq('id', g.id)
+    if (error) throw new Error(`Link ${map.games}: ${error.message}`)
+  }
+
+  for (const e of db.calendarEvents) {
+    if (!e.linkedGameId) continue
+    if (!gameIds.has(e.linkedGameId)) continue
+    const { error } = await client
+      .from(map.calendarEvents)
+      .update({ linked_game_id: e.linkedGameId })
+      .eq('user_id', userId)
+      .eq('id', e.id)
+    if (error) throw new Error(`Link ${map.calendarEvents}: ${error.message}`)
   }
 }
 
@@ -160,15 +201,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const write = useCallback(async (next: DB) => {
     setError(null)
-    setDb(next)
-    saveDB(next)
-    if (mode !== 'supabase') return
-    if (!userId) return
+    if (mode !== 'supabase' || !userId) {
+      setDb(next)
+      saveDB(next)
+      return
+    }
     setLoading(true)
     try {
       await replaceAll(userId, next)
+      setDb(next)
+      saveDB(next)
     } catch (e: any) {
       setError(String(e?.message ?? e))
+      throw e
     } finally {
       setLoading(false)
     }
