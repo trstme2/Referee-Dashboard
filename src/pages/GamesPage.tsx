@@ -214,7 +214,7 @@ export default function GamesPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Date</th><th>Sport</th><th>Level</th><th>Level detail</th><th>League</th><th>Roundtrip mi</th><th>Pay</th><th>Paid</th><th>Location</th><th>Status</th><th></th>
+              <th>Date</th><th>Sport</th><th>Level</th><th>Level detail</th><th>League</th><th>Platforms</th><th>Roundtrip mi</th><th>Pay</th><th>Paid</th><th>Location</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -225,6 +225,15 @@ export default function GamesPage() {
                 <td>{g.competitionLevel}</td>
                 <td>{(g as any).levelDetail ?? ''}</td>
                 <td>{g.league ?? ''}</td>
+                <td>
+                  <div className="platform-row">
+                    {db.settings.assigningPlatforms.slice(0, 2).map(p => (
+                      <span key={p} className={'platform-chip ' + (g.platformConfirmations?.[p] ? 'on' : 'off')}>
+                        {p}
+                      </span>
+                    ))}
+                  </div>
+                </td>
                 <td>{(g as any).roundtripMiles != null ? Number((g as any).roundtripMiles).toFixed(0) : ''}</td>
                 <td>{(g as any).gameFee != null ? `$${Number((g as any).gameFee).toFixed(0)}` : ''}</td>
                 <td>{(g as any).paidConfirmed ? <span className="pill ok">Yes</span> : <span className="pill">No</span>}</td>
@@ -242,7 +251,7 @@ export default function GamesPage() {
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={11} className="small">No games yet.</td></tr>
+              <tr><td colSpan={12} className="small">No games yet.</td></tr>
             )}
           </tbody>
         </table>
@@ -401,9 +410,10 @@ export default function GamesPage() {
 
         <div className="field">
           <label>Assigning platforms confirmation</label>
+          <div className="small" style={{marginBottom: 6}}>Make these green once entered in RefQuest/DragonFly.</div>
           <div className="btnbar">
             {db.settings.assigningPlatforms.map(p => (
-              <label key={p} className="pill" style={{cursor:'pointer'}}>
+              <label key={p} className={'platform-chip ' + (form.platformConfirmations?.[p] ? 'on' : 'off')} style={{cursor:'pointer'}}>
                 <input
                   type="checkbox"
                   checked={Boolean(form.platformConfirmations?.[p])}

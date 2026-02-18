@@ -1,16 +1,24 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
 import { addDays, endOfMonth, startOfMonth, yyyyMmDd } from '../lib/utils'
 import { upsertCalendarEventIn, deleteCalendarEventIn } from '../lib/mutate'
+import type { EventType } from '../lib/types'
 
 const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+function hhmmLocal(iso: string): string {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
 
 export default function CalendarPage() {
   const { db, write, loading } = useData()
+  const navigate = useNavigate()
   const [cursor, setCursor] = useState(() => new Date())
+  const [notice, setNotice] = useState<string | null>(null)
   const [form, setForm] = useState({
     id: '',
-    eventType: 'Block' as any,
+    eventType: 'Block' as EventType,
     title: 'Blocked',
     startDate: '',
     startTime: '',
@@ -47,6 +55,7 @@ export default function CalendarPage() {
   }, [db.calendarEvents])
 
   function startNew() {
+    setNotice(null)
     setForm({
       id: '',
       eventType: 'Block',
@@ -93,6 +102,11 @@ export default function CalendarPage() {
   async function edit(id: string) {
     const e = db.calendarEvents.find(x => x.id === id)
     if (!e) return
+    if (e.eventType === 'Game' || e.linkedGameId) {
+      setNotice('Game events are managed on the Games page. Use Calendar for Block/Admin/Travel.')
+      return
+    }
+    setNotice(null)
     const sd = yyyyMmDd(new Date(e.start))
     const ed = yyyyMmDd(new Date(e.end))
     setForm({
@@ -100,9 +114,9 @@ export default function CalendarPage() {
       eventType: e.eventType,
       title: e.title,
       startDate: sd,
-      startTime: new Date(e.start).toISOString().slice(11,16),
+      startTime: hhmmLocal(e.start),
       endDate: ed,
-      endTime: new Date(e.end).toISOString().slice(11,16),
+      endTime: hhmmLocal(e.end),
       allDay: e.allDay,
       notes: e.notes ?? '',
       platformConfirmations: e.platformConfirmations ?? {},
@@ -148,6 +162,13 @@ export default function CalendarPage() {
                     <div key={e.id} className="item" onClick={() => edit(e.id)} style={{cursor:'pointer'}}>
                       <div className="t">{e.eventType}: {e.title}</div>
                       <div className="m">{new Date(e.start).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                      <div className="platform-row" style={{marginTop: 6}}>
+                        {db.settings.assigningPlatforms.slice(0, 2).map((p) => (
+                          <span key={p} className={'platform-chip ' + (e.platformConfirmations?.[p] ? 'on' : 'off')}>
+                            {p}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   ))}
                   {items.length > 3 && <div className="small">+{items.length - 3} more</div>}
@@ -164,11 +185,14 @@ export default function CalendarPage() {
 
       <section className="card">
         <h2>{form.id ? 'Edit event' : 'Add block/admin'}</h2>
+        {notice && (
+          <p className="small"><span className="pill warn">{notice}</span> <button className="btn" onClick={() => navigate('/games')}>Go to Games</button></p>
+        )}
 
         <div className="row">
           <div className="field">
             <label>Type</label>
-            <select value={form.eventType} onChange={e => setForm({ ...form, eventType: e.target.value })}>
+            <select value={form.eventType} onChange={e => setForm({ ...form, eventType: e.target.value as EventType })}>
               <option value="Block">Block</option>
               <option value="Admin">Admin</option>
               <option value="Travel">Travel</option>
