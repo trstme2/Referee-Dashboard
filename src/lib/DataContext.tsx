@@ -103,7 +103,9 @@ async function replaceAll(userId: string, db: DB): Promise<void> {
   }
 
   const settingsPayload = settingsToRow(db.settings, userId)
-  const { error: sErr } = await client.from(map.userSettings).insert([settingsPayload])
+  const { error: sErr } = await client
+    .from(map.userSettings)
+    .upsert([settingsPayload], { onConflict: 'user_id' })
   if (sErr) throw new Error(`Insert user_settings: ${sErr.message}`)
 
   // Break circular FK between games.calendar_event_id and calendar_events.linked_game_id:
