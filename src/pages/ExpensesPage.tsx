@@ -4,6 +4,11 @@ import type { ExpenseCategory } from '../lib/types'
 import { upsertExpenseIn, deleteExpenseIn } from '../lib/mutate'
 import { formatMoney, safeNumber } from '../lib/utils'
 
+const expenseCategories: ExpenseCategory[] = [
+  'Mileage','Gear','Uniform','Dues/Registration',
+  'Tolls','Parking','Training','Meals','Lodging','Supplies','Phone/App','Other',
+]
+
 export default function ExpensesPage() {
   const { db, write, loading } = useData()
   const [form, setForm] = useState({
@@ -14,7 +19,8 @@ export default function ExpensesPage() {
     miles: '',
     vendor: '',
     description: '',
-    taxDeductible: 'Yes',    gameId: '',
+    taxDeductible: 'Yes',
+    gameId: '',
     notes: '',
   })
 
@@ -40,7 +46,8 @@ export default function ExpensesPage() {
       miles: '',
       vendor: '',
       description: '',
-      taxDeductible: 'Yes',      gameId: '',
+      taxDeductible: 'Yes',
+      gameId: '',
       notes: '',
     })
   }
@@ -55,7 +62,8 @@ export default function ExpensesPage() {
       miles: form.category === 'Mileage' ? safeNumber(form.miles, 0) : undefined,
       vendor: form.vendor || undefined,
       description: form.description || undefined,
-      taxDeductible: form.taxDeductible === 'Yes',      gameId: form.gameId || undefined,
+      taxDeductible: form.taxDeductible === 'Yes',
+      gameId: form.gameId || undefined,
       notes: form.notes || undefined,
     })
     await write(next)
@@ -73,7 +81,8 @@ export default function ExpensesPage() {
       miles: e.miles != null ? String(e.miles) : '',
       vendor: e.vendor ?? '',
       description: e.description ?? '',
-      taxDeductible: e.taxDeductible ? 'Yes' : 'No',      gameId: e.gameId ?? '',
+      taxDeductible: e.taxDeductible ? 'Yes' : 'No',
+      gameId: e.gameId ?? '',
       notes: e.notes ?? '',
     })
   }
@@ -89,7 +98,7 @@ export default function ExpensesPage() {
       <section className="card">
         <h2>Expenses</h2>
         <p className="sub">
-          This year: <span className="pill ok">{formatMoney(totals.total)}</span> • Mileage: <span className="pill">{totals.miles.toFixed(1)} mi</span>
+          This year: <span className="pill ok">{formatMoney(totals.total)}</span> | Mileage: <span className="pill">{totals.miles.toFixed(1)} mi</span>
         </p>
 
         <table className="table">
@@ -121,6 +130,75 @@ export default function ExpensesPage() {
 
       <section className="card">
         <h2>{form.id ? 'Edit expense' : 'Add expense'}</h2>
+
+        <div className="row">
+          <div className="field">
+            <label>Date</label>
+            <input type="date" value={form.expenseDate} onChange={e => setForm({ ...form, expenseDate: e.target.value })} />
+          </div>
+          <div className="field">
+            <label>Amount</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.amount}
+              onChange={e => setForm({ ...form, amount: e.target.value })}
+              placeholder="e.g., 42.50"
+            />
+          </div>
+          <div className="field">
+            <label>Category</label>
+            <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value as ExpenseCategory })}>
+              {expenseCategories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="row">
+          <div className="field">
+            <label>Miles (for Mileage category)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              value={form.miles}
+              onChange={e => setForm({ ...form, miles: e.target.value })}
+              disabled={form.category !== 'Mileage'}
+              placeholder="e.g., 24.5"
+            />
+          </div>
+          <div className="field">
+            <label>Vendor (optional)</label>
+            <input value={form.vendor} onChange={e => setForm({ ...form, vendor: e.target.value })} placeholder="e.g., Shell, Amazon" />
+          </div>
+          <div className="field">
+            <label>Tax deductible</label>
+            <select value={form.taxDeductible} onChange={e => setForm({ ...form, taxDeductible: e.target.value })}>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="row">
+          <div className="field">
+            <label>Linked game (optional)</label>
+            <select value={form.gameId} onChange={e => setForm({ ...form, gameId: e.target.value })}>
+              <option value="">(none)</option>
+              {db.games.map(g => (
+                <option key={g.id} value={g.id}>
+                  {g.gameDate} {g.homeTeam && g.awayTeam ? `${g.homeTeam} vs ${g.awayTeam}` : g.locationAddress}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="field">
+          <label>Description (optional)</label>
+          <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+        </div>
 
         <div className="field">
           <label>Notes</label>

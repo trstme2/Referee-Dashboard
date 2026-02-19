@@ -12,10 +12,15 @@ export default function HomePage() {
       .length
 
     const y = new Date().getFullYear()
-    const miles = db.expenses
+    const expenseMiles = db.expenses
       .filter(e => e.category === 'Mileage')
       .filter(e => e.expenseDate.startsWith(String(y)))
       .reduce((s, e) => s + (e.miles ?? 0), 0)
+    const gameMiles = db.games
+      .filter(g => g.status === 'Completed')
+      .filter(g => g.gameDate.startsWith(String(y)))
+      .reduce((s, g) => s + (g.roundtripMiles ?? (g.distanceMiles != null ? g.distanceMiles * 2 : 0)), 0)
+    const miles = expenseMiles + gameMiles
 
     const total = db.expenses
       .filter(e => e.expenseDate.startsWith(String(y)))
@@ -46,7 +51,7 @@ export default function HomePage() {
             <div className="value">{kpis.upcoming}</div>
           </div>
           <div className="box">
-            <div className="label">Mileage logged (this year)</div>
+            <div className="label">Mileage logged (this year, games + expenses)</div>
             <div className="value">{kpis.miles.toFixed(1)} mi</div>
           </div>
           <div className="box">
