@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import ical from 'node-ical'
-import { createAuthedSupabase, getBearerToken, toJsonBody } from './auth-utils'
+import { createAuthedSupabase, getBearerToken, toJsonBody } from './auth-utils.js'
 
 type Feed = {
   id: string
