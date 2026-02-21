@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createAuthedSupabase, getBearerToken, maskUrl, toJsonBody } from './_auth'
+import { createAuthedSupabase, getBearerToken, maskUrl, toJsonBody } from './auth-utils'
 
 type FeedPlatform = 'RefQuest' | 'DragonFly'
 type FeedSport = 'Soccer' | 'Lacrosse' | null
