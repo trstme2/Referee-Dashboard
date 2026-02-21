@@ -1,5 +1,6 @@
 export type Sport = 'Soccer' | 'Lacrosse'
 export type CompetitionLevel = 'High School' | 'College' | 'Club'
+export type FeedPlatform = 'RefQuest' | 'DragonFly'
 
 export type GameStatus = 'Scheduled' | 'Completed' | 'Canceled'
 export type EventType = 'Game' | 'Block' | 'Admin' | 'Travel'
@@ -145,6 +146,27 @@ export interface CsvImportRow {
   errorMessage?: string
   createdCalendarEventId?: string
   createdGameId?: string
+}
+
+export interface CalendarFeed {
+  id: string
+  platform: FeedPlatform
+  name: string
+  enabled: boolean
+  sport?: Sport
+  defaultLeague?: string
+  lastSyncedAt?: string
+  createdAt: string
+  updatedAt: string
+  maskedFeedUrl?: string
+}
+
+export interface SyncIcsResult {
+  createdEvents: number
+  updatedEvents: number
+  createdGames: number
+  updatedGames: number
+  errors: string[]
 }
 
 export interface DB {

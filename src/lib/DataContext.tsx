@@ -402,7 +402,7 @@ function rowToCalendarEvent(r: any) {
     timezone: r.timezone,
     locationAddress: r.location_address ?? undefined,
     notes: r.notes ?? undefined,
-    source: r.source,
+    source: r.source === 'CSV Import' ? 'CSV Import' : 'Manual',
     externalRef: r.external_ref ?? undefined,
     status: r.status,
     linkedGameId: r.linked_game_id ?? undefined,

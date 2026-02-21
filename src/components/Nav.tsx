@@ -9,6 +9,7 @@ export default function Nav() {
       <NavLink to="/" className={linkClass}>Home</NavLink>
       <NavLink to="/games" className={linkClass}>Games</NavLink>
       <NavLink to="/calendar" className={linkClass}>Calendar</NavLink>
+      <NavLink to="/sync" className={linkClass}>Sync</NavLink>
       <NavLink to="/expenses" className={linkClass}>Expenses</NavLink>
       <NavLink to="/requirements" className={linkClass}>Requirements</NavLink>
       <NavLink to="/import" className={linkClass}>CSV Import</NavLink>

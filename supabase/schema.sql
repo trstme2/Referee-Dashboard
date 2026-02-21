@@ -65,6 +65,22 @@ begin
       end if;
     end if;
   end if;
+
+  if not exists (select 1 from information_schema.tables where table_schema='public' and table_name='calendar_feeds') then
+    create table public.calendar_feeds (
+      id uuid primary key default gen_random_uuid(),
+      user_id uuid not null,
+      platform text not null check (platform in ('RefQuest','DragonFly')),
+      name text not null,
+      feed_url text not null,
+      enabled boolean not null default true,
+      sport text null check (sport in ('Soccer','Lacrosse') or sport is null),
+      default_league text null,
+      last_synced_at timestamptz null,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+  end if;
 end $$;
 
 -- =========================
@@ -122,6 +138,20 @@ create table if not exists public.calendar_events (
   status text not null,
   linked_game_id uuid null,
   platform_confirmations jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.calendar_feeds (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  platform text not null check (platform in ('RefQuest','DragonFly')),
+  name text not null,
+  feed_url text not null,
+  enabled boolean not null default true,
+  sport text null check (sport in ('Soccer','Lacrosse') or sport is null),
+  default_league text null,
+  last_synced_at timestamptz null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -239,6 +269,7 @@ create table if not exists public.csv_import_rows (
 alter table public.user_settings enable row level security;
 alter table public.games enable row level security;
 alter table public.calendar_events enable row level security;
+alter table public.calendar_feeds enable row level security;
 alter table public.expenses enable row level security;
 alter table public.requirement_definitions enable row level security;
 alter table public.requirement_instances enable row level security;
@@ -253,7 +284,8 @@ begin
   foreach t in array array[
     'user_settings',
     'games','calendar_events','expenses','requirement_definitions',
-    'requirement_instances','requirement_activities','csv_imports','csv_import_rows'
+    'requirement_instances','requirement_activities','csv_imports','csv_import_rows',
+    'calendar_feeds'
   ]
   loop
     execute format('drop policy if exists "select_own_%1$s" on public.%1$s;', t);
@@ -273,3 +305,5 @@ end $$;
 create index if not exists idx_games_user_date on public.games(user_id, game_date);
 create index if not exists idx_expenses_user_date on public.expenses(user_id, expense_date);
 create index if not exists idx_calendar_user_start on public.calendar_events(user_id, start_ts);
+create unique index if not exists idx_calendar_events_user_external_ref on public.calendar_events(user_id, external_ref) where external_ref is not null;
+create index if not exists idx_calendar_feeds_user_platform on public.calendar_feeds(user_id, platform);

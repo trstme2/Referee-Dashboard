@@ -8,6 +8,7 @@ import RequirementsPage from './pages/RequirementsPage'
 import ImportPage from './pages/ImportPage'
 import SettingsPage from './pages/SettingsPage'
 import AuthPage from './pages/AuthPage'
+import SyncPage from './pages/SyncPage'
 import { useData } from './lib/DataContext'
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="/expenses" element={requireAuth && !session ? <Navigate to="/auth" /> : <ExpensesPage />} />
         <Route path="/requirements" element={requireAuth && !session ? <Navigate to="/auth" /> : <RequirementsPage />} />
         <Route path="/import" element={requireAuth && !session ? <Navigate to="/auth" /> : <ImportPage />} />
+        <Route path="/sync" element={requireAuth && !session ? <Navigate to="/auth" /> : <SyncPage />} />
         <Route path="/settings" element={requireAuth && !session ? <Navigate to="/auth" /> : <SettingsPage />} />
 
         <Route path="*" element={<Navigate to="/" />} />
