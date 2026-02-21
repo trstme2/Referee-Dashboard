@@ -5,6 +5,7 @@ import { supabase, supabaseConfigured } from './supabaseClient'
 import type { Session } from '@supabase/supabase-js'
 
 type DataMode = 'local' | 'supabase'
+type WriteOptions = { forceFullReplace?: boolean }
 
 type DataContextValue = {
   mode: DataMode
@@ -13,7 +14,7 @@ type DataContextValue = {
   loading: boolean
   error: string | null
   refresh: () => Promise<void>
-  write: (next: DB) => Promise<void>
+  write: (next: DB, options?: WriteOptions) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -159,6 +160,125 @@ async function replaceAll(userId: string, db: DB): Promise<void> {
   }
 }
 
+function jsonEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
+function diffById<T extends { id: string }>(prev: T[], next: T[]): { upserts: T[]; deletes: string[] } {
+  const prevMap = new Map(prev.map((x) => [x.id, x]))
+  const nextMap = new Map(next.map((x) => [x.id, x]))
+
+  const upserts: T[] = []
+  for (const n of next) {
+    const p = prevMap.get(n.id)
+    if (!p || !jsonEqual(p, n)) upserts.push(n)
+  }
+
+  const deletes: string[] = []
+  for (const p of prev) {
+    if (!nextMap.has(p.id)) deletes.push(p.id)
+  }
+
+  return { upserts, deletes }
+}
+
+async function syncIncremental(userId: string, prev: DB, next: DB): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const client = supabase
+
+  const map = {
+    userSettings: 'user_settings',
+    games: 'games',
+    calendarEvents: 'calendar_events',
+    expenses: 'expenses',
+    requirementDefinitions: 'requirement_definitions',
+    requirementInstances: 'requirement_instances',
+    requirementActivities: 'requirement_activities',
+    csvImports: 'csv_imports',
+    csvImportRows: 'csv_import_rows',
+  } as const
+
+  if (!jsonEqual(prev.settings, next.settings)) {
+    const settingsPayload = settingsToRow(next.settings, userId)
+    const { error } = await client.from(map.userSettings).upsert([settingsPayload], { onConflict: 'user_id' })
+    if (error) throw new Error(`Upsert ${map.userSettings}: ${error.message}`)
+  }
+
+  const gamesDiff = diffById(prev.games, next.games)
+  const calendarDiff = diffById(prev.calendarEvents, next.calendarEvents)
+  const expensesDiff = diffById(prev.expenses, next.expenses)
+  const reqDefsDiff = diffById(prev.requirementDefinitions, next.requirementDefinitions)
+  const reqInstDiff = diffById(prev.requirementInstances, next.requirementInstances)
+  const reqActsDiff = diffById(prev.requirementActivities, next.requirementActivities)
+  const csvImportsDiff = diffById(prev.csvImports, next.csvImports)
+  const csvRowsDiff = diffById(prev.csvImportRows, next.csvImportRows)
+
+  const deleteByTable: Array<[string, string[]]> = [
+    [map.csvImportRows, csvRowsDiff.deletes],
+    [map.csvImports, csvImportsDiff.deletes],
+    [map.requirementActivities, reqActsDiff.deletes],
+    [map.requirementInstances, reqInstDiff.deletes],
+    [map.expenses, expensesDiff.deletes],
+    [map.calendarEvents, calendarDiff.deletes],
+    [map.games, gamesDiff.deletes],
+    [map.requirementDefinitions, reqDefsDiff.deletes],
+  ]
+
+  for (const [table, ids] of deleteByTable) {
+    if (!ids.length) continue
+    const { error } = await client.from(table).delete().eq('user_id', userId).in('id', ids)
+    if (error) throw new Error(`Delete ${table}: ${error.message}`)
+  }
+
+  const gameRows = toRows('games', userId, gamesDiff.upserts as any[]) as any[]
+  const calendarRows = toRows('calendarEvents', userId, calendarDiff.upserts as any[]) as any[]
+  const gameLinks = new Map<string, string | null>(gameRows.map((r) => [r.id, r.calendar_event_id ?? null]))
+  const calendarLinks = new Map<string, string | null>(calendarRows.map((r) => [r.id, r.linked_game_id ?? null]))
+  for (const row of gameRows) row.calendar_event_id = null
+  for (const row of calendarRows) row.linked_game_id = null
+
+  if (gameRows.length) {
+    const { error } = await client.from(map.games).upsert(gameRows, { onConflict: 'id' })
+    if (error) throw new Error(`Upsert ${map.games}: ${error.message}`)
+  }
+  if (calendarRows.length) {
+    const { error } = await client.from(map.calendarEvents).upsert(calendarRows, { onConflict: 'id' })
+    if (error) throw new Error(`Upsert ${map.calendarEvents}: ${error.message}`)
+  }
+
+  for (const [id, calendarEventId] of gameLinks) {
+    const { error } = await client
+      .from(map.games)
+      .update({ calendar_event_id: calendarEventId })
+      .eq('user_id', userId)
+      .eq('id', id)
+    if (error) throw new Error(`Link ${map.games}: ${error.message}`)
+  }
+  for (const [id, linkedGameId] of calendarLinks) {
+    const { error } = await client
+      .from(map.calendarEvents)
+      .update({ linked_game_id: linkedGameId })
+      .eq('user_id', userId)
+      .eq('id', id)
+    if (error) throw new Error(`Link ${map.calendarEvents}: ${error.message}`)
+  }
+
+  const upsertByTable: Array<[string, any[]]> = [
+    [map.requirementDefinitions, toRows('requirementDefinitions', userId, reqDefsDiff.upserts as any[])],
+    [map.requirementInstances, toRows('requirementInstances', userId, reqInstDiff.upserts as any[])],
+    [map.requirementActivities, toRows('requirementActivities', userId, reqActsDiff.upserts as any[])],
+    [map.expenses, toRows('expenses', userId, expensesDiff.upserts as any[])],
+    [map.csvImports, toRows('csvImports', userId, csvImportsDiff.upserts as any[])],
+    [map.csvImportRows, toRows('csvImportRows', userId, csvRowsDiff.upserts as any[])],
+  ]
+
+  for (const [table, rows] of upsertByTable) {
+    if (!rows.length) continue
+    const { error } = await client.from(table).upsert(rows, { onConflict: 'id' })
+    if (error) throw new Error(`Upsert ${table}: ${error.message}`)
+  }
+}
+
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [db, setDb] = useState<DB>(() => loadDB())
   const [session, setSession] = useState<Session | null>(null)
@@ -201,7 +321,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     refresh()
   }, [refresh])
 
-  const write = useCallback(async (next: DB) => {
+  const write = useCallback(async (next: DB, options?: WriteOptions) => {
     setError(null)
     if (mode !== 'supabase' || !userId) {
       setDb(next)
@@ -210,7 +330,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
     setLoading(true)
     try {
-      await replaceAll(userId, next)
+      if (options?.forceFullReplace) {
+        await replaceAll(userId, next)
+      } else {
+        await syncIncremental(userId, db, next)
+      }
       setDb(next)
       saveDB(next)
     } catch (e: any) {
@@ -219,7 +343,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [mode, userId])
+  }, [mode, userId, db])
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut()

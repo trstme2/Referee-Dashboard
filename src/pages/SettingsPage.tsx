@@ -25,7 +25,7 @@ export default function SettingsPage() {
   async function pushLocalToCloud() {
     if (mode !== 'supabase') return
     if (!confirm('Overwrite cloud snapshot with your current local cache?')) return
-    await write(db)
+    await write(db, { forceFullReplace: true })
   }
 
   async function saveSettings() {
@@ -70,7 +70,7 @@ export default function SettingsPage() {
             <div className="btnbar">
               <button className="btn primary" onClick={saveSettings} disabled={loading}>Save settings</button>
               <button className="btn" onClick={refresh} disabled={loading || mode !== 'supabase'}>Refresh from cloud</button>
-              <button className="btn" onClick={pushLocalToCloud} disabled={loading || mode !== 'supabase' || !session}>Push local → cloud</button>
+              <button className="btn" onClick={pushLocalToCloud} disabled={loading || mode !== 'supabase' || !session}>Push local -&gt; cloud</button>
             </div>
 
             <div className="footer-note">
@@ -80,13 +80,13 @@ export default function SettingsPage() {
 
           <div className="card" style={{flex:1}}>
             <h2>Local cache</h2>
-            <p className="small">Wiping local cache won’t delete cloud data.</p>
+            <p className="small">Wiping local cache will not delete cloud data.</p>
             <button className="btn danger" onClick={wipeLocal}>Wipe local cache</button>
           </div>
         </div>
 
         <div className="footer-note">
-          MVP sync uses “replace snapshot” semantics. Next upgrade is incremental upserts.
+          Default sync is incremental upserts/deletes. Use Push local to cloud only when you want a full overwrite.
         </div>
       </section>
     </div>
