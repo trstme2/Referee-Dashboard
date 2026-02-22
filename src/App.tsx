@@ -9,6 +9,7 @@ import ImportPage from './pages/ImportPage'
 import SettingsPage from './pages/SettingsPage'
 import AuthPage from './pages/AuthPage'
 import SyncPage from './pages/SyncPage'
+import TaxPage from './pages/TaxPage'
 import { useData } from './lib/DataContext'
 
 export default function App() {
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/games" element={requireAuth && !session ? <Navigate to="/auth" /> : <GamesPage />} />
         <Route path="/calendar" element={requireAuth && !session ? <Navigate to="/auth" /> : <CalendarPage />} />
         <Route path="/expenses" element={requireAuth && !session ? <Navigate to="/auth" /> : <ExpensesPage />} />
+        <Route path="/tax" element={requireAuth && !session ? <Navigate to="/auth" /> : <TaxPage />} />
         <Route path="/requirements" element={requireAuth && !session ? <Navigate to="/auth" /> : <RequirementsPage />} />
         <Route path="/import" element={requireAuth && !session ? <Navigate to="/auth" /> : <ImportPage />} />
         <Route path="/sync" element={requireAuth && !session ? <Navigate to="/auth" /> : <SyncPage />} />

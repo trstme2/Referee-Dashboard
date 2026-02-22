@@ -11,6 +11,7 @@ export default function Nav() {
       <NavLink to="/calendar" className={linkClass}>Calendar</NavLink>
       <NavLink to="/sync" className={linkClass}>Sync</NavLink>
       <NavLink to="/expenses" className={linkClass}>Expenses</NavLink>
+      <NavLink to="/tax" className={linkClass}>Tax</NavLink>
       <NavLink to="/requirements" className={linkClass}>Requirements</NavLink>
       <NavLink to="/import" className={linkClass}>CSV Import</NavLink>
       <NavLink to="/settings" className={linkClass}>Settings</NavLink>

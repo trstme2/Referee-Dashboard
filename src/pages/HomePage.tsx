@@ -33,6 +33,40 @@ export default function HomePage() {
     return { upcoming, miles, total, due }
   }, [db])
 
+  const upcomingWeekGames = useMemo(() => {
+    return [...db.games]
+      .filter(g => g.status === 'Scheduled')
+      .filter(g => isWithinNextDays(g.gameDate, 7))
+      .sort((a, b) => {
+        const ak = `${a.gameDate} ${a.startTime ?? '99:99'}`
+        const bk = `${b.gameDate} ${b.startTime ?? '99:99'}`
+        return ak < bk ? -1 : ak > bk ? 1 : 0
+      })
+  }, [db.games])
+
+  const outstandingRequirements = useMemo(() => {
+    const defById = new Map(db.requirementDefinitions.map(d => [d.id, d]))
+    const today = new Date().toISOString().slice(0, 10)
+    return db.requirementInstances
+      .filter(i => i.status !== 'Complete' && i.status !== 'Waived')
+      .map(i => {
+        const def = defById.get(i.definitionId)
+        return {
+          id: i.id,
+          name: def?.name ?? 'Requirement',
+          governingBody: def?.governingBody,
+          dueDate: i.dueDate,
+          status: i.status,
+          overdue: Boolean(i.dueDate && i.dueDate < today),
+        }
+      })
+      .sort((a, b) => {
+        const ad = a.dueDate ?? '9999-12-31'
+        const bd = b.dueDate ?? '9999-12-31'
+        return ad < bd ? -1 : ad > bd ? 1 : 0
+      })
+  }, [db.requirementInstances, db.requirementDefinitions])
+
   return (
     <div className="grid">
       <section className="card">
@@ -65,7 +99,63 @@ export default function HomePage() {
         </div>
 
         <div className="footer-note">
-          In Supabase mode, edits sync by replacing your cloud snapshot (MVP approach). Next upgrade is real upserts.
+          Dashboard is now optimized for quick weekly planning and requirement tracking.
+        </div>
+      </section>
+
+      <section className="grid cols2">
+        <div className="card">
+          <h2>Games Next 7 Days</h2>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Date</th><th>Time</th><th>Match</th><th>Location</th>
+              </tr>
+            </thead>
+            <tbody>
+              {upcomingWeekGames.map(g => (
+                <tr key={g.id}>
+                  <td>{g.gameDate}</td>
+                  <td>{g.startTime ?? '-'}</td>
+                  <td>{g.homeTeam && g.awayTeam ? `${g.homeTeam} vs ${g.awayTeam}` : `${g.sport} (${g.competitionLevel})`}</td>
+                  <td>{g.locationAddress}</td>
+                </tr>
+              ))}
+              {upcomingWeekGames.length === 0 && (
+                <tr><td colSpan={4} className="small">No scheduled games in the next 7 days.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="card">
+          <h2>Outstanding Requirements</h2>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Requirement</th><th>Due</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {outstandingRequirements.map(r => (
+                <tr key={r.id}>
+                  <td>
+                    <div>{r.name}</div>
+                    {r.governingBody ? <div className="small">{r.governingBody}</div> : null}
+                  </td>
+                  <td>{r.dueDate ?? '-'}</td>
+                  <td>
+                    <span className={'pill ' + (r.overdue ? 'bad' : r.status === 'In Progress' ? 'warn' : '')}>
+                      {r.overdue ? 'Overdue' : r.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {outstandingRequirements.length === 0 && (
+                <tr><td colSpan={3} className="small">No outstanding requirements.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
     </div>

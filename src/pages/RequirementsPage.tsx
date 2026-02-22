@@ -1,7 +1,25 @@
 import { useMemo, useState } from 'react'
 import { useData } from '../lib/DataContext'
-import { addRequirementActivityIn, addRequirementDefinitionIn, createRequirementInstanceIn, deleteRequirementActivityIn, setRequirementStatusIn } from '../lib/mutate'
+import {
+  addRequirementActivityIn,
+  addRequirementDefinitionIn,
+  createRequirementInstanceIn,
+  deleteRequirementActivityIn,
+  deleteRequirementInstanceIn,
+  editRequirementInstanceIn,
+  setRequirementStatusIn,
+} from '../lib/mutate'
+import type { RequirementStatus } from '../lib/types'
 import { yyyyMmDd } from '../lib/utils'
+
+function parseOptionalYear(input: string): number | undefined {
+  const s = input.trim()
+  if (!s) return undefined
+  const n = Number(s)
+  if (!Number.isInteger(n)) return undefined
+  if (n < 1900 || n > 2100) return undefined
+  return n
+}
 
 export default function RequirementsPage() {
   const { db, write, loading } = useData()
@@ -9,6 +27,13 @@ export default function RequirementsPage() {
   const [seasonName, setSeasonName] = useState('Spring 2026')
   const [year, setYear] = useState(String(new Date().getFullYear()))
   const [dueDate, setDueDate] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState({
+    seasonName: '',
+    year: '',
+    dueDate: '',
+    status: 'Not Started' as RequirementStatus,
+  })
 
   const [newDef, setNewDef] = useState({
     name: '',
@@ -27,7 +52,7 @@ export default function RequirementsPage() {
     return db.requirementInstances
       .map(i => ({ i, def: defs.find(d => d.id === i.definitionId) }))
       .filter(x => x.def)
-      .sort((a,b) => (a.i.updatedAt < b.i.updatedAt ? 1 : -1))
+      .sort((a, b) => (a.i.updatedAt < b.i.updatedAt ? 1 : -1))
   }, [db.requirementInstances, defs])
 
   async function createDefinition() {
@@ -59,8 +84,43 @@ export default function RequirementsPage() {
 
   async function createInstance() {
     if (!selectedDef) return
-    const next = createRequirementInstanceIn(db, selectedDef, seasonName || undefined, year ? Number(year) : undefined, dueDate || undefined)
+    const next = createRequirementInstanceIn(db, selectedDef, seasonName || undefined, parseOptionalYear(year), dueDate || undefined)
     await write(next)
+  }
+
+  function startEdit(instanceId: string) {
+    const inst = db.requirementInstances.find(i => i.id === instanceId)
+    if (!inst) return
+    setEditingId(instanceId)
+    setEditDraft({
+      seasonName: inst.seasonName ?? '',
+      year: inst.year != null ? String(inst.year) : '',
+      dueDate: inst.dueDate ?? '',
+      status: inst.status,
+    })
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditDraft({ seasonName: '', year: '', dueDate: '', status: 'Not Started' })
+  }
+
+  async function saveEdit(instanceId: string) {
+    const next = editRequirementInstanceIn(db, instanceId, {
+      seasonName: editDraft.seasonName.trim() || undefined,
+      year: parseOptionalYear(editDraft.year),
+      dueDate: editDraft.dueDate || undefined,
+      status: editDraft.status,
+    })
+    await write(next)
+    cancelEdit()
+  }
+
+  async function delInstance(instanceId: string) {
+    if (!confirm('Delete this requirement instance and all its activities?')) return
+    const next = deleteRequirementInstanceIn(db, instanceId)
+    await write(next)
+    if (editingId === instanceId) cancelEdit()
   }
 
   async function setStatus(instanceId: string, status: any) {
@@ -89,7 +149,7 @@ export default function RequirementsPage() {
     for (const a of db.requirementActivities) {
       m.set(a.instanceId, [...(m.get(a.instanceId) ?? []), a])
     }
-    for (const [, v] of m) v.sort((a,b) => (a.activityDate < b.activityDate ? -1 : 1))
+    for (const [, v] of m) v.sort((a, b) => (a.activityDate < b.activityDate ? -1 : 1))
     return m
   }, [db.requirementActivities])
 
@@ -112,7 +172,7 @@ export default function RequirementsPage() {
           </div>
           <div className="field">
             <label>Year</label>
-            <input value={year} onChange={e => setYear(e.target.value)} />
+            <input type="number" min={1900} max={2100} step={1} value={year} onChange={e => setYear(e.target.value)} />
           </div>
           <div className="field">
             <label>Due date</label>
@@ -138,33 +198,60 @@ export default function RequirementsPage() {
             {instances.map(({ i, def }) => {
               const acts = activityByInstance.get(i.id) ?? []
               const needed = def!.requiredCount ?? 0
-              const done = acts.reduce((s,a) => s + (a.quantity ?? 1), 0)
+              const done = acts.reduce((s, a) => s + (a.quantity ?? 1), 0)
               const progress = needed ? `${done}/${needed}` : `${done}`
+              const isEditing = editingId === i.id
               return (
                 <tr key={i.id}>
                   <td>
-                    <div style={{fontWeight: 600}}>{def!.name}</div>
-                    <div className="small">{def!.governingBody} • {def!.frequency}</div>
+                    <div style={{ fontWeight: 600 }}>{def!.name}</div>
+                    <div className="small">{def!.governingBody} | {def!.frequency}</div>
                     {def!.notes ? <div className="small">{def!.notes}</div> : null}
                   </td>
-                  <td>{i.seasonName ?? ''} {i.year ?? ''}{i.dueDate ? <div className="small">Due {i.dueDate}</div> : null}</td>
-                  <td><span className={"pill " + (i.status === 'Complete' ? 'ok' : i.status === 'Overdue' ? 'bad' : '')}>{i.status}</span></td>
+                  <td>
+                    {isEditing ? (
+                      <div className="row">
+                        <input value={editDraft.seasonName} onChange={e => setEditDraft({ ...editDraft, seasonName: e.target.value })} placeholder="Season" />
+                        <input type="number" min={1900} max={2100} step={1} value={editDraft.year} onChange={e => setEditDraft({ ...editDraft, year: e.target.value })} placeholder="Year" />
+                        <input type="date" value={editDraft.dueDate} onChange={e => setEditDraft({ ...editDraft, dueDate: e.target.value })} />
+                      </div>
+                    ) : (
+                      <>{i.seasonName ?? ''} {i.year ?? ''}{i.dueDate ? <div className="small">Due {i.dueDate}</div> : null}</>
+                    )}
+                  </td>
+                  <td>
+                    {isEditing ? (
+                      <select value={editDraft.status} onChange={e => setEditDraft({ ...editDraft, status: e.target.value as RequirementStatus })}>
+                        <option value="Not Started">Not Started</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Complete">Complete</option>
+                        <option value="Waived">Waived</option>
+                        <option value="Overdue">Overdue</option>
+                      </select>
+                    ) : (
+                      <span className={'pill ' + (i.status === 'Complete' ? 'ok' : i.status === 'Overdue' ? 'bad' : '')}>{i.status}</span>
+                    )}
+                  </td>
                   <td>{progress}</td>
                   <td>
                     <div className="btnbar">
-                      <button className="btn" onClick={() => addActivity(i.id)} disabled={loading}>Add activity</button>
-                      <button className="btn" onClick={() => setStatus(i.id, 'In Progress')} disabled={loading}>In progress</button>
-                      <button className="btn primary" onClick={() => setStatus(i.id, 'Complete')} disabled={loading}>Complete</button>
+                      {!isEditing && <button className="btn" onClick={() => addActivity(i.id)} disabled={loading}>Add activity</button>}
+                      {!isEditing && <button className="btn" onClick={() => setStatus(i.id, 'In Progress')} disabled={loading}>In progress</button>}
+                      {!isEditing && <button className="btn primary" onClick={() => setStatus(i.id, 'Complete')} disabled={loading}>Complete</button>}
+                      {!isEditing && <button className="btn" onClick={() => startEdit(i.id)} disabled={loading}>Edit</button>}
+                      {isEditing && <button className="btn primary" onClick={() => saveEdit(i.id)} disabled={loading}>Save</button>}
+                      {isEditing && <button className="btn" onClick={cancelEdit} disabled={loading}>Cancel</button>}
+                      <button className="btn danger" onClick={() => delInstance(i.id)} disabled={loading}>Delete</button>
                     </div>
                     {acts.length > 0 && (
-                      <div style={{marginTop: 10}}>
+                      <div style={{ marginTop: 10 }}>
                         <div className="small">Activities:</div>
                         {acts.map(a => (
-                          <div key={a.id} className="small" style={{display:'flex', gap: 8, alignItems:'center', marginTop: 6}}>
+                          <div key={a.id} className="small" style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
                             <span className="pill">{a.activityDate}</span>
                             <span className="pill">x{a.quantity}</span>
                             {a.notes ? <span className="small">{a.notes}</span> : null}
-                            <button className="btn danger" onClick={() => delActivity(a.id)} style={{padding:'4px 8px'}}>Del</button>
+                            <button className="btn danger" onClick={() => delActivity(a.id)} style={{ padding: '4px 8px' }}>Del</button>
                           </div>
                         ))}
                       </div>
@@ -236,7 +323,7 @@ export default function RequirementsPage() {
         </div>
         <div className="field">
           <label>Notes (optional)</label>
-          <input value={newDef.notes} onChange={e => setNewDef({ ...newDef, notes: e.target.value })} placeholder="Anything you want to remember about this requirement…" />
+          <input value={newDef.notes} onChange={e => setNewDef({ ...newDef, notes: e.target.value })} placeholder="Anything you want to remember about this requirement..." />
         </div>
         <div className="btnbar">
           <button className="btn" onClick={createDefinition} disabled={!newDef.name.trim()}>Create requirement</button>

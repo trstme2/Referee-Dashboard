@@ -79,7 +79,11 @@ export function upsertGameIn(db: DB, input: Partial<Game> & Pick<Game, 'sport'|'
       externalRef: existingCe?.externalRef,
       status: 'Scheduled',
       linkedGameId: merged.id,
-      platformConfirmations: normalizePlatformConfirmations(db.settings.assigningPlatforms, existingCe?.platformConfirmations),
+      // Keep calendar event platform confirmations aligned with the game toggles.
+      platformConfirmations: normalizePlatformConfirmations(
+        db.settings.assigningPlatforms,
+        merged.platformConfirmations ?? existingCe?.platformConfirmations
+      ),
       createdAt: existingCe?.createdAt ?? now,
       updatedAt: now,
     }
@@ -188,6 +192,34 @@ export function createRequirementInstanceIn(db: DB, definitionId: string, season
   const now = nowISO()
   const inst: RequirementInstance = { id: uuid(), definitionId, seasonName, year, dueDate, status: 'Not Started', createdAt: now, updatedAt: now }
   return { ...db, requirementInstances: [inst, ...db.requirementInstances] }
+}
+
+export function editRequirementInstanceIn(
+  db: DB,
+  instanceId: string,
+  patch: Partial<Pick<RequirementInstance, 'seasonName' | 'year' | 'dueDate' | 'status' | 'completionNotes'>>
+): DB {
+  const now = nowISO()
+  return {
+    ...db,
+    requirementInstances: db.requirementInstances.map(i => i.id === instanceId ? ({
+      ...i,
+      seasonName: patch.seasonName ?? i.seasonName,
+      year: patch.year === undefined ? i.year : patch.year,
+      dueDate: patch.dueDate === undefined ? i.dueDate : patch.dueDate,
+      status: patch.status ?? i.status,
+      completionNotes: patch.completionNotes ?? i.completionNotes,
+      updatedAt: now,
+    }) : i),
+  }
+}
+
+export function deleteRequirementInstanceIn(db: DB, instanceId: string): DB {
+  return {
+    ...db,
+    requirementInstances: db.requirementInstances.filter(i => i.id !== instanceId),
+    requirementActivities: db.requirementActivities.filter(a => a.instanceId !== instanceId),
+  }
 }
 
 export function setRequirementStatusIn(db: DB, instanceId: string, status: RequirementInstance['status'], completedDate?: string, completionNotes?: string): DB {
