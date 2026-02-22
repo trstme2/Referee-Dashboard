@@ -123,12 +123,12 @@ async function syncFeed(client: any, feed: Feed) {
     }
   })
 
-  const refs = normalized.map((x) => x.externalRef)
+  const refPrefix = `${feed.platform}:${feed.id}:`
   const { data: existingEvents, error: evLookupErr } = await client
     .from('calendar_events')
     .select('id,external_ref,linked_game_id,created_at')
     .eq('user_id', feed.user_id)
-    .in('external_ref', refs)
+    .like('external_ref', `${refPrefix}%`)
   if (evLookupErr) throw new Error(`calendar_events lookup: ${evLookupErr.message}`)
   const existingByRef = new Map<string, any>((existingEvents ?? []).map((e: any) => [String(e.external_ref), e]))
 
@@ -157,7 +157,7 @@ async function syncFeed(client: any, feed: Feed) {
 
   const { data: upsertedEvents, error: upsertEventsErr } = await client
     .from('calendar_events')
-    .upsert(calendarRows, { onConflict: 'user_id,external_ref' })
+    .upsert(calendarRows, { onConflict: 'id' })
     .select('id,external_ref,linked_game_id')
   if (upsertEventsErr) throw new Error(`calendar_events upsert: ${upsertEventsErr.message}`)
 
