@@ -13,37 +13,37 @@ type Feed = {
   default_league: string | null
 }
 
-function zoneOffsetMinutes(date: Date, timeZone: string): number {
-  const dtf = new Intl.DateTimeFormat('en-US', {
+const APP_TIMEZONE = 'America/New_York'
+
+function datePartsInZone(d: Date, timeZone: string): { y: number; m: number; day: number; hh: number; mm: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
-    timeZoneName: 'shortOffset',
     year: 'numeric',
-  })
-  const part = dtf.formatToParts(date).find((p) => p.type === 'timeZoneName')?.value || 'GMT'
-  const m = part.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/)
-  if (!m) return 0
-  const sign = m[1] === '-' ? -1 : 1
-  const hh = Number(m[2] || 0)
-  const mm = Number(m[3] || 0)
-  return sign * (hh * 60 + mm)
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d)
+
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value || 0)
+  return {
+    y: get('year'),
+    m: get('month'),
+    day: get('day'),
+    hh: get('hour'),
+    mm: get('minute'),
+  }
 }
 
-function normalizeDragonFlyDate(date: Date): Date {
-  // DragonFly ICS commonly exports wall-clock times as UTC-like values.
-  // Shift by NY offset so 8:00 in DragonFly stays 8:00 in dashboard.
-  const nyOffset = zoneOffsetMinutes(date, 'America/New_York')
-  return new Date(date.getTime() + nyOffset * 60_000)
+function ymdInZone(d: Date, timeZone: string): string {
+  const p = datePartsInZone(d, timeZone)
+  return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`
 }
 
-function ymdLocal(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-function hhmmLocal(d: Date): string {
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+function hhmmInZone(d: Date, timeZone: string): string {
+  const p = datePartsInZone(d, timeZone)
+  return `${String(p.hh).padStart(2, '0')}:${String(p.mm).padStart(2, '0')}`
 }
 
 function inferSport(feedSport: Feed['sport'], text: string): 'Soccer' | 'Lacrosse' {
@@ -130,8 +130,8 @@ async function syncFeed(client: any, feed: Feed) {
   const normalized = icsEvents.map((ev: any) => {
     const rawStart = new Date(ev.start)
     const rawEnd = ev.end ? new Date(ev.end) : new Date(rawStart.getTime() + 2 * 60 * 60 * 1000)
-    const start = feed.platform === 'DragonFly' ? normalizeDragonFlyDate(rawStart) : rawStart
-    const end = feed.platform === 'DragonFly' ? normalizeDragonFlyDate(rawEnd) : rawEnd
+    const start = rawStart
+    const end = rawEnd
     const text = eventDesc(ev)
     const sport = inferSport(feed.sport, text)
     const competitionLevel = inferCompetitionLevel(text)
@@ -153,8 +153,8 @@ async function syncFeed(client: any, feed: Feed) {
       competitionLevel,
       levelDetail,
       role,
-      gameDate: ymdLocal(start),
-      startTime: allDay ? null : hhmmLocal(start),
+      gameDate: ymdInZone(start, APP_TIMEZONE),
+      startTime: allDay ? null : hhmmInZone(start, APP_TIMEZONE),
     }
   })
 

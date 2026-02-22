@@ -32,6 +32,8 @@ export default function SyncPage() {
   const [syncing, setSyncing] = useState(false)
   const [form, setForm] = useState<FeedForm>(() => emptyForm())
   const [result, setResult] = useState<SyncIcsResult | null>(null)
+  const [cleanupResult, setCleanupResult] = useState<any>(null)
+  const [cleaning, setCleaning] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
   const token = session?.access_token ?? null
@@ -160,6 +162,28 @@ export default function SyncPage() {
     }
   }
 
+  async function runCleanup(apply: boolean) {
+    setErr(null)
+    setCleaning(true)
+    try {
+      if (apply && !confirm('Apply cleanup? This will permanently delete duplicate games/events selected by the cleanup plan.')) {
+        setCleaning(false)
+        return
+      }
+      const json = await api('/api/cleanup-sync', {
+        method: 'POST',
+        body: JSON.stringify({ apply }),
+      })
+      setCleanupResult(json)
+      await refresh()
+      await loadFeeds()
+    } catch (e: any) {
+      setErr(String(e?.message ?? e))
+    } finally {
+      setCleaning(false)
+    }
+  }
+
   if (mode !== 'supabase') {
     return (
       <div className="grid">
@@ -182,6 +206,12 @@ export default function SyncPage() {
         <div className="btnbar" style={{ marginBottom: 10 }}>
           <button className="btn primary" onClick={() => syncNow()} disabled={syncing || loading}>
             {syncing ? 'Syncing...' : 'Sync All'}
+          </button>
+          <button className="btn" onClick={() => runCleanup(false)} disabled={cleaning || syncing || loading}>
+            {cleaning ? 'Working...' : 'Preview Cleanup'}
+          </button>
+          <button className="btn danger" onClick={() => runCleanup(true)} disabled={cleaning || syncing || loading}>
+            Apply Cleanup
           </button>
           <button className="btn" onClick={loadFeeds} disabled={loading}>Refresh feeds</button>
         </div>
@@ -225,6 +255,30 @@ export default function SyncPage() {
             {result.errors?.length > 0 && (
               <div>
                 {result.errors.map((x, i) => <p key={i} className="small"><span className="pill bad">{x}</span></p>)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {cleanupResult && (
+          <div className="card" style={{ marginTop: 10 }}>
+            <h2>Cleanup Result ({cleanupResult.mode})</h2>
+            <p className="small">
+              Duplicate groups: {cleanupResult.duplicateGroups} | Delete games: {cleanupResult.deleteGames?.length ?? 0} | Delete events: {cleanupResult.deleteEvents?.length ?? 0}
+            </p>
+            {cleanupResult.relinks?.length ? <p className="small">Relinks: {cleanupResult.relinks.length}</p> : null}
+            {cleanupResult.samples?.length > 0 && (
+              <div>
+                {cleanupResult.samples.slice(0, 8).map((s: any, i: number) => (
+                  <p key={i} className="small">
+                    <span className="pill">keep {s.keepGameId}</span> delete {s.deleteGameIds.join(', ')}
+                  </p>
+                ))}
+              </div>
+            )}
+            {cleanupResult.errors?.length > 0 && (
+              <div>
+                {cleanupResult.errors.map((x: string, i: number) => <p key={i} className="small"><span className="pill bad">{x}</span></p>)}
               </div>
             )}
           </div>
