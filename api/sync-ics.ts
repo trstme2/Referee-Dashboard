@@ -13,6 +13,28 @@ type Feed = {
   default_league: string | null
 }
 
+function zoneOffsetMinutes(date: Date, timeZone: string): number {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    timeZoneName: 'shortOffset',
+    year: 'numeric',
+  })
+  const part = dtf.formatToParts(date).find((p) => p.type === 'timeZoneName')?.value || 'GMT'
+  const m = part.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/)
+  if (!m) return 0
+  const sign = m[1] === '-' ? -1 : 1
+  const hh = Number(m[2] || 0)
+  const mm = Number(m[3] || 0)
+  return sign * (hh * 60 + mm)
+}
+
+function normalizeDragonFlyDate(date: Date): Date {
+  // DragonFly ICS commonly exports wall-clock times as UTC-like values.
+  // Shift by NY offset so 8:00 in DragonFly stays 8:00 in dashboard.
+  const nyOffset = zoneOffsetMinutes(date, 'America/New_York')
+  return new Date(date.getTime() + nyOffset * 60_000)
+}
+
 function ymdLocal(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -64,6 +86,17 @@ function eventDesc(x: any): string {
   return parts.join(' | ')
 }
 
+function normText(s: string | null | undefined): string {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function sameLocation(a: string | null | undefined, b: string | null | undefined): boolean {
+  const aa = normText(a)
+  const bb = normText(b)
+  if (!aa || !bb) return false
+  return aa.includes(bb) || bb.includes(aa)
+}
+
 async function syncFeed(client: any, feed: Feed) {
   const now = new Date().toISOString()
   let createdEvents = 0
@@ -95,8 +128,10 @@ async function syncFeed(client: any, feed: Feed) {
   }
 
   const normalized = icsEvents.map((ev: any) => {
-    const start = new Date(ev.start)
-    const end = ev.end ? new Date(ev.end) : new Date(start.getTime() + 2 * 60 * 60 * 1000)
+    const rawStart = new Date(ev.start)
+    const rawEnd = ev.end ? new Date(ev.end) : new Date(rawStart.getTime() + 2 * 60 * 60 * 1000)
+    const start = feed.platform === 'DragonFly' ? normalizeDragonFlyDate(rawStart) : rawStart
+    const end = feed.platform === 'DragonFly' ? normalizeDragonFlyDate(rawEnd) : rawEnd
     const text = eventDesc(ev)
     const sport = inferSport(feed.sport, text)
     const competitionLevel = inferCompetitionLevel(text)
@@ -123,6 +158,32 @@ async function syncFeed(client: any, feed: Feed) {
     }
   })
 
+  const eventDates = Array.from(new Set(normalized.map((n) => n.gameDate)))
+  const { data: dayGames, error: dayGamesErr } = await client
+    .from('games')
+    .select('*')
+    .eq('user_id', feed.user_id)
+    .in('game_date', eventDates)
+  if (dayGamesErr) throw new Error(`games day lookup: ${dayGamesErr.message}`)
+  const unusedGameIds = new Set((dayGames ?? []).map((g: any) => String(g.id)))
+  const manualMatchByExternalRef = new Map<string, any>()
+
+  for (const n of normalized) {
+    const candidates = (dayGames ?? []).filter((g: any) => {
+      if (!unusedGameIds.has(String(g.id))) return false
+      if (String(g.game_date) !== n.gameDate) return false
+      if (g.status === 'Canceled') return false
+      const sameStart = (g.start_time ? String(g.start_time).slice(0, 5) : null) === n.startTime
+      const startClose = sameStart || !g.start_time || !n.startTime
+      return startClose && sameLocation(g.location_address, n.location)
+    })
+    if (candidates.length > 0) {
+      const c = candidates[0]
+      manualMatchByExternalRef.set(n.externalRef, c)
+      unusedGameIds.delete(String(c.id))
+    }
+  }
+
   const refPrefix = `${feed.platform}:${feed.id}:`
   const { data: existingEvents, error: evLookupErr } = await client
     .from('calendar_events')
@@ -134,8 +195,10 @@ async function syncFeed(client: any, feed: Feed) {
 
   const calendarRows = normalized.map((n) => {
     const existing = existingByRef.get(n.externalRef)
+    const manualMatch = manualMatchByExternalRef.get(n.externalRef)
+    const reusedCalendarEventId = manualMatch?.calendar_event_id ? String(manualMatch.calendar_event_id) : null
     return {
-      id: existing?.id ?? crypto.randomUUID(),
+      id: existing?.id ?? reusedCalendarEventId ?? crypto.randomUUID(),
       user_id: feed.user_id,
       event_type: 'Game',
       title: n.title,
@@ -179,7 +242,8 @@ async function syncFeed(client: any, feed: Feed) {
 
   const gameRows = normalized.map((n) => {
     const ev = eventByRef.get(n.externalRef)
-    const existing = gameByEventId.get(String(ev.id))
+    const matchedManual = manualMatchByExternalRef.get(n.externalRef)
+    const existing = gameByEventId.get(String(ev.id)) ?? matchedManual
     const keepGameFee = existing?.game_fee ?? null
     const keepPaidConfirmed = existing?.paid_confirmed ?? false
     const keepRoundtripMiles = existing?.roundtrip_miles ?? null
