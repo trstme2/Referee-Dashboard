@@ -47,6 +47,7 @@ export default function GamesPage() {
   const { db, write, loading } = useData()
   const [filter, setFilter] = useState<'All' | GameStatus>('All')
   const [q, setQ] = useState<string>('')
+  const [yearFilter, setYearFilter] = useState<string>('All years')
 
   const [form, setForm] = useState({
     id: '',
@@ -72,10 +73,18 @@ export default function GamesPage() {
 
   const rolesForSport = form.sport === 'Soccer' ? soccerRoles : lacrosseRoles
   const timeParts = to12HourParts(form.startTime || undefined)
+  const availableYears = useMemo(() => {
+    return Array.from(new Set(
+      db.games
+        .map(g => g.gameDate.slice(0, 4))
+        .filter(Boolean)
+    )).sort((a, b) => Number(b) - Number(a))
+  }, [db.games])
 
   const rows = useMemo(() => {
     let list = [...db.games]
     if (filter !== 'All') list = list.filter(g => g.status === filter)
+    if (yearFilter !== 'All years') list = list.filter(g => g.gameDate.startsWith(yearFilter))
     if (q.trim()) {
       const s = q.trim().toLowerCase()
       list = list.filter(g =>
@@ -86,8 +95,16 @@ export default function GamesPage() {
         g.gameDate.includes(s)
       )
     }
-    return list.sort((a,b) => (a.gameDate < b.gameDate ? 1 : -1))
-  }, [db.games, filter, q])
+    return list.sort((a, b) => {
+      if (a.gameDate !== b.gameDate) {
+        return a.gameDate < b.gameDate ? 1 : -1
+      }
+      const timeA = a.startTime ?? ''
+      const timeB = b.startTime ?? ''
+      if (timeA === timeB) return 0
+      return timeA < timeB ? 1 : -1
+    })
+  }, [db.games, filter, q, yearFilter])
 
   function startNew() {
     setForm({
@@ -172,6 +189,40 @@ export default function GamesPage() {
     if (form.id === id) startNew()
   }
 
+  async function togglePaid(id: string) {
+    const g = db.games.find(x => x.id === id)
+    if (!g) return
+    const next = upsertGameIn(db, {
+      ...g,
+      id: g.id,
+      paidConfirmed: !g.paidConfirmed,
+      paidDate: !g.paidConfirmed ? (g.paidDate ?? g.gameDate) : undefined,
+    })
+    await write(next)
+    if (form.id === id) {
+      setForm(prev => ({
+        ...prev,
+        paidConfirmed: !g.paidConfirmed,
+        paidDate: !g.paidConfirmed ? (g.paidDate ?? g.gameDate) : '',
+      }))
+    }
+  }
+
+  async function toggleCompleted(id: string) {
+    const g = db.games.find(x => x.id === id)
+    if (!g) return
+    const nextStatus: GameStatus = g.status === 'Completed' ? 'Scheduled' : 'Completed'
+    const next = upsertGameIn(db, {
+      ...g,
+      id: g.id,
+      status: nextStatus,
+    })
+    await write(next)
+    if (form.id === id) {
+      setForm(prev => ({ ...prev, status: nextStatus }))
+    }
+  }
+
   function togglePlatform(p: string) {
     setForm(prev => ({
       ...prev,
@@ -206,6 +257,13 @@ export default function GamesPage() {
             </select>
           </div>
           <div className="field">
+            <label>Year filter</label>
+            <select value={yearFilter} onChange={e => setYearFilter(e.target.value)}>
+              <option value="All years">All years</option>
+              {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
+            </select>
+          </div>
+          <div className="field">
             <label>Search</label>
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="date, league, location, teams..." />
           </div>
@@ -236,12 +294,28 @@ export default function GamesPage() {
                 </td>
                 <td>{(g as any).roundtripMiles != null ? Number((g as any).roundtripMiles).toFixed(0) : ''}</td>
                 <td>{(g as any).gameFee != null ? `$${Number((g as any).gameFee).toFixed(0)}` : ''}</td>
-                <td>{(g as any).paidConfirmed ? <span className="pill ok">Yes</span> : <span className="pill">No</span>}</td>
+                <td>
+                  <div className="btnbar">
+                    {(g as any).paidConfirmed ? <span className="pill ok">Yes</span> : <span className="pill">No</span>}
+                    <button className="btn compact" onClick={() => togglePaid(g.id)}>
+                      Paid?
+                    </button>
+                  </div>
+                </td>
                 <td>
                   {g.locationAddress}
                   {g.distanceMiles != null ? <div className="small">{g.distanceMiles.toFixed(1)} mi one-way</div> : null}
                 </td>
-                <td><span className={"pill " + (g.status === 'Completed' ? 'ok' : g.status === 'Canceled' ? 'bad' : '')}>{g.status}</span></td>
+                <td>
+                  <div className="btnbar">
+                    <span className={"pill " + (g.status === 'Completed' ? 'ok' : g.status === 'Canceled' ? 'bad' : '')}>{g.status}</span>
+                    {g.status !== 'Canceled' ? (
+                      <button className="btn compact" onClick={() => toggleCompleted(g.id)}>
+                        Complete?
+                      </button>
+                    ) : null}
+                  </div>
+                </td>
                 <td>
                   <div className="btnbar">
                     <button className="btn" onClick={() => edit(g.id)}>Edit</button>

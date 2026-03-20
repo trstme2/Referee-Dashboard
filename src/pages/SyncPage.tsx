@@ -25,7 +25,7 @@ function emptyForm(): FeedForm {
 }
 
 export default function SyncPage() {
-  const { mode, session, refresh } = useData()
+  const { mode, session, refresh, db } = useData()
   const [feeds, setFeeds] = useState<CalendarFeed[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -42,6 +42,28 @@ export default function SyncPage() {
     DragonFly: feeds.filter(f => f.platform === 'DragonFly').length,
     RefQuest: feeds.filter(f => f.platform === 'RefQuest').length,
   }), [feeds])
+
+  const cleanupReview = useMemo(() => {
+    if (!cleanupResult?.samples?.length) return []
+
+    const gameById = new Map(db.games.map((g) => [g.id, g]))
+    const eventById = new Map(db.calendarEvents.map((e) => [e.id, e]))
+
+    return cleanupResult.samples.map((sample: any) => {
+      const keeper = gameById.get(sample.keepGameId)
+      const deletions = (sample.deleteGameIds ?? []).map((id: string) => {
+        const game = gameById.get(id)
+        const event = game?.calendarEventId ? eventById.get(game.calendarEventId) : undefined
+        return {
+          id,
+          game,
+          event,
+        }
+      })
+      const relinks = (cleanupResult.relinks ?? []).filter((r: any) => r.keeperGameId === sample.keepGameId)
+      return { sample, keeper, deletions, relinks }
+    })
+  }, [cleanupResult, db.games, db.calendarEvents])
 
   async function api(path: string, init?: RequestInit) {
     if (!token) throw new Error('Not authenticated')
@@ -267,13 +289,33 @@ export default function SyncPage() {
               Duplicate groups: {cleanupResult.duplicateGroups} | Delete games: {cleanupResult.deleteGames?.length ?? 0} | Delete events: {cleanupResult.deleteEvents?.length ?? 0}
             </p>
             {cleanupResult.relinks?.length ? <p className="small">Relinks: {cleanupResult.relinks.length}</p> : null}
-            {cleanupResult.samples?.length > 0 && (
+            {cleanupReview.length > 0 && (
               <div>
-                {cleanupResult.samples.slice(0, 8).map((s: any, i: number) => (
-                  <p key={i} className="small">
-                    <span className="pill">keep {s.keepGameId}</span> delete {s.deleteGameIds.join(', ')}
-                  </p>
+                {cleanupReview.slice(0, 8).map((entry: any, i: number) => (
+                  <div key={i} className="card" style={{ marginTop: 8, padding: 10 }}>
+                    <p className="small">
+                      <span className="pill ok">Keep</span>{' '}
+                      {entry.keeper
+                        ? `${entry.keeper.gameDate}${entry.keeper.startTime ? ` ${entry.keeper.startTime}` : ''} | ${entry.keeper.locationAddress}`
+                        : entry.sample.keepGameId}
+                    </p>
+                    {entry.deletions.map((d: any) => (
+                      <p key={d.id} className="small">
+                        <span className="pill bad">Delete</span>{' '}
+                        {d.game
+                          ? `${d.game.gameDate}${d.game.startTime ? ` ${d.game.startTime}` : ''} | ${d.game.locationAddress}`
+                          : d.id}
+                        {d.event?.externalRef ? ` | synced event ${d.event.externalRef}` : ''}
+                      </p>
+                    ))}
+                    {entry.relinks.map((r: any) => (
+                      <p key={r.eventId} className="small">
+                        <span className="pill warn">Relink</span> Event {r.eventId} will be attached to the kept game.
+                      </p>
+                    ))}
+                  </div>
                 ))}
+                {cleanupReview.length > 8 ? <p className="small">Showing 8 of {cleanupReview.length} duplicate groups.</p> : null}
               </div>
             )}
             {cleanupResult.errors?.length > 0 && (

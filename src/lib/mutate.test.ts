@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { deleteRequirementInstanceIn, editRequirementInstanceIn } from './mutate'
+import {
+  deleteCalendarEventIn,
+  deleteGameIn,
+  deleteRequirementInstanceIn,
+  editRequirementInstanceIn,
+  rollbackImportIn,
+  setRequirementStatusIn,
+  upsertGameIn,
+} from './mutate'
 import type { DB } from './types'
 
 function baseDB(): DB {
@@ -94,5 +102,216 @@ describe('requirement instance mutations', () => {
 
     expect(next.requirementInstances.map((x) => x.id)).toEqual(['inst-2'])
     expect(next.requirementActivities.map((x) => x.id)).toEqual(['act-2'])
+  })
+})
+
+describe('game mutations', () => {
+  it('creates a linked calendar event, normalizes platform confirmations, and saves new leagues', () => {
+    const db = baseDB()
+    const next = upsertGameIn(db, {
+      sport: 'Soccer',
+      competitionLevel: 'High School',
+      gameDate: '2026-09-10',
+      startTime: '19:15',
+      locationAddress: '100 Stadium Dr',
+      league: 'OHSAA',
+      status: 'Scheduled',
+      paidConfirmed: true,
+      platformConfirmations: { RefQuest: true, ExtraPlatform: true },
+      homeTeam: 'North',
+      awayTeam: 'South',
+      notes: 'Varsity match',
+    })
+
+    expect(next.games).toHaveLength(1)
+    expect(next.calendarEvents).toHaveLength(1)
+    expect(next.settings.leagues).toContain('OHSAA')
+
+    const game = next.games[0]
+    const calendarEvent = next.calendarEvents[0]
+
+    expect(game.calendarEventId).toBe(calendarEvent.id)
+    expect(game.platformConfirmations).toEqual({ RefQuest: true, DragonFly: false })
+    expect(calendarEvent.linkedGameId).toBe(game.id)
+    expect(calendarEvent.platformConfirmations).toEqual({ RefQuest: true, DragonFly: false })
+    expect(calendarEvent.locationAddress).toBe('100 Stadium Dr')
+    expect(calendarEvent.notes).toBe('Varsity match')
+    expect(calendarEvent.title).toContain('Soccer')
+    expect(calendarEvent.title).toContain('North vs South')
+    expect(calendarEvent.start).toBe(new Date('2026-09-10T19:15:00').toISOString())
+    expect(calendarEvent.end).toBe(new Date('2026-09-10T21:15:00').toISOString())
+  })
+
+  it('updates the existing linked calendar event instead of creating a second one', () => {
+    const created = upsertGameIn(baseDB(), {
+      sport: 'Soccer',
+      competitionLevel: 'College',
+      gameDate: '2026-10-12',
+      startTime: '18:00',
+      locationAddress: 'Old Field',
+      status: 'Scheduled',
+      notes: 'Original note',
+    })
+
+    const game = created.games[0]
+    const event = created.calendarEvents[0]
+
+    const updated = upsertGameIn(created, {
+      ...game,
+      locationAddress: 'New Field',
+      startTime: '20:30',
+      notes: 'Updated note',
+      status: 'Completed',
+    })
+
+    expect(updated.games).toHaveLength(1)
+    expect(updated.calendarEvents).toHaveLength(1)
+    expect(updated.games[0].calendarEventId).toBe(event.id)
+    expect(updated.calendarEvents[0].id).toBe(event.id)
+    expect(updated.calendarEvents[0].locationAddress).toBe('New Field')
+    expect(updated.calendarEvents[0].notes).toBe('Updated note')
+    expect(updated.calendarEvents[0].start).toBe(new Date('2026-10-12T20:30:00').toISOString())
+    expect(updated.calendarEvents[0].end).toBe(new Date('2026-10-12T22:30:00').toISOString())
+  })
+
+  it('deletes a game and its linked calendar event together', () => {
+    const created = upsertGameIn(baseDB(), {
+      sport: 'Lacrosse',
+      competitionLevel: 'Club',
+      gameDate: '2026-05-01',
+      locationAddress: 'Turf Complex',
+      status: 'Scheduled',
+    })
+
+    const gameId = created.games[0].id
+    const eventId = created.calendarEvents[0].id
+    const next = deleteGameIn(created, gameId)
+
+    expect(next.games).toHaveLength(0)
+    expect(next.calendarEvents.find((x) => x.id === eventId)).toBeUndefined()
+  })
+})
+
+describe('calendar and import mutations', () => {
+  it('unlinks a game when its calendar event is deleted', () => {
+    const created = upsertGameIn(baseDB(), {
+      sport: 'Soccer',
+      competitionLevel: 'High School',
+      gameDate: '2026-08-20',
+      locationAddress: 'Main Stadium',
+      status: 'Scheduled',
+    })
+
+    const eventId = created.calendarEvents[0].id
+    const gameId = created.games[0].id
+    const next = deleteCalendarEventIn(created, eventId)
+
+    expect(next.calendarEvents).toHaveLength(0)
+    expect(next.games.find((x) => x.id === gameId)?.calendarEventId).toBeUndefined()
+  })
+
+  it('rolls back imported games, events, rows, and the import record together', () => {
+    const db: DB = {
+      ...baseDB(),
+      games: [
+        {
+          id: 'game-imported',
+          sport: 'Soccer',
+          competitionLevel: 'High School',
+          gameDate: '2026-03-01',
+          locationAddress: 'Imported Field',
+          status: 'Scheduled',
+          paidConfirmed: false,
+          platformConfirmations: { RefQuest: false, DragonFly: false },
+          createdAt: '2026-03-01T00:00:00.000Z',
+          updatedAt: '2026-03-01T00:00:00.000Z',
+        },
+        {
+          id: 'game-keep',
+          sport: 'Lacrosse',
+          competitionLevel: 'Club',
+          gameDate: '2026-03-02',
+          locationAddress: 'Keep Field',
+          status: 'Scheduled',
+          paidConfirmed: false,
+          platformConfirmations: { RefQuest: false, DragonFly: false },
+          createdAt: '2026-03-02T00:00:00.000Z',
+          updatedAt: '2026-03-02T00:00:00.000Z',
+        },
+      ],
+      calendarEvents: [
+        {
+          id: 'event-imported',
+          eventType: 'Game',
+          title: 'Imported game',
+          start: '2026-03-01T17:00:00.000Z',
+          end: '2026-03-01T19:00:00.000Z',
+          allDay: false,
+          timezone: 'America/New_York',
+          source: 'CSV Import',
+          status: 'Scheduled',
+          linkedGameId: 'game-imported',
+          platformConfirmations: { RefQuest: false, DragonFly: false },
+          createdAt: '2026-03-01T00:00:00.000Z',
+          updatedAt: '2026-03-01T00:00:00.000Z',
+        },
+        {
+          id: 'event-keep',
+          eventType: 'Admin',
+          title: 'Keep event',
+          start: '2026-03-03T17:00:00.000Z',
+          end: '2026-03-03T18:00:00.000Z',
+          allDay: false,
+          timezone: 'America/New_York',
+          source: 'Manual',
+          status: 'Scheduled',
+          platformConfirmations: { RefQuest: false, DragonFly: false },
+          createdAt: '2026-03-03T00:00:00.000Z',
+          updatedAt: '2026-03-03T00:00:00.000Z',
+        },
+      ],
+      csvImports: [
+        { id: 'import-1', importType: 'Games', fileName: 'games.csv', importedAt: '2026-03-01T00:00:00.000Z', rowCount: 1 },
+        { id: 'import-keep', importType: 'Blocks', fileName: 'blocks.csv', importedAt: '2026-03-01T00:00:00.000Z', rowCount: 1 },
+      ],
+      csvImportRows: [
+        {
+          id: 'row-1',
+          importId: 'import-1',
+          rowNumber: 1,
+          rawJson: { game_date: '2026-03-01' },
+          status: 'Imported',
+          createdGameId: 'game-imported',
+          createdCalendarEventId: 'event-imported',
+        },
+        {
+          id: 'row-keep',
+          importId: 'import-keep',
+          rowNumber: 1,
+          rawJson: { date: '2026-03-03' },
+          status: 'Imported',
+          createdCalendarEventId: 'event-keep',
+        },
+      ],
+    }
+
+    const next = rollbackImportIn(db, 'import-1')
+
+    expect(next.games.map((x) => x.id)).toEqual(['game-keep'])
+    expect(next.calendarEvents.map((x) => x.id)).toEqual(['event-keep'])
+    expect(next.csvImports.map((x) => x.id)).toEqual(['import-keep'])
+    expect(next.csvImportRows.map((x) => x.id)).toEqual(['row-keep'])
+  })
+})
+
+describe('requirement status mutations', () => {
+  it('sets completed date automatically when marking an instance complete', () => {
+    const db = baseDB()
+    const next = setRequirementStatusIn(db, 'inst-1', 'Complete', undefined, 'Finished clinic')
+    const updated = next.requirementInstances.find((x) => x.id === 'inst-1')
+
+    expect(updated?.status).toBe('Complete')
+    expect(updated?.completionNotes).toBe('Finished clinic')
+    expect(updated?.completedDate).toBe(new Date().toISOString().slice(0, 10))
   })
 })
