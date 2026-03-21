@@ -17,7 +17,7 @@ export default function HomePage() {
       .filter(e => e.expenseDate.startsWith(String(y)))
       .reduce((s, e) => s + (e.miles ?? 0), 0)
     const gameMiles = db.games
-      .filter(g => g.status === 'Completed')
+      .filter(g => g.status === 'Played' || g.status === 'Paid / Complete')
       .filter(g => g.gameDate.startsWith(String(y)))
       .reduce((s, g) => s + (g.roundtripMiles ?? (g.distanceMiles != null ? g.distanceMiles * 2 : 0)), 0)
     const miles = expenseMiles + gameMiles

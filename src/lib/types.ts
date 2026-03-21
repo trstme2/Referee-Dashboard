@@ -2,7 +2,7 @@ export type Sport = 'Soccer' | 'Lacrosse'
 export type CompetitionLevel = 'High School' | 'College' | 'Club'
 export type FeedPlatform = 'RefQuest' | 'DragonFly'
 
-export type GameStatus = 'Scheduled' | 'Completed' | 'Canceled'
+export type GameStatus = 'Scheduled' | 'Played' | 'Paid / Complete' | 'Canceled'
 export type EventType = 'Game' | 'Block' | 'Admin' | 'Travel'
 
 export type ExpenseCategory =

@@ -3,6 +3,7 @@ import type { DB, Settings } from './types'
 import { loadDB, saveDB } from './storage'
 import { supabase, supabaseConfigured } from './supabaseClient'
 import type { Session } from '@supabase/supabase-js'
+import { migrateLegacyGameStatus } from './gameStatus'
 
 type DataMode = 'local' | 'supabase'
 type WriteOptions = { forceFullReplace?: boolean }
@@ -365,7 +366,7 @@ function rowToSettings(r: any): Settings {
 }
 
 function rowToGame(r: any) {
-  return {
+  return migrateLegacyGameStatus({
     id: r.id,
     sport: r.sport,
     competitionLevel: r.competition_level,
@@ -388,7 +389,7 @@ function rowToGame(r: any) {
     calendarEventId: r.calendar_event_id ?? undefined,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
-  }
+  })
 }
 
 function rowToCalendarEvent(r: any) {

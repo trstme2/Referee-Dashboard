@@ -6,7 +6,7 @@ import { getDrivingDistanceMiles } from '../lib/distance'
 
 const sports: Sport[] = ['Soccer', 'Lacrosse']
 const levels: CompetitionLevel[] = ['High School', 'College', 'Club']
-const statuses: GameStatus[] = ['Scheduled', 'Completed', 'Canceled']
+const statuses: GameStatus[] = ['Scheduled', 'Played', 'Paid / Complete', 'Canceled']
 
 const soccerRoles: SoccerRole[] = ['Center', 'AR', '4th', 'Dual']
 const lacrosseRoles: LacrosseRole[] = ['Lead', 'Ref']
@@ -106,6 +106,15 @@ export default function GamesPage() {
     })
   }, [db.games, filter, q, yearFilter])
 
+  function applyStatusToForm(nextStatus: GameStatus) {
+    setForm(prev => ({
+      ...prev,
+      status: nextStatus,
+      paidConfirmed: nextStatus === 'Paid / Complete',
+      paidDate: nextStatus === 'Paid / Complete' ? (prev.paidDate || prev.gameDate) : '',
+    }))
+  }
+
   function startNew() {
     setForm({
       id: '',
@@ -189,29 +198,9 @@ export default function GamesPage() {
     if (form.id === id) startNew()
   }
 
-  async function togglePaid(id: string) {
+  async function updateStatus(id: string, nextStatus: GameStatus) {
     const g = db.games.find(x => x.id === id)
     if (!g) return
-    const next = upsertGameIn(db, {
-      ...g,
-      id: g.id,
-      paidConfirmed: !g.paidConfirmed,
-      paidDate: !g.paidConfirmed ? (g.paidDate ?? g.gameDate) : undefined,
-    })
-    await write(next)
-    if (form.id === id) {
-      setForm(prev => ({
-        ...prev,
-        paidConfirmed: !g.paidConfirmed,
-        paidDate: !g.paidConfirmed ? (g.paidDate ?? g.gameDate) : '',
-      }))
-    }
-  }
-
-  async function toggleCompleted(id: string) {
-    const g = db.games.find(x => x.id === id)
-    if (!g) return
-    const nextStatus: GameStatus = g.status === 'Completed' ? 'Scheduled' : 'Completed'
     const next = upsertGameIn(db, {
       ...g,
       id: g.id,
@@ -219,7 +208,12 @@ export default function GamesPage() {
     })
     await write(next)
     if (form.id === id) {
-      setForm(prev => ({ ...prev, status: nextStatus }))
+      setForm(prev => ({
+        ...prev,
+        status: nextStatus,
+        paidConfirmed: nextStatus === 'Paid / Complete',
+        paidDate: nextStatus === 'Paid / Complete' ? (g.paidDate ?? g.gameDate) : '',
+      }))
     }
   }
 
@@ -294,26 +288,21 @@ export default function GamesPage() {
                 </td>
                 <td>{(g as any).roundtripMiles != null ? Number((g as any).roundtripMiles).toFixed(0) : ''}</td>
                 <td>{(g as any).gameFee != null ? `$${Number((g as any).gameFee).toFixed(0)}` : ''}</td>
-                <td>
-                  <div className="btnbar">
-                    {(g as any).paidConfirmed ? <span className="pill ok">Yes</span> : <span className="pill">No</span>}
-                    <button className="btn compact" onClick={() => togglePaid(g.id)}>
-                      Paid?
-                    </button>
-                  </div>
-                </td>
+                <td>{(g as any).paidConfirmed ? <span className="pill ok">Yes</span> : <span className="pill">No</span>}</td>
                 <td>
                   {g.locationAddress}
                   {g.distanceMiles != null ? <div className="small">{g.distanceMiles.toFixed(1)} mi one-way</div> : null}
                 </td>
                 <td>
                   <div className="btnbar">
-                    <span className={"pill " + (g.status === 'Completed' ? 'ok' : g.status === 'Canceled' ? 'bad' : '')}>{g.status}</span>
-                    {g.status !== 'Canceled' ? (
-                      <button className="btn compact" onClick={() => toggleCompleted(g.id)}>
-                        Complete?
-                      </button>
-                    ) : null}
+                    <span className={"pill " + (g.status === 'Paid / Complete' ? 'ok' : g.status === 'Canceled' ? 'bad' : g.status === 'Played' ? 'warn' : '')}>{g.status}</span>
+                    <select
+                      value={g.status}
+                      onChange={e => updateStatus(g.id, e.target.value as GameStatus)}
+                      style={{ minWidth: 145 }}
+                    >
+                      {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
                   </div>
                 </td>
                 <td>
@@ -350,7 +339,7 @@ export default function GamesPage() {
           </div>
           <div className="field">
             <label>Status</label>
-            <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value as any })}>
+            <select value={form.status} onChange={e => applyStatusToForm(e.target.value as GameStatus)}>
               {statuses.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
@@ -425,11 +414,10 @@ export default function GamesPage() {
           <div className="field">
             <label>Paid confirmed</label>
             <div className="btnbar">
-              <label className="pill" style={{cursor:'pointer'}}>
-                <input type="checkbox" checked={Boolean(form.paidConfirmed)} onChange={() => setForm(prev => ({...prev, paidConfirmed: !prev.paidConfirmed }))} style={{marginRight:8}}/>
-                Paid
-              </label>
-</div>
+              <span className={'pill ' + (form.paidConfirmed ? 'ok' : '')}>
+                {form.paidConfirmed ? `Auto-paid${form.paidDate ? ` (${form.paidDate})` : ''}` : 'Not paid'}
+              </span>
+            </div>
           </div>
         </div>
 

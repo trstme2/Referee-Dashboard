@@ -1,4 +1,5 @@
 import type { DB } from './types'
+import { migrateLegacyGameStatus } from './gameStatus'
 
 const KEY = 'referee_dashboard_db_v4'
 
@@ -7,7 +8,16 @@ export function loadDB(): DB {
   if (!raw) return seedDB()
   try {
     const parsed = JSON.parse(raw) as DB
-    return { ...seedDB(), ...parsed, settings: { ...seedDB().settings, ...(parsed as any).settings } }
+    const migrated = {
+      ...seedDB(),
+      ...parsed,
+      settings: { ...seedDB().settings, ...(parsed as any).settings },
+      games: Array.isArray(parsed.games) ? parsed.games.map(migrateLegacyGameStatus) : [],
+    }
+    if (JSON.stringify(migrated) !== raw) {
+      localStorage.setItem(KEY, JSON.stringify(migrated))
+    }
+    return migrated
   } catch {
     return seedDB()
   }

@@ -8,6 +8,7 @@ import {
   setRequirementStatusIn,
   upsertGameIn,
 } from './mutate'
+import { migrateLegacyGameStatus } from './gameStatus'
 import type { DB } from './types'
 
 function baseDB(): DB {
@@ -106,6 +107,46 @@ describe('requirement instance mutations', () => {
 })
 
 describe('game mutations', () => {
+  it('migrates legacy completed unpaid games to Played', () => {
+    const migrated = migrateLegacyGameStatus({
+      id: 'legacy-1',
+      sport: 'Soccer',
+      competitionLevel: 'High School',
+      gameDate: '2026-09-10',
+      locationAddress: 'Legacy Field',
+      status: 'Completed' as any,
+      paidConfirmed: false,
+      paidDate: undefined,
+      platformConfirmations: {},
+      createdAt: '2026-09-10T00:00:00.000Z',
+      updatedAt: '2026-09-10T00:00:00.000Z',
+    })
+
+    expect(migrated.status).toBe('Played')
+    expect(migrated.paidConfirmed).toBe(false)
+    expect(migrated.paidDate).toBeUndefined()
+  })
+
+  it('migrates legacy completed paid games to Paid / Complete', () => {
+    const migrated = migrateLegacyGameStatus({
+      id: 'legacy-2',
+      sport: 'Soccer',
+      competitionLevel: 'High School',
+      gameDate: '2026-09-11',
+      locationAddress: 'Legacy Field',
+      status: 'Completed' as any,
+      paidConfirmed: true,
+      paidDate: undefined,
+      platformConfirmations: {},
+      createdAt: '2026-09-11T00:00:00.000Z',
+      updatedAt: '2026-09-11T00:00:00.000Z',
+    })
+
+    expect(migrated.status).toBe('Paid / Complete')
+    expect(migrated.paidConfirmed).toBe(true)
+    expect(migrated.paidDate).toBe('2026-09-11')
+  })
+
   it('creates a linked calendar event, normalizes platform confirmations, and saves new leagues', () => {
     const db = baseDB()
     const next = upsertGameIn(db, {
@@ -161,7 +202,7 @@ describe('game mutations', () => {
       locationAddress: 'New Field',
       startTime: '20:30',
       notes: 'Updated note',
-      status: 'Completed',
+      status: 'Played',
     })
 
     expect(updated.games).toHaveLength(1)
@@ -172,6 +213,46 @@ describe('game mutations', () => {
     expect(updated.calendarEvents[0].notes).toBe('Updated note')
     expect(updated.calendarEvents[0].start).toBe(new Date('2026-10-12T20:30:00').toISOString())
     expect(updated.calendarEvents[0].end).toBe(new Date('2026-10-12T22:30:00').toISOString())
+  })
+
+  it('marks a game paid automatically when status becomes Paid / Complete', () => {
+    const created = upsertGameIn(baseDB(), {
+      sport: 'Soccer',
+      competitionLevel: 'High School',
+      gameDate: '2026-11-03',
+      locationAddress: 'North Field',
+      status: 'Scheduled',
+    })
+
+    const game = created.games[0]
+    const updated = upsertGameIn(created, {
+      ...game,
+      status: 'Paid / Complete',
+    })
+
+    expect(updated.games[0].status).toBe('Paid / Complete')
+    expect(updated.games[0].paidConfirmed).toBe(true)
+    expect(updated.games[0].paidDate).toBe('2026-11-03')
+  })
+
+  it('clears paid fields when moving back out of Paid / Complete', () => {
+    const created = upsertGameIn(baseDB(), {
+      sport: 'Soccer',
+      competitionLevel: 'High School',
+      gameDate: '2026-11-03',
+      locationAddress: 'North Field',
+      status: 'Paid / Complete',
+    })
+
+    const game = created.games[0]
+    const updated = upsertGameIn(created, {
+      ...game,
+      status: 'Played',
+    })
+
+    expect(updated.games[0].status).toBe('Played')
+    expect(updated.games[0].paidConfirmed).toBe(false)
+    expect(updated.games[0].paidDate).toBeUndefined()
   })
 
   it('deletes a game and its linked calendar event together', () => {

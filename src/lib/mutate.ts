@@ -19,6 +19,32 @@ function normalizePlatformConfirmations(platforms: string[], current?: Record<st
   return out
 }
 
+function paymentFieldsForStatus(
+  status: Game['status'],
+  paidConfirmed: boolean | undefined,
+  paidDate: string | undefined,
+  gameDate: string
+): Pick<Game, 'paidConfirmed' | 'paidDate'> {
+  if (status === 'Paid / Complete') {
+    return {
+      paidConfirmed: true,
+      paidDate: paidDate ?? gameDate,
+    }
+  }
+
+  if (status === 'Scheduled' || status === 'Played') {
+    return {
+      paidConfirmed: false,
+      paidDate: undefined,
+    }
+  }
+
+  return {
+    paidConfirmed: paidConfirmed ?? false,
+    paidDate,
+  }
+}
+
 export function upsertGameIn(db: DB, input: Partial<Game> & Pick<Game, 'sport'|'competitionLevel'|'gameDate'|'status'|'locationAddress'> & { id?: string }): DB {
   const now = nowISO()
   const id = input.id ?? uuid()
@@ -27,6 +53,13 @@ export function upsertGameIn(db: DB, input: Partial<Game> & Pick<Game, 'sport'|'
   const platformConfirmations = normalizePlatformConfirmations(
     db.settings.assigningPlatforms,
     input.platformConfirmations ?? existing?.platformConfirmations
+  )
+
+  const paymentFields = paymentFieldsForStatus(
+    input.status,
+    input.paidConfirmed ?? existing?.paidConfirmed,
+    input.paidDate ?? existing?.paidDate,
+    input.gameDate
   )
 
   const merged: Game = {
@@ -42,8 +75,8 @@ export function upsertGameIn(db: DB, input: Partial<Game> & Pick<Game, 'sport'|'
     role: input.role ?? existing?.role,
     status: input.status,
     gameFee: input.gameFee ?? existing?.gameFee,
-    paidConfirmed: (input.paidConfirmed ?? existing?.paidConfirmed) ?? false,
-    paidDate: input.paidDate ?? existing?.paidDate,
+    paidConfirmed: paymentFields.paidConfirmed,
+    paidDate: paymentFields.paidDate,
     homeTeam: input.homeTeam ?? existing?.homeTeam,
     awayTeam: input.awayTeam ?? existing?.awayTeam,
     notes: input.notes ?? existing?.notes,
