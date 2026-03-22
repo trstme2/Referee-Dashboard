@@ -84,6 +84,10 @@ export interface Expense {
   taxDeductible: boolean
   gameId?: string
   miles?: number
+  receiptStoragePath?: string
+  receiptFileName?: string
+  receiptMimeType?: string
+  receiptSizeBytes?: number
   notes?: string
   createdAt: string
   updatedAt: string
@@ -123,6 +127,10 @@ export interface RequirementActivity {
   quantity: number
   result?: string
   evidenceLink?: string
+  evidenceStoragePath?: string
+  evidenceFileName?: string
+  evidenceMimeType?: string
+  evidenceSizeBytes?: number
   notes?: string
   createdAt: string
   updatedAt: string

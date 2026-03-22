@@ -6,6 +6,8 @@ import {
   editRequirementInstanceIn,
   rollbackImportIn,
   setRequirementStatusIn,
+  updateExpenseIn,
+  updateRequirementActivityIn,
   upsertGameIn,
 } from './mutate'
 import { migrateLegacyGameStatus } from './gameStatus'
@@ -394,5 +396,55 @@ describe('requirement status mutations', () => {
     expect(updated?.status).toBe('Complete')
     expect(updated?.completionNotes).toBe('Finished clinic')
     expect(updated?.completedDate).toBe(new Date().toISOString().slice(0, 10))
+  })
+})
+
+describe('requirement activity evidence mutations', () => {
+  it('updates evidence metadata for a requirement activity', () => {
+    const db = baseDB()
+    const next = updateRequirementActivityIn(db, 'act-1', {
+      evidenceStoragePath: 'user-1/act-1/test.pdf',
+      evidenceFileName: 'test.pdf',
+      evidenceMimeType: 'application/pdf',
+      evidenceSizeBytes: 12345,
+    })
+    const updated = next.requirementActivities.find((x) => x.id === 'act-1')
+
+    expect(updated?.evidenceStoragePath).toBe('user-1/act-1/test.pdf')
+    expect(updated?.evidenceFileName).toBe('test.pdf')
+    expect(updated?.evidenceMimeType).toBe('application/pdf')
+    expect(updated?.evidenceSizeBytes).toBe(12345)
+  })
+})
+
+describe('expense receipt mutations', () => {
+  it('updates receipt metadata for an expense', () => {
+    const db: DB = {
+      ...baseDB(),
+      expenses: [
+        {
+          id: 'exp-1',
+          expenseDate: '2026-03-01',
+          amount: 42.5,
+          category: 'Gear',
+          taxDeductible: true,
+          createdAt: '2026-03-01T00:00:00.000Z',
+          updatedAt: '2026-03-01T00:00:00.000Z',
+        },
+      ],
+    }
+
+    const next = updateExpenseIn(db, 'exp-1', {
+      receiptStoragePath: 'user-1/exp-1/receipt.pdf',
+      receiptFileName: 'receipt.pdf',
+      receiptMimeType: 'application/pdf',
+      receiptSizeBytes: 999,
+    })
+    const updated = next.expenses.find((x) => x.id === 'exp-1')
+
+    expect(updated?.receiptStoragePath).toBe('user-1/exp-1/receipt.pdf')
+    expect(updated?.receiptFileName).toBe('receipt.pdf')
+    expect(updated?.receiptMimeType).toBe('application/pdf')
+    expect(updated?.receiptSizeBytes).toBe(999)
   })
 })

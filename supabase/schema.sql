@@ -81,6 +81,36 @@ begin
       updated_at timestamptz not null default now()
     );
   end if;
+
+  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='requirement_activities') then
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='requirement_activities' and column_name='evidence_storage_path') then
+      alter table public.requirement_activities add column evidence_storage_path text null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='requirement_activities' and column_name='evidence_file_name') then
+      alter table public.requirement_activities add column evidence_file_name text null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='requirement_activities' and column_name='evidence_mime_type') then
+      alter table public.requirement_activities add column evidence_mime_type text null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='requirement_activities' and column_name='evidence_size_bytes') then
+      alter table public.requirement_activities add column evidence_size_bytes bigint null;
+    end if;
+  end if;
+
+  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='expenses') then
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='expenses' and column_name='receipt_storage_path') then
+      alter table public.expenses add column receipt_storage_path text null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='expenses' and column_name='receipt_file_name') then
+      alter table public.expenses add column receipt_file_name text null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='expenses' and column_name='receipt_mime_type') then
+      alter table public.expenses add column receipt_mime_type text null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='expenses' and column_name='receipt_size_bytes') then
+      alter table public.expenses add column receipt_size_bytes bigint null;
+    end if;
+  end if;
 end $$;
 
 -- =========================
@@ -194,6 +224,10 @@ create table if not exists public.expenses (
   tax_deductible boolean not null default true,
   game_id uuid null references public.games(id) on delete set null,
   miles numeric null,
+  receipt_storage_path text null,
+  receipt_file_name text null,
+  receipt_mime_type text null,
+  receipt_size_bytes bigint null,
   notes text null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -236,6 +270,10 @@ create table if not exists public.requirement_activities (
   quantity int not null default 1,
   result text null,
   evidence_link text null,
+  evidence_storage_path text null,
+  evidence_file_name text null,
+  evidence_mime_type text null,
+  evidence_size_bytes bigint null,
   notes text null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -307,3 +345,101 @@ create index if not exists idx_expenses_user_date on public.expenses(user_id, ex
 create index if not exists idx_calendar_user_start on public.calendar_events(user_id, start_ts);
 create unique index if not exists idx_calendar_events_user_external_ref on public.calendar_events(user_id, external_ref) where external_ref is not null;
 create index if not exists idx_calendar_feeds_user_platform on public.calendar_feeds(user_id, platform);
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'requirement-evidence',
+  'requirement-evidence',
+  false,
+  10485760,
+  array['application/pdf','image/jpeg','image/png','image/webp']
+)
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'expense-receipts',
+  'expense-receipts',
+  false,
+  10485760,
+  array['application/pdf','image/jpeg','image/png','image/webp']
+)
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "requirement_evidence_select_own" on storage.objects;
+create policy "requirement_evidence_select_own"
+on storage.objects for select to authenticated
+using (
+  bucket_id = 'requirement-evidence'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+drop policy if exists "requirement_evidence_insert_own" on storage.objects;
+create policy "requirement_evidence_insert_own"
+on storage.objects for insert to authenticated
+with check (
+  bucket_id = 'requirement-evidence'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+drop policy if exists "requirement_evidence_update_own" on storage.objects;
+create policy "requirement_evidence_update_own"
+on storage.objects for update to authenticated
+using (
+  bucket_id = 'requirement-evidence'
+  and auth.uid()::text = (storage.foldername(name))[1]
+)
+with check (
+  bucket_id = 'requirement-evidence'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+drop policy if exists "requirement_evidence_delete_own" on storage.objects;
+create policy "requirement_evidence_delete_own"
+on storage.objects for delete to authenticated
+using (
+  bucket_id = 'requirement-evidence'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+drop policy if exists "expense_receipts_select_own" on storage.objects;
+create policy "expense_receipts_select_own"
+on storage.objects for select to authenticated
+using (
+  bucket_id = 'expense-receipts'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+drop policy if exists "expense_receipts_insert_own" on storage.objects;
+create policy "expense_receipts_insert_own"
+on storage.objects for insert to authenticated
+with check (
+  bucket_id = 'expense-receipts'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+drop policy if exists "expense_receipts_update_own" on storage.objects;
+create policy "expense_receipts_update_own"
+on storage.objects for update to authenticated
+using (
+  bucket_id = 'expense-receipts'
+  and auth.uid()::text = (storage.foldername(name))[1]
+)
+with check (
+  bucket_id = 'expense-receipts'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+drop policy if exists "expense_receipts_delete_own" on storage.objects;
+create policy "expense_receipts_delete_own"
+on storage.objects for delete to authenticated
+using (
+  bucket_id = 'expense-receipts'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);

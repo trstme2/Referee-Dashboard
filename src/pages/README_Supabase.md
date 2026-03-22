@@ -7,6 +7,7 @@ Create a project in Supabase, then grab:
 
 ## 2) Run the schema SQL
 Open Supabase → SQL Editor → paste `supabase/schema.sql` from this repo.
+This now also creates the private `requirement-evidence` Storage bucket plus policies for per-user document access.
 
 ## 3) Enable Auth + URLs
 Supabase → Authentication → URL Configuration:
@@ -30,5 +31,6 @@ Push to GitHub, import into Vercel, deploy.
 
 ## Notes
 - RLS policies enforce `auth.uid() = user_id` across all tables.
+- Requirement evidence uploads are stored in private Supabase Storage, under a user-scoped folder path.
 - Settings (home address, assigning platforms, league suggestions) are stored in `user_settings`.
 - Distance is calculated via `/api/distance` (serverless) so your API key is not exposed to the browser.

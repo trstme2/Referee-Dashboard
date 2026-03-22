@@ -8,9 +8,11 @@ import {
   deleteRequirementInstanceIn,
   editRequirementInstanceIn,
   setRequirementStatusIn,
+  updateRequirementActivityIn,
 } from '../lib/mutate'
 import type { RequirementStatus } from '../lib/types'
 import { yyyyMmDd } from '../lib/utils'
+import { createRequirementEvidenceSignedUrl, deleteRequirementEvidence, uploadRequirementEvidence } from '../lib/documents'
 
 function parseOptionalYear(input: string): number | undefined {
   const s = input.trim()
@@ -22,7 +24,7 @@ function parseOptionalYear(input: string): number | undefined {
 }
 
 export default function RequirementsPage() {
-  const { db, write, loading } = useData()
+  const { db, write, loading, mode, session } = useData()
   const [selectedDef, setSelectedDef] = useState(db.requirementDefinitions[0]?.id ?? '')
   const [seasonName, setSeasonName] = useState('Spring 2026')
   const [year, setYear] = useState(String(new Date().getFullYear()))
@@ -140,8 +142,78 @@ export default function RequirementsPage() {
   }
 
   async function delActivity(id: string) {
+    const activity = db.requirementActivities.find(a => a.id === id)
+    if (activity?.evidenceStoragePath && mode === 'supabase') {
+      try {
+        await deleteRequirementEvidence(activity.evidenceStoragePath)
+      } catch (e: any) {
+        alert(`Could not delete evidence file: ${String(e?.message ?? e)}`)
+        return
+      }
+    }
     const next = deleteRequirementActivityIn(db, id)
     await write(next)
+  }
+
+  async function uploadEvidence(activityId: string, file: File | null) {
+    if (!file) return
+    if (mode !== 'supabase' || !session?.user?.id) {
+      alert('File uploads require Supabase mode and a signed-in user.')
+      return
+    }
+    const activity = db.requirementActivities.find(a => a.id === activityId)
+    if (!activity) return
+    try {
+      if (activity.evidenceStoragePath) {
+        await deleteRequirementEvidence(activity.evidenceStoragePath)
+      }
+      const uploaded = await uploadRequirementEvidence(session.user.id, activityId, file)
+      const next = updateRequirementActivityIn(db, activityId, {
+        evidenceStoragePath: uploaded.path,
+        evidenceFileName: uploaded.fileName,
+        evidenceMimeType: uploaded.mimeType,
+        evidenceSizeBytes: uploaded.sizeBytes,
+      })
+      await write(next)
+    } catch (e: any) {
+      alert(`Evidence upload failed: ${String(e?.message ?? e)}`)
+    }
+  }
+
+  async function openEvidence(activityId: string) {
+    const activity = db.requirementActivities.find(a => a.id === activityId)
+    if (!activity) return
+    try {
+      if (activity.evidenceStoragePath) {
+        const url = await createRequirementEvidenceSignedUrl(activity.evidenceStoragePath)
+        window.open(url, '_blank', 'noopener,noreferrer')
+        return
+      }
+      if (activity.evidenceLink) {
+        window.open(activity.evidenceLink, '_blank', 'noopener,noreferrer')
+      }
+    } catch (e: any) {
+      alert(`Could not open evidence: ${String(e?.message ?? e)}`)
+    }
+  }
+
+  async function removeEvidence(activityId: string) {
+    const activity = db.requirementActivities.find(a => a.id === activityId)
+    if (!activity) return
+    try {
+      if (activity.evidenceStoragePath && mode === 'supabase') {
+        await deleteRequirementEvidence(activity.evidenceStoragePath)
+      }
+      const next = updateRequirementActivityIn(db, activityId, {
+        evidenceStoragePath: '',
+        evidenceFileName: '',
+        evidenceMimeType: '',
+        evidenceSizeBytes: undefined,
+      })
+      await write(next)
+    } catch (e: any) {
+      alert(`Could not remove evidence: ${String(e?.message ?? e)}`)
+    }
   }
 
   const activityByInstance = useMemo(() => {
@@ -251,6 +323,29 @@ export default function RequirementsPage() {
                             <span className="pill">{a.activityDate}</span>
                             <span className="pill">x{a.quantity}</span>
                             {a.notes ? <span className="small">{a.notes}</span> : null}
+                            {a.evidenceFileName ? <span className="pill ok">{a.evidenceFileName}</span> : null}
+                            {a.evidenceStoragePath || a.evidenceLink ? (
+                              <button className="btn" onClick={() => openEvidence(a.id)} style={{ padding: '4px 8px' }}>
+                                Open evidence
+                              </button>
+                            ) : null}
+                            {mode === 'supabase' && session ? (
+                              <input
+                                type="file"
+                                accept=".pdf,image/jpeg,image/png,image/webp"
+                                onChange={e => {
+                                  const file = e.target.files?.[0] ?? null
+                                  void uploadEvidence(a.id, file)
+                                  e.currentTarget.value = ''
+                                }}
+                                style={{ maxWidth: 220 }}
+                              />
+                            ) : null}
+                            {a.evidenceStoragePath ? (
+                              <button className="btn" onClick={() => removeEvidence(a.id)} style={{ padding: '4px 8px' }}>
+                                Remove file
+                              </button>
+                            ) : null}
                             <button className="btn danger" onClick={() => delActivity(a.id)} style={{ padding: '4px 8px' }}>Del</button>
                           </div>
                         ))}
@@ -329,6 +424,7 @@ export default function RequirementsPage() {
           <button className="btn" onClick={createDefinition} disabled={!newDef.name.trim()}>Create requirement</button>
         </div>
         <p className="small">This creates a reusable requirement you can apply to seasons/years. Not just the two defaults.</p>
+        <p className="small">For document evidence, activities can now upload files to Supabase Storage when the app is running in Supabase mode.</p>
       </div>
     </div>
   )

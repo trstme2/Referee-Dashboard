@@ -197,11 +197,43 @@ export function upsertExpenseIn(db: DB, input: Partial<Expense> & Pick<Expense, 
     taxDeductible: input.taxDeductible,
     gameId: input.gameId,
     miles: input.miles,
+    receiptStoragePath: input.receiptStoragePath ?? existing?.receiptStoragePath,
+    receiptFileName: input.receiptFileName ?? existing?.receiptFileName,
+    receiptMimeType: input.receiptMimeType ?? existing?.receiptMimeType,
+    receiptSizeBytes: input.receiptSizeBytes ?? existing?.receiptSizeBytes,
     notes: input.notes,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   }
   return { ...db, expenses: existing ? db.expenses.map(e => e.id===id ? merged : e) : [merged, ...db.expenses] }
+}
+
+export function updateExpenseIn(
+  db: DB,
+  id: string,
+  patch: Partial<Pick<Expense, 'expenseDate' | 'amount' | 'category' | 'vendor' | 'description' | 'taxDeductible' | 'gameId' | 'miles' | 'receiptStoragePath' | 'receiptFileName' | 'receiptMimeType' | 'receiptSizeBytes' | 'notes'>>
+): DB {
+  const now = nowISO()
+  return {
+    ...db,
+    expenses: db.expenses.map(e => e.id === id ? ({
+      ...e,
+      expenseDate: patch.expenseDate ?? e.expenseDate,
+      amount: patch.amount ?? e.amount,
+      category: patch.category ?? e.category,
+      vendor: patch.vendor === undefined ? e.vendor : patch.vendor,
+      description: patch.description === undefined ? e.description : patch.description,
+      taxDeductible: patch.taxDeductible ?? e.taxDeductible,
+      gameId: patch.gameId === undefined ? e.gameId : patch.gameId,
+      miles: patch.miles === undefined ? e.miles : patch.miles,
+      receiptStoragePath: patch.receiptStoragePath === undefined ? e.receiptStoragePath : patch.receiptStoragePath,
+      receiptFileName: patch.receiptFileName === undefined ? e.receiptFileName : patch.receiptFileName,
+      receiptMimeType: patch.receiptMimeType === undefined ? e.receiptMimeType : patch.receiptMimeType,
+      receiptSizeBytes: patch.receiptSizeBytes === undefined ? e.receiptSizeBytes : patch.receiptSizeBytes,
+      notes: patch.notes === undefined ? e.notes : patch.notes,
+      updatedAt: now,
+    }) : e),
+  }
 }
 
 export function deleteExpenseIn(db: DB, id: string): DB { return { ...db, expenses: db.expenses.filter(e => e.id !== id) } }
@@ -274,6 +306,29 @@ export function addRequirementActivityIn(db: DB, instanceId: string, activity: O
   const now = nowISO()
   const a: RequirementActivity = { id: uuid(), instanceId, ...activity, createdAt: now, updatedAt: now }
   return { ...db, requirementActivities: [a, ...db.requirementActivities] }
+}
+export function updateRequirementActivityIn(
+  db: DB,
+  id: string,
+  patch: Partial<Pick<RequirementActivity, 'activityDate' | 'quantity' | 'result' | 'evidenceLink' | 'evidenceStoragePath' | 'evidenceFileName' | 'evidenceMimeType' | 'evidenceSizeBytes' | 'notes'>>
+): DB {
+  const now = nowISO()
+  return {
+    ...db,
+    requirementActivities: db.requirementActivities.map(a => a.id === id ? ({
+      ...a,
+      activityDate: patch.activityDate ?? a.activityDate,
+      quantity: patch.quantity ?? a.quantity,
+      result: patch.result === undefined ? a.result : patch.result,
+      evidenceLink: patch.evidenceLink === undefined ? a.evidenceLink : patch.evidenceLink,
+      evidenceStoragePath: patch.evidenceStoragePath === undefined ? a.evidenceStoragePath : patch.evidenceStoragePath,
+      evidenceFileName: patch.evidenceFileName === undefined ? a.evidenceFileName : patch.evidenceFileName,
+      evidenceMimeType: patch.evidenceMimeType === undefined ? a.evidenceMimeType : patch.evidenceMimeType,
+      evidenceSizeBytes: patch.evidenceSizeBytes === undefined ? a.evidenceSizeBytes : patch.evidenceSizeBytes,
+      notes: patch.notes === undefined ? a.notes : patch.notes,
+      updatedAt: now,
+    }) : a),
+  }
 }
 export function deleteRequirementActivityIn(db: DB, id: string): DB {
   return { ...db, requirementActivities: db.requirementActivities.filter(a => a.id !== id) }

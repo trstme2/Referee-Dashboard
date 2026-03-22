@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useData } from '../lib/DataContext'
 import type { ExpenseCategory } from '../lib/types'
-import { upsertExpenseIn, deleteExpenseIn } from '../lib/mutate'
+import { upsertExpenseIn, deleteExpenseIn, updateExpenseIn } from '../lib/mutate'
 import { formatMoney, safeNumber } from '../lib/utils'
+import { createExpenseReceiptSignedUrl, deleteExpenseReceipt, uploadExpenseReceipt } from '../lib/documents'
 
 const expenseCategories: ExpenseCategory[] = [
   'Mileage','Gear','Uniform','Dues/Registration',
@@ -10,7 +11,7 @@ const expenseCategories: ExpenseCategory[] = [
 ]
 
 export default function ExpensesPage() {
-  const { db, write, loading } = useData()
+  const { db, write, loading, mode, session } = useData()
   const [form, setForm] = useState({
     id: '',
     expenseDate: '',
@@ -21,6 +22,7 @@ export default function ExpensesPage() {
     description: '',
     taxDeductible: 'Yes',
     gameId: '',
+    receiptFileName: '',
     notes: '',
   })
 
@@ -48,6 +50,7 @@ export default function ExpensesPage() {
       description: '',
       taxDeductible: 'Yes',
       gameId: '',
+      receiptFileName: '',
       notes: '',
     })
   }
@@ -83,14 +86,81 @@ export default function ExpensesPage() {
       description: e.description ?? '',
       taxDeductible: e.taxDeductible ? 'Yes' : 'No',
       gameId: e.gameId ?? '',
+      receiptFileName: e.receiptFileName ?? '',
       notes: e.notes ?? '',
     })
   }
 
   async function del(id: string) {
+    const expense = db.expenses.find(x => x.id === id)
+    if (expense?.receiptStoragePath && mode === 'supabase') {
+      try {
+        await deleteExpenseReceipt(expense.receiptStoragePath)
+      } catch (e: any) {
+        alert(`Could not delete receipt file: ${String(e?.message ?? e)}`)
+        return
+      }
+    }
     const next = deleteExpenseIn(db, id)
     await write(next)
     if (form.id === id) startNew()
+  }
+
+  async function uploadReceipt(expenseId: string, file: File | null) {
+    if (!file) return
+    if (mode !== 'supabase' || !session?.user?.id) {
+      alert('Receipt uploads require Supabase mode and a signed-in user.')
+      return
+    }
+    const expense = db.expenses.find(x => x.id === expenseId)
+    if (!expense) return
+    try {
+      if (expense.receiptStoragePath) {
+        await deleteExpenseReceipt(expense.receiptStoragePath)
+      }
+      const uploaded = await uploadExpenseReceipt(session.user.id, expenseId, file)
+      const next = updateExpenseIn(db, expenseId, {
+        receiptStoragePath: uploaded.path,
+        receiptFileName: uploaded.fileName,
+        receiptMimeType: uploaded.mimeType,
+        receiptSizeBytes: uploaded.sizeBytes,
+      })
+      await write(next)
+      if (form.id === expenseId) setForm(prev => ({ ...prev, receiptFileName: uploaded.fileName }))
+    } catch (e: any) {
+      alert(`Receipt upload failed: ${String(e?.message ?? e)}`)
+    }
+  }
+
+  async function openReceipt(expenseId: string) {
+    const expense = db.expenses.find(x => x.id === expenseId)
+    if (!expense?.receiptStoragePath) return
+    try {
+      const url = await createExpenseReceiptSignedUrl(expense.receiptStoragePath)
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch (e: any) {
+      alert(`Could not open receipt: ${String(e?.message ?? e)}`)
+    }
+  }
+
+  async function removeReceipt(expenseId: string) {
+    const expense = db.expenses.find(x => x.id === expenseId)
+    if (!expense) return
+    try {
+      if (expense.receiptStoragePath && mode === 'supabase') {
+        await deleteExpenseReceipt(expense.receiptStoragePath)
+      }
+      const next = updateExpenseIn(db, expenseId, {
+        receiptStoragePath: '',
+        receiptFileName: '',
+        receiptMimeType: '',
+        receiptSizeBytes: undefined,
+      })
+      await write(next)
+      if (form.id === expenseId) setForm(prev => ({ ...prev, receiptFileName: '' }))
+    } catch (e: any) {
+      alert(`Could not remove receipt: ${String(e?.message ?? e)}`)
+    }
   }
 
   return (
@@ -104,7 +174,7 @@ export default function ExpensesPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Date</th><th>Category</th><th>Amount</th><th>Miles</th><th>Description</th><th></th>
+              <th>Date</th><th>Category</th><th>Amount</th><th>Miles</th><th>Description</th><th>Receipt</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -117,13 +187,32 @@ export default function ExpensesPage() {
                 <td>{e.description ?? e.vendor ?? ''}</td>
                 <td>
                   <div className="btnbar">
+                    {e.receiptFileName ? <span className="pill ok">{e.receiptFileName}</span> : <span className="pill">None</span>}
+                    {e.receiptStoragePath ? <button className="btn compact" onClick={() => openReceipt(e.id)}>Open</button> : null}
+                    {mode === 'supabase' && session ? (
+                      <input
+                        type="file"
+                        accept=".pdf,image/jpeg,image/png,image/webp"
+                        onChange={evt => {
+                          const file = evt.target.files?.[0] ?? null
+                          void uploadReceipt(e.id, file)
+                          evt.currentTarget.value = ''
+                        }}
+                        style={{ maxWidth: 180 }}
+                      />
+                    ) : null}
+                    {e.receiptStoragePath ? <button className="btn compact" onClick={() => removeReceipt(e.id)}>Remove</button> : null}
+                  </div>
+                </td>
+                <td>
+                  <div className="btnbar">
                     <button className="btn" onClick={() => edit(e.id)}>Edit</button>
                     <button className="btn danger" onClick={() => del(e.id)}>Delete</button>
                   </div>
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan={6} className="small">No expenses yet.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={7} className="small">No expenses yet.</td></tr>}
           </tbody>
         </table>
       </section>
@@ -204,6 +293,32 @@ export default function ExpensesPage() {
           <label>Notes</label>
           <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
         </div>
+
+        {form.id && (
+          <div className="field">
+            <label>Receipt</label>
+            <div className="btnbar">
+              {form.receiptFileName ? <span className="pill ok">{form.receiptFileName}</span> : <span className="pill">No receipt uploaded</span>}
+              {mode === 'supabase' && session ? (
+                <input
+                  type="file"
+                  accept=".pdf,image/jpeg,image/png,image/webp"
+                  onChange={evt => {
+                    const file = evt.target.files?.[0] ?? null
+                    void uploadReceipt(form.id, file)
+                    evt.currentTarget.value = ''
+                  }}
+                />
+              ) : <span className="small">Sign in with Supabase mode to upload receipts.</span>}
+              {form.id && db.expenses.find(x => x.id === form.id)?.receiptStoragePath ? (
+                <>
+                  <button className="btn" onClick={() => openReceipt(form.id)}>Open receipt</button>
+                  <button className="btn" onClick={() => removeReceipt(form.id)}>Remove receipt</button>
+                </>
+              ) : null}
+            </div>
+          </div>
+        )}
 
         <div className="btnbar">
           <button className="btn primary" onClick={save} disabled={loading || !form.expenseDate || !form.amount}>Save</button>
