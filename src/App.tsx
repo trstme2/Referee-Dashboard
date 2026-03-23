@@ -11,6 +11,7 @@ import AuthPage from './pages/AuthPage'
 import SyncPage from './pages/SyncPage'
 import TaxPage from './pages/TaxPage'
 import { useData } from './lib/DataContext'
+import logo from './assets/logo.png'
 
 export default function App() {
   const { mode, session, error } = useData()
@@ -19,9 +20,12 @@ export default function App() {
   return (
     <div className="container">
       <header className="topbar">
-        <div className="brand">
-          <h1>Referee Career Dashboard</h1>
-          <p>Games, expenses, compliance, calendar. Humanity: still winging it.</p>
+        <div className="brand-wrap">
+          <img src={logo} alt="Referee Career Dashboard logo" className="brand-logo" />
+          <div className="brand">
+            <h1>Referee Career Dashboard</h1>
+            <p>Games, expenses, compliance, calendar. Humanity: still winging it.</p>
+          </div>
         </div>
         <Nav />
       </header>
