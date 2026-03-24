@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Nav from './components/Nav'
 import HomePage from './pages/HomePage'
 import GamesPage from './pages/GamesPage'
@@ -16,10 +16,11 @@ import logo from './assets/logo.png'
 export default function App() {
   const { mode, session, error } = useData()
   const requireAuth = mode === 'supabase'
+  const location = useLocation()
 
   return (
     <div className="container">
-      <header className="topbar">
+      <header className="topbar accent-frame">
         <div className="brand-wrap">
           <img src={logo} alt="Referee Career Dashboard logo" className="brand-logo" />
           <div className="brand">
@@ -37,22 +38,24 @@ export default function App() {
         </div>
       )}
 
-      <Routes>
-        <Route path="/auth" element={<AuthPage />} />
+      <div key={location.pathname} className="route-shell">
+        <Routes>
+          <Route path="/auth" element={<AuthPage />} />
 
-        {/* Guard routes when in supabase mode */}
-        <Route path="/" element={requireAuth && !session ? <Navigate to="/auth" /> : <HomePage />} />
-        <Route path="/games" element={requireAuth && !session ? <Navigate to="/auth" /> : <GamesPage />} />
-        <Route path="/calendar" element={requireAuth && !session ? <Navigate to="/auth" /> : <CalendarPage />} />
-        <Route path="/expenses" element={requireAuth && !session ? <Navigate to="/auth" /> : <ExpensesPage />} />
-        <Route path="/tax" element={requireAuth && !session ? <Navigate to="/auth" /> : <TaxPage />} />
-        <Route path="/requirements" element={requireAuth && !session ? <Navigate to="/auth" /> : <RequirementsPage />} />
-        <Route path="/import" element={requireAuth && !session ? <Navigate to="/auth" /> : <ImportPage />} />
-        <Route path="/sync" element={requireAuth && !session ? <Navigate to="/auth" /> : <SyncPage />} />
-        <Route path="/settings" element={requireAuth && !session ? <Navigate to="/auth" /> : <SettingsPage />} />
+          {/* Guard routes when in supabase mode */}
+          <Route path="/" element={requireAuth && !session ? <Navigate to="/auth" /> : <HomePage />} />
+          <Route path="/games" element={requireAuth && !session ? <Navigate to="/auth" /> : <GamesPage />} />
+          <Route path="/calendar" element={requireAuth && !session ? <Navigate to="/auth" /> : <CalendarPage />} />
+          <Route path="/expenses" element={requireAuth && !session ? <Navigate to="/auth" /> : <ExpensesPage />} />
+          <Route path="/tax" element={requireAuth && !session ? <Navigate to="/auth" /> : <TaxPage />} />
+          <Route path="/requirements" element={requireAuth && !session ? <Navigate to="/auth" /> : <RequirementsPage />} />
+          <Route path="/import" element={requireAuth && !session ? <Navigate to="/auth" /> : <ImportPage />} />
+          <Route path="/sync" element={requireAuth && !session ? <Navigate to="/auth" /> : <SyncPage />} />
+          <Route path="/settings" element={requireAuth && !session ? <Navigate to="/auth" /> : <SettingsPage />} />
 
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </div>
     </div>
   )
 }

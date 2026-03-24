@@ -1,6 +1,15 @@
 import { useMemo } from 'react'
 import { useData } from '../lib/DataContext'
 import { formatMoney, isWithinNextDays } from '../lib/utils'
+import type { RequirementStatus } from '../lib/types'
+
+function requirementStatusBadge(status: RequirementStatus, overdue: boolean) {
+  if (overdue || status === 'Overdue') return { label: 'Overdue', tone: 'bad' }
+  if (status === 'Complete') return { label: 'Complete', tone: 'ok' }
+  if (status === 'In Progress') return { label: 'In Progress', tone: 'warn' }
+  if (status === 'Waived') return { label: 'Waived', tone: 'muted' }
+  return { label: 'Not Started', tone: 'info' }
+}
 
 export default function HomePage() {
   const { db, mode, loading, session } = useData()
@@ -69,7 +78,7 @@ export default function HomePage() {
 
   return (
     <div className="grid">
-      <section className="card">
+      <section className="card hero accent-frame">
         <h2>Status</h2>
         <p className="sub">
           Mode: <span className="pill">{mode}</span>
@@ -145,9 +154,10 @@ export default function HomePage() {
                   </td>
                   <td>{r.dueDate ?? '-'}</td>
                   <td>
-                    <span className={'pill ' + (r.overdue ? 'bad' : r.status === 'In Progress' ? 'warn' : '')}>
-                      {r.overdue ? 'Overdue' : r.status}
-                    </span>
+                    {(() => {
+                      const badge = requirementStatusBadge(r.status as RequirementStatus, r.overdue)
+                      return <span className={`pill ${badge.tone}`}>{badge.label}</span>
+                    })()}
                   </td>
                 </tr>
               ))}

@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
 import type { CompetitionLevel, GameStatus, Sport, Role, SoccerRole, LacrosseRole } from '../lib/types'
 import { upsertGameIn, deleteGameIn } from '../lib/mutate'
 import { getDrivingDistanceMiles } from '../lib/distance'
+import { formatMoney, isWithinNextDays } from '../lib/utils'
 
 const sports: Sport[] = ['Soccer', 'Lacrosse']
 const levels: CompetitionLevel[] = ['High School', 'College', 'Club']
@@ -43,11 +45,27 @@ function shiftTimeByMinutes(time: string, deltaMinutes: number): string {
   return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`
 }
 
+function paymentBadge(game: { paidConfirmed: boolean; status: GameStatus }) {
+  if (game.paidConfirmed || game.status === 'Paid / Complete') return { label: 'Paid', tone: 'ok' }
+  if (game.status === 'Canceled') return { label: 'Canceled', tone: 'bad' }
+  if (game.status === 'Played') return { label: 'Unpaid', tone: 'warn' }
+  return { label: 'Unpaid', tone: 'warn' }
+}
+
+function gameStatusTone(status: GameStatus) {
+  if (status === 'Paid / Complete') return 'ok'
+  if (status === 'Played') return 'warn'
+  if (status === 'Canceled') return 'bad'
+  return 'info'
+}
+
 export default function GamesPage() {
   const { db, write, loading } = useData()
+  const navigate = useNavigate()
   const [filter, setFilter] = useState<'All' | GameStatus>('All')
   const [q, setQ] = useState<string>('')
   const [yearFilter, setYearFilter] = useState<string>('All years')
+  const [expandedGameId, setExpandedGameId] = useState<string | null>(null)
 
   const [form, setForm] = useState({
     id: '',
@@ -105,6 +123,21 @@ export default function GamesPage() {
       return timeA < timeB ? 1 : -1
     })
   }, [db.games, filter, q, yearFilter])
+  const strip = useMemo(() => {
+    const activeRows = rows.filter(g => g.status !== 'Canceled')
+    const mileageRows = activeRows.filter(g => g.status === 'Played' || g.status === 'Paid / Complete')
+    const gamesThisWeek = activeRows.filter(g => isWithinNextDays(g.gameDate, 7)).length
+    const totalExpectedPay = activeRows.reduce((sum, g) => sum + Number(g.gameFee ?? 0), 0)
+    const paidAmount = activeRows
+      .filter(g => g.paidConfirmed || g.status === 'Paid / Complete')
+      .reduce((sum, g) => sum + Number(g.gameFee ?? 0), 0)
+    const unpaidAmount = activeRows
+      .filter(g => !(g.paidConfirmed || g.status === 'Paid / Complete'))
+      .reduce((sum, g) => sum + Number(g.gameFee ?? 0), 0)
+    const milesLogged = mileageRows.reduce((sum, g) => sum + Number(g.roundtripMiles ?? (g.distanceMiles != null ? g.distanceMiles * 2 : 0)), 0)
+    return { gamesThisWeek, totalExpectedPay, paidAmount, unpaidAmount, milesLogged }
+  }, [rows])
+  const noGamesYet = db.games.length === 0
 
   function applyStatusToForm(nextStatus: GameStatus) {
     setForm(prev => ({
@@ -169,6 +202,7 @@ export default function GamesPage() {
   async function edit(id: string) {
     const g = db.games.find(x => x.id === id)
     if (!g) return
+    setExpandedGameId(id)
     setForm({
       id: g.id,
       sport: g.sport,
@@ -195,6 +229,7 @@ export default function GamesPage() {
   async function del(id: string) {
     const next = deleteGameIn(db, id)
     await write(next)
+    if (expandedGameId === id) setExpandedGameId(null)
     if (form.id === id) startNew()
   }
 
@@ -215,6 +250,10 @@ export default function GamesPage() {
         paidDate: nextStatus === 'Paid / Complete' ? (g.paidDate ?? g.gameDate) : '',
       }))
     }
+  }
+
+  function toggleExpanded(id: string) {
+    setExpandedGameId(prev => prev === id ? null : id)
   }
 
   function togglePlatform(p: string) {
@@ -240,8 +279,26 @@ export default function GamesPage() {
 
   return (
     <div className="grid cols2">
-      <section className="card">
+      <section className="card accent-frame">
         <h2>Games</h2>
+        <div className="kpi compact-kpi">
+          <div className="box">
+            <div className="label">Games this week</div>
+            <div className="value">{strip.gamesThisWeek}</div>
+          </div>
+          <div className="box">
+            <div className="label">Total expected pay</div>
+            <div className="value">{formatMoney(strip.totalExpectedPay)}</div>
+          </div>
+          <div className="box">
+            <div className="label">Paid vs unpaid</div>
+            <div className="value">{formatMoney(strip.paidAmount)} / {formatMoney(strip.unpaidAmount)}</div>
+          </div>
+          <div className="box">
+            <div className="label">Miles logged</div>
+            <div className="value">{strip.milesLogged.toFixed(1)} mi</div>
+          </div>
+        </div>
         <div className="row">
           <div className="field">
             <label>Status filter</label>
@@ -263,61 +320,153 @@ export default function GamesPage() {
           </div>
         </div>
 
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Date</th><th>Sport</th><th>Level</th><th>Level detail</th><th>League</th><th>Platforms</th><th>Roundtrip mi</th><th>Pay</th><th>Paid</th><th>Location</th><th>Status</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(g => (
-              <tr key={g.id}>
-                <td>{g.gameDate}{g.startTime ? ` ${g.startTime}` : ''}</td>
-                <td>{g.sport}</td>
-                <td>{g.competitionLevel}</td>
-                <td>{(g as any).levelDetail ?? ''}</td>
-                <td>{g.league ?? ''}</td>
-                <td>
-                  <div className="platform-row">
-                    {db.settings.assigningPlatforms.slice(0, 2).map(p => (
-                      <span key={p} className={'platform-chip ' + (g.platformConfirmations?.[p] ? 'on' : 'off')}>
-                        {p}
-                      </span>
-                    ))}
-                  </div>
-                </td>
-                <td>{(g as any).roundtripMiles != null ? Number((g as any).roundtripMiles).toFixed(0) : ''}</td>
-                <td>{(g as any).gameFee != null ? `$${Number((g as any).gameFee).toFixed(0)}` : ''}</td>
-                <td>{(g as any).paidConfirmed ? <span className="pill ok">Yes</span> : <span className="pill">No</span>}</td>
-                <td>
-                  {g.locationAddress}
-                  {g.distanceMiles != null ? <div className="small">{g.distanceMiles.toFixed(1)} mi one-way</div> : null}
-                </td>
-                <td>
-                  <div className="btnbar">
-                    <span className={"pill " + (g.status === 'Paid / Complete' ? 'ok' : g.status === 'Canceled' ? 'bad' : g.status === 'Played' ? 'warn' : '')}>{g.status}</span>
-                    <select
-                      value={g.status}
-                      onChange={e => updateStatus(g.id, e.target.value as GameStatus)}
-                      style={{ minWidth: 145 }}
-                    >
-                      {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                </td>
-                <td>
-                  <div className="btnbar">
-                    <button className="btn" onClick={() => edit(g.id)}>Edit</button>
-                    <button className="btn danger" onClick={() => del(g.id)}>Delete</button>
-                  </div>
-                </td>
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th></th><th>Date</th><th>Sport</th><th>Level</th><th>Level detail</th><th>League</th><th>Platforms</th><th>Roundtrip mi</th><th>Pay</th><th>Paid</th><th>Location</th><th>Status</th><th></th>
               </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr><td colSpan={12} className="small">No games yet.</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map(g => {
+                const isExpanded = expandedGameId === g.id
+                const payBadge = paymentBadge(g)
+                return (
+                  <Fragment key={g.id}>
+                    <tr
+                      className={`expandable-row${isExpanded ? ' expanded' : ''}`}
+                      onClick={() => toggleExpanded(g.id)}
+                    >
+                      <td className="expander-cell" aria-label={isExpanded ? 'Collapse row' : 'Expand row'}>
+                        {isExpanded ? '−' : '+'}
+                      </td>
+                      <td>{g.gameDate}{g.startTime ? ` ${g.startTime}` : ''}</td>
+                      <td>{g.sport}</td>
+                      <td>{g.competitionLevel}</td>
+                      <td>{(g as any).levelDetail ?? ''}</td>
+                      <td>{g.league ?? ''}</td>
+                      <td>
+                        <div className="platform-row">
+                          {db.settings.assigningPlatforms.slice(0, 2).map(p => (
+                            <span key={p} className={'platform-chip ' + (g.platformConfirmations?.[p] ? 'on' : 'off')}>
+                              {p}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td>{(g as any).roundtripMiles != null ? Number((g as any).roundtripMiles).toFixed(0) : ''}</td>
+                      <td>{(g as any).gameFee != null ? `$${Number((g as any).gameFee).toFixed(0)}` : ''}</td>
+                      <td><span className={`pill ${payBadge.tone}`}>{payBadge.label}</span></td>
+                      <td>
+                        {g.locationAddress}
+                        {g.distanceMiles != null ? <div className="small">{g.distanceMiles.toFixed(1)} mi one-way</div> : null}
+                      </td>
+                      <td>
+                        <div className="btnbar" onClick={e => e.stopPropagation()}>
+                          <span className={`pill ${gameStatusTone(g.status)}`}>{g.status}</span>
+                          <select
+                            value={g.status}
+                            onChange={e => updateStatus(g.id, e.target.value as GameStatus)}
+                            style={{ minWidth: 145 }}
+                          >
+                            {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="btnbar" onClick={e => e.stopPropagation()}>
+                          <button className="btn" onClick={() => edit(g.id)}>Edit</button>
+                          <button className="btn danger" onClick={() => del(g.id)}>Delete</button>
+                        </div>
+                      </td>
+                    </tr>
+                    {isExpanded ? (
+                      <tr className="expanded">
+                        <td colSpan={13}>
+                          <div className="expanded-panel">
+                            <div className="expanded-grid">
+                              <div className="expanded-block">
+                                <div className="expanded-label">Teams</div>
+                                <div className="expanded-value">
+                                  {g.homeTeam || g.awayTeam ? `${g.homeTeam || 'TBD'} vs ${g.awayTeam || 'TBD'}` : 'Teams not entered yet'}
+                                </div>
+                              </div>
+                              <div className="expanded-block">
+                                <div className="expanded-label">Location</div>
+                                <div className="expanded-value">{g.locationAddress}</div>
+                              </div>
+                              <div className="expanded-block">
+                                <div className="expanded-label">Pay</div>
+                                <div className="expanded-value">
+                                  {(g as any).gameFee != null ? `$${Number((g as any).gameFee).toFixed(2)}` : 'No fee entered'}
+                                  {' · '}
+                                  <span className={`pill ${payBadge.tone}`}>{payBadge.label}</span>
+                                </div>
+                              </div>
+                              <div className="expanded-block">
+                                <div className="expanded-label">Mileage</div>
+                                <div className="expanded-value">
+                                  {(g as any).roundtripMiles != null
+                                    ? `${Number((g as any).roundtripMiles).toFixed(1)} roundtrip mi`
+                                    : g.distanceMiles != null
+                                      ? `${(g.distanceMiles * 2).toFixed(1)} estimated roundtrip mi`
+                                      : 'No mileage logged'}
+                                </div>
+                              </div>
+                              <div className="expanded-block">
+                                <div className="expanded-label">Platforms</div>
+                                <div className="expanded-value">
+                                  {(db.settings.assigningPlatforms.filter(p => g.platformConfirmations?.[p]).join(', ')) || 'No platform confirmations yet'}
+                                </div>
+                              </div>
+                              <div className="expanded-block">
+                                <div className="expanded-label">Notes</div>
+                                <div className="expanded-value">{g.notes?.trim() ? g.notes : 'No notes yet'}</div>
+                              </div>
+                            </div>
+                            <div className="btnbar expanded-actions" onClick={e => e.stopPropagation()}>
+                              <button className="btn primary" onClick={() => edit(g.id)}>Edit game</button>
+                              <button className="btn" onClick={() => setExpandedGameId(null)}>Collapse</button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                )
+              })}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={13} className="empty-cell">
+                    <div className="empty-state centered">
+                      <h3>{noGamesYet ? 'No games yet' : 'No games match those filters'}</h3>
+                      <p>
+                        {noGamesYet
+                          ? 'Sync RefQuest or DragonFly, import a CSV, or add your first assignment here so this page becomes your working schedule.'
+                          : 'Try clearing one of the filters or your search to bring more assignments back into view.'}
+                      </p>
+                      <div className="btnbar">
+                        {noGamesYet ? (
+                          <>
+                            <button className="btn primary" onClick={startNew}>Add your first assignment</button>
+                            <button className="btn" onClick={() => navigate('/sync')}>Sync calendars</button>
+                            <button className="btn" onClick={() => navigate('/import')}>Import CSV</button>
+                          </>
+                        ) : (
+                          <>
+                            <button className="btn primary" onClick={() => setFilter('All')}>Clear status filter</button>
+                            <button className="btn" onClick={() => setYearFilter('All years')}>Show all years</button>
+                            <button className="btn" onClick={() => setQ('')}>Clear search</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="card">
@@ -415,7 +564,7 @@ export default function GamesPage() {
             <label>Paid confirmed</label>
             <div className="btnbar">
               <span className={'pill ' + (form.paidConfirmed ? 'ok' : '')}>
-                {form.paidConfirmed ? `Auto-paid${form.paidDate ? ` (${form.paidDate})` : ''}` : 'Not paid'}
+                {form.paidConfirmed ? `Paid${form.paidDate ? ` (${form.paidDate})` : ''}` : 'Unpaid'}
               </span>
             </div>
           </div>

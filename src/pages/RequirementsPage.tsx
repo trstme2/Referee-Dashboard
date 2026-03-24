@@ -23,6 +23,14 @@ function parseOptionalYear(input: string): number | undefined {
   return n
 }
 
+function requirementStatusBadge(status: RequirementStatus) {
+  if (status === 'Complete') return { label: 'Complete', tone: 'ok' }
+  if (status === 'Overdue') return { label: 'Overdue', tone: 'bad' }
+  if (status === 'In Progress') return { label: 'In Progress', tone: 'warn' }
+  if (status === 'Waived') return { label: 'Waived', tone: 'muted' }
+  return { label: 'Not Started', tone: 'info' }
+}
+
 export default function RequirementsPage() {
   const { db, write, loading, mode, session } = useData()
   const [selectedDef, setSelectedDef] = useState(db.requirementDefinitions[0]?.id ?? '')
@@ -49,6 +57,7 @@ export default function RequirementsPage() {
   })
 
   const defs = db.requirementDefinitions
+  const hasDefinitions = defs.length > 0
 
   const instances = useMemo(() => {
     return db.requirementInstances
@@ -225,36 +234,52 @@ export default function RequirementsPage() {
     return m
   }, [db.requirementActivities])
 
+  function jumpToDefinitionForm() {
+    document.getElementById('requirement-definition-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
     <div className="grid">
       <section className="card">
         <h2>Create requirement instance</h2>
         <p className="sub">Definitions are reusable. Instances are what you track for a season/year.</p>
 
-        <div className="row">
-          <div className="field">
-            <label>Definition</label>
-            <select value={selectedDef} onChange={e => setSelectedDef(e.target.value)}>
-              {defs.map(d => <option key={d.id} value={d.id}>{d.name} ({d.governingBody})</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label>Season</label>
-            <input value={seasonName} onChange={e => setSeasonName(e.target.value)} />
-          </div>
-          <div className="field">
-            <label>Year</label>
-            <input type="number" min={1900} max={2100} step={1} value={year} onChange={e => setYear(e.target.value)} />
-          </div>
-          <div className="field">
-            <label>Due date</label>
-            <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-          </div>
-        </div>
+        {hasDefinitions ? (
+          <>
+            <div className="row">
+              <div className="field">
+                <label>Definition</label>
+                <select value={selectedDef} onChange={e => setSelectedDef(e.target.value)}>
+                  {defs.map(d => <option key={d.id} value={d.id}>{d.name} ({d.governingBody})</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label>Season</label>
+                <input value={seasonName} onChange={e => setSeasonName(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Year</label>
+                <input type="number" min={1900} max={2100} step={1} value={year} onChange={e => setYear(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Due date</label>
+                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+              </div>
+            </div>
 
-        <div className="btnbar">
-          <button className="btn primary" onClick={createInstance} disabled={loading || !selectedDef}>Create</button>
-        </div>
+            <div className="btnbar">
+              <button className="btn primary" onClick={createInstance} disabled={loading || !selectedDef}>Create</button>
+            </div>
+          </>
+        ) : (
+          <div className="empty-state">
+            <h3>No requirement definitions yet</h3>
+            <p>Create your first requirement below, then come back here to turn it into a season or annual tracking instance.</p>
+            <div className="btnbar">
+              <button className="btn primary" onClick={jumpToDefinitionForm}>Create your first requirement</button>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="card">
@@ -301,7 +326,7 @@ export default function RequirementsPage() {
                         <option value="Overdue">Overdue</option>
                       </select>
                     ) : (
-                      <span className={'pill ' + (i.status === 'Complete' ? 'ok' : i.status === 'Overdue' ? 'bad' : '')}>{i.status}</span>
+                      <span className={`pill ${requirementStatusBadge(i.status).tone}`}>{requirementStatusBadge(i.status).label}</span>
                     )}
                   </td>
                   <td>{progress}</td>
@@ -355,12 +380,32 @@ export default function RequirementsPage() {
                 </tr>
               )
             })}
-            {instances.length === 0 && <tr><td colSpan={5} className="small">No requirement instances yet.</td></tr>}
+            {instances.length === 0 && (
+              <tr>
+                <td colSpan={5} className="empty-cell">
+                  <div className="empty-state centered">
+                    <h3>No requirement instances yet</h3>
+                    <p>
+                      {hasDefinitions
+                        ? 'Pick a definition above and create your first tracked season so activities and document evidence have a place to live.'
+                        : 'Start by creating a reusable requirement definition below, then turn it into a tracked season or annual instance.'}
+                    </p>
+                    <div className="btnbar">
+                      {hasDefinitions ? (
+                        <button className="btn primary" onClick={createInstance} disabled={loading || !selectedDef}>Create first instance</button>
+                      ) : (
+                        <button className="btn primary" onClick={jumpToDefinitionForm}>Create a definition first</button>
+                      )}
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </section>
 
-      <div className="card">
+      <div className="card" id="requirement-definition-form">
         <h2>New requirement definition</h2>
         <div className="row">
           <div className="field">
@@ -424,7 +469,7 @@ export default function RequirementsPage() {
           <button className="btn" onClick={createDefinition} disabled={!newDef.name.trim()}>Create requirement</button>
         </div>
         <p className="small">This creates a reusable requirement you can apply to seasons/years. Not just the two defaults.</p>
-        <p className="small">For document evidence, activities can now upload files to Supabase Storage when the app is running in Supabase mode.</p>
+        <p className="small">For document evidence, activities can upload files to Supabase Storage so they stay available after restart and on your other signed-in devices.</p>
       </div>
     </div>
   )

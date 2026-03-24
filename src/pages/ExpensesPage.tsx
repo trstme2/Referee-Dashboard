@@ -38,6 +38,7 @@ export default function ExpensesPage() {
   const rows = useMemo(() => {
     return [...db.expenses].sort((a,b) => (a.expenseDate < b.expenseDate ? 1 : -1))
   }, [db.expenses])
+  const noExpensesYet = db.expenses.length === 0
 
   function startNew() {
     setForm({
@@ -212,7 +213,19 @@ export default function ExpensesPage() {
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan={7} className="small">No expenses yet.</td></tr>}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={7} className="empty-cell">
+                  <div className="empty-state centered">
+                    <h3>No expenses yet</h3>
+                    <p>Add your first expense to start tracking deductions, mileage, and receipt storage across devices.</p>
+                    <div className="btnbar">
+                      <button className="btn primary" onClick={startNew}>Add your first expense</button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </section>
@@ -298,7 +311,7 @@ export default function ExpensesPage() {
           <div className="field">
             <label>Receipt</label>
             <div className="btnbar">
-              {form.receiptFileName ? <span className="pill ok">{form.receiptFileName}</span> : <span className="pill">No receipt uploaded</span>}
+              {form.receiptFileName ? <span className="pill ok">{form.receiptFileName}</span> : <span className="pill">{noExpensesYet ? 'Receipts ready when you are' : 'No receipt uploaded yet'}</span>}
               {mode === 'supabase' && session ? (
                 <input
                   type="file"
@@ -308,8 +321,8 @@ export default function ExpensesPage() {
                     void uploadReceipt(form.id, file)
                     evt.currentTarget.value = ''
                   }}
-                />
-              ) : <span className="small">Sign in with Supabase mode to upload receipts.</span>}
+                  />
+              ) : <span className="small">Sign in with Supabase mode to upload receipts you can reopen after restart or from another device.</span>}
               {form.id && db.expenses.find(x => x.id === form.id)?.receiptStoragePath ? (
                 <>
                   <button className="btn" onClick={() => openReceipt(form.id)}>Open receipt</button>
