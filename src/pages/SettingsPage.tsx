@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const { mode, session, refresh, db, write, loading } = useData()
 
   const [home, setHome] = useState(db.settings.homeAddress)
+  const [otherWork, setOtherWork] = useState(db.settings.otherWorkAddress ?? '')
   const [platforms, setPlatforms] = useState(toListString(db.settings.assigningPlatforms))
   const [leagues, setLeagues] = useState(toListString(db.settings.leagues))
 
@@ -33,6 +34,7 @@ export default function SettingsPage() {
       ...db,
       settings: {
         homeAddress: home.trim() || db.settings.homeAddress,
+        otherWorkAddress: otherWork.trim(),
         assigningPlatforms: parseList(platforms),
         leagues: parseList(leagues).sort(),
       },
@@ -51,8 +53,15 @@ export default function SettingsPage() {
             <h2>Preferences</h2>
 
             <div className="field">
-              <label>Home address (for distance calculations)</label>
-              <input value={home} onChange={e => setHome(e.target.value)} />
+              <label>Primary work location (home office)</label>
+              <input value={home} onChange={e => setHome(e.target.value)} placeholder="123 Main St, Columbus, OH 43215" />
+              <div className="small">This stays the default origin for mileage calculations on each game.</div>
+            </div>
+
+            <div className="field">
+              <label>Secondary work location (optional)</label>
+              <input value={otherWork} onChange={e => setOtherWork(e.target.value)} placeholder="Office, school, or other work address" />
+              <div className="small">Use this for another IRS work location you sometimes travel from.</div>
             </div>
 
             <div className="field">

@@ -12,12 +12,14 @@ export type ExpenseCategory =
 
 export type RequirementStatus = 'Not Started' | 'In Progress' | 'Complete' | 'Waived' | 'Overdue'
 
-export type SoccerRole = 'Center' | 'AR' | '4th' | 'Dual'
-export type LacrosseRole = 'Lead' | 'Ref'
+export type SoccerRole = 'Center' | 'AR' | '4th' | 'Dual' | 'Mentor'
+export type LacrosseRole = 'Lead' | 'Ref' | 'Mentor'
 export type Role = SoccerRole | LacrosseRole
+export type MileageOrigin = 'home' | 'other'
 
 export interface Settings {
   homeAddress: string
+  otherWorkAddress?: string
   assigningPlatforms: string[]
   leagues: string[]
 }
@@ -35,6 +37,7 @@ export interface Game {
   locationAddress: string
   distanceMiles?: number
   roundtripMiles?: number
+  mileageOrigin?: MileageOrigin
 
   role?: Role
   status: GameStatus

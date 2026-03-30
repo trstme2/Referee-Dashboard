@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
-import type { CompetitionLevel, GameStatus, Sport, Role, SoccerRole, LacrosseRole } from '../lib/types'
+import type { CompetitionLevel, GameStatus, Sport, Role, SoccerRole, LacrosseRole, MileageOrigin } from '../lib/types'
 import { upsertGameIn, deleteGameIn } from '../lib/mutate'
 import { getDrivingDistanceMiles } from '../lib/distance'
 import { formatMoney, isWithinNextDays } from '../lib/utils'
@@ -10,10 +10,24 @@ const sports: Sport[] = ['Soccer', 'Lacrosse']
 const levels: CompetitionLevel[] = ['High School', 'College', 'Club']
 const statuses: GameStatus[] = ['Scheduled', 'Played', 'Paid / Complete', 'Canceled']
 
-const soccerRoles: SoccerRole[] = ['Center', 'AR', '4th', 'Dual']
-const lacrosseRoles: LacrosseRole[] = ['Lead', 'Ref']
+const soccerRoles: SoccerRole[] = ['Center', 'AR', '4th', 'Dual', 'Mentor']
+const lacrosseRoles: LacrosseRole[] = ['Lead', 'Ref', 'Mentor']
 
 type Meridiem = 'AM' | 'PM'
+
+function clearDerivedMileage<T extends { distanceMiles: string; roundtripMiles: string }>(value: T): T {
+  const oneWay = Number(value.distanceMiles)
+  const autoRoundtrip = Number.isFinite(oneWay) ? String(Math.round(oneWay * 2)) : ''
+  return {
+    ...value,
+    distanceMiles: '',
+    roundtripMiles: value.roundtripMiles === autoRoundtrip ? '' : value.roundtripMiles,
+  }
+}
+
+function normalizeMileageOrigin(origin: MileageOrigin | '' | undefined, hasOtherWorkAddress: boolean): MileageOrigin {
+  return origin === 'other' && hasOtherWorkAddress ? 'other' : 'home'
+}
 
 function to12HourParts(time: string | undefined): { hour: number; minute: number; meridiem: Meridiem } {
   if (!time) return { hour: 7, minute: 0, meridiem: 'PM' }
@@ -77,6 +91,7 @@ export default function GamesPage() {
     startTime: '',
     locationAddress: '',
     role: '' as Role | '',
+    mileageOrigin: 'home' as MileageOrigin,
     status: 'Scheduled' as GameStatus,
     gameFee: '',
     paidConfirmed: false,
@@ -90,6 +105,15 @@ export default function GamesPage() {
   })
 
   const rolesForSport = form.sport === 'Soccer' ? soccerRoles : lacrosseRoles
+  const hasOtherWorkAddress = Boolean(db.settings.otherWorkAddress?.trim())
+  const workLocationOptions = [
+    { value: 'home' as MileageOrigin, label: 'Home office', address: db.settings.homeAddress.trim() },
+    ...(hasOtherWorkAddress
+      ? [{ value: 'other' as MileageOrigin, label: 'Other work location', address: db.settings.otherWorkAddress!.trim() }]
+      : []),
+  ]
+  const selectedMileageOrigin = normalizeMileageOrigin(form.mileageOrigin, hasOtherWorkAddress)
+  const selectedWorkLocation = workLocationOptions.find(option => option.value === selectedMileageOrigin) ?? workLocationOptions[0]
   const timeParts = to12HourParts(form.startTime || undefined)
   const availableYears = useMemo(() => {
     return Array.from(new Set(
@@ -159,6 +183,7 @@ export default function GamesPage() {
       startTime: '',
       locationAddress: '',
       role: '',
+      mileageOrigin: 'home',
       status: 'Scheduled',
       gameFee: '',
       paidConfirmed: false,
@@ -184,6 +209,7 @@ export default function GamesPage() {
       startTime: form.startTime || undefined,
       locationAddress: form.locationAddress.trim(),
       role: (form.role || undefined) as any,
+      mileageOrigin: selectedMileageOrigin,
       status: form.status,
       gameFee: form.gameFee ? Number(form.gameFee) : undefined,
       paidConfirmed: Boolean(form.paidConfirmed),
@@ -213,6 +239,7 @@ export default function GamesPage() {
       startTime: g.startTime ?? '',
       locationAddress: g.locationAddress,
       role: (g.role ?? '') as any,
+      mileageOrigin: normalizeMileageOrigin(g.mileageOrigin, hasOtherWorkAddress),
       status: g.status,
       gameFee: (g as any).gameFee != null ? String((g as any).gameFee) : '',
       paidConfirmed: Boolean((g as any).paidConfirmed ?? false),
@@ -264,9 +291,9 @@ export default function GamesPage() {
   }
 
   async function calcDistance() {
-    const origin = db.settings.homeAddress
+    const origin = selectedWorkLocation?.address?.trim() ?? ''
     const dest = form.locationAddress.trim()
-    if (!dest) return
+    if (!origin || !dest) return
     try {
       const miles = await getDrivingDistanceMiles(origin, dest)
       const oneWay = Math.round(miles * 10) / 10
@@ -359,7 +386,11 @@ export default function GamesPage() {
                       <td><span className={`pill ${payBadge.tone}`}>{payBadge.label}</span></td>
                       <td>
                         {g.locationAddress}
-                        {g.distanceMiles != null ? <div className="small">{g.distanceMiles.toFixed(1)} mi one-way</div> : null}
+                        {g.distanceMiles != null ? (
+                          <div className="small">
+                            {g.distanceMiles.toFixed(1)} mi one-way from {g.mileageOrigin === 'other' ? 'other work location' : 'home office'}
+                          </div>
+                        ) : null}
                       </td>
                       <td>
                         <div className="btnbar" onClick={e => e.stopPropagation()}>
@@ -411,6 +442,8 @@ export default function GamesPage() {
                                     : g.distanceMiles != null
                                       ? `${(g.distanceMiles * 2).toFixed(1)} estimated roundtrip mi`
                                       : 'No mileage logged'}
+                                  {' · '}
+                                  {g.mileageOrigin === 'other' ? 'from other work location' : 'from home office'}
                                 </div>
                               </div>
                               <div className="expanded-block">
@@ -593,9 +626,41 @@ export default function GamesPage() {
 
         <div className="field">
           <label>Location (required address/field)</label>
-          <input value={form.locationAddress} onChange={e => setForm({ ...form, locationAddress: e.target.value })} placeholder="Address or field name + city" />
+          <input
+            value={form.locationAddress}
+            onChange={e => {
+              const nextAddress = e.target.value
+              setForm(prev => {
+              if (nextAddress === prev.locationAddress) return { ...prev, locationAddress: nextAddress }
+              return { ...clearDerivedMileage(prev), locationAddress: nextAddress }
+              })
+            }}
+            placeholder="Address or field name + city"
+          />
+          <div className="row" style={{ marginTop: 8 }}>
+            <div className="field">
+              <label>Calculate mileage from</label>
+              <select
+                value={selectedMileageOrigin}
+                onChange={e => {
+                  const nextOrigin = e.target.value as MileageOrigin
+                  setForm(prev => ({
+                    ...clearDerivedMileage(prev),
+                    mileageOrigin: nextOrigin,
+                  }))
+                }}
+              >
+                {workLocationOptions.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <div className="small">{selectedWorkLocation?.address || 'Add a work location in Settings first.'}</div>
+            </div>
+          </div>
           <div className="btnbar" style={{marginTop: 8}}>
-            <button className="btn" onClick={calcDistance} disabled={!form.locationAddress.trim()}>Calculate distance from home</button>
+            <button className="btn" onClick={calcDistance} disabled={!form.locationAddress.trim() || !selectedWorkLocation?.address}>
+              Calculate distance from {selectedWorkLocation?.label.toLowerCase() || 'work location'}
+            </button>
             {form.distanceMiles ? <span className="pill ok">{form.distanceMiles} mi one-way</span> : <span className="pill">distance n/a</span>}
           </div>
           <div className="row" style={{marginTop: 8}}>

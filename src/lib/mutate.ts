@@ -72,6 +72,7 @@ export function upsertGameIn(db: DB, input: Partial<Game> & Pick<Game, 'sport'|'
     locationAddress: input.locationAddress,
     distanceMiles: input.distanceMiles ?? existing?.distanceMiles,
     roundtripMiles: input.roundtripMiles ?? existing?.roundtripMiles,
+    mileageOrigin: input.mileageOrigin ?? existing?.mileageOrigin ?? 'home',
     role: input.role ?? existing?.role,
     status: input.status,
     gameFee: input.gameFee ?? existing?.gameFee,

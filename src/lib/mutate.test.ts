@@ -17,6 +17,7 @@ function baseDB(): DB {
   return {
     settings: {
       homeAddress: '123 Main St',
+      otherWorkAddress: '456 Office Park Dr',
       assigningPlatforms: ['RefQuest', 'DragonFly'],
       leagues: [],
     },
@@ -183,6 +184,30 @@ describe('game mutations', () => {
     expect(calendarEvent.title).toContain('North vs South')
     expect(calendarEvent.start).toBe(new Date('2026-09-10T19:15:00').toISOString())
     expect(calendarEvent.end).toBe(new Date('2026-09-10T21:15:00').toISOString())
+  })
+
+  it('defaults mileage origin to home and preserves an explicit other work location origin', () => {
+    const created = upsertGameIn(baseDB(), {
+      sport: 'Soccer',
+      competitionLevel: 'High School',
+      gameDate: '2026-09-10',
+      locationAddress: '100 Stadium Dr',
+      status: 'Scheduled',
+    })
+
+    expect(created.games[0].mileageOrigin).toBe('home')
+
+    const updated = upsertGameIn(created, {
+      ...created.games[0],
+      mileageOrigin: 'other',
+      distanceMiles: 14.2,
+      roundtripMiles: 28,
+      status: 'Played',
+    })
+
+    expect(updated.games[0].mileageOrigin).toBe('other')
+    expect(updated.games[0].distanceMiles).toBe(14.2)
+    expect(updated.games[0].roundtripMiles).toBe(28)
   })
 
   it('updates the existing linked calendar event instead of creating a second one', () => {

@@ -13,10 +13,17 @@ begin
     create table public.user_settings (
       user_id uuid primary key,
       home_address text not null,
+      other_work_address text null,
       assigning_platforms jsonb not null default '[]'::jsonb,
       leagues jsonb not null default '[]'::jsonb,
       updated_at timestamptz not null default now()
     );
+  end if;
+
+  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='user_settings') then
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='other_work_address') then
+      alter table public.user_settings add column other_work_address text null;
+    end if;
   end if;
 
   if exists (select 1 from information_schema.tables where table_schema='public' and table_name='games') then
@@ -31,6 +38,9 @@ begin
     end if;
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='games' and column_name='distance_miles') then
       alter table public.games add column distance_miles numeric null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='games' and column_name='mileage_origin') then
+      alter table public.games add column mileage_origin text not null default 'home';
     end if;
 
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='games' and column_name='level_detail') then
@@ -120,6 +130,7 @@ end $$;
 create table if not exists public.user_settings (
   user_id uuid primary key,
   home_address text not null,
+  other_work_address text null,
   assigning_platforms jsonb not null default '[]'::jsonb,
   leagues jsonb not null default '[]'::jsonb,
   updated_at timestamptz not null default now()
@@ -137,6 +148,7 @@ create table if not exists public.games (
   location_address text not null,
   distance_miles numeric null,
   roundtrip_miles numeric null,
+  mileage_origin text not null default 'home',
   role text null,
   status text not null,
   game_fee numeric null,

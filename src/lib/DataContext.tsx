@@ -360,6 +360,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 function rowToSettings(r: any): Settings {
   return {
     homeAddress: r.home_address ?? '399 S. Columbia Ave, Bexley, OH 43209',
+    otherWorkAddress: r.other_work_address ?? '',
     assigningPlatforms: Array.isArray(r.assigning_platforms) ? r.assigning_platforms : (r.assigning_platforms ?? []),
     leagues: Array.isArray(r.leagues) ? r.leagues : (r.leagues ?? []),
   }
@@ -377,6 +378,7 @@ function rowToGame(r: any) {
     locationAddress: r.location_address,
     distanceMiles: r.distance_miles ?? undefined,
     roundtripMiles: r.roundtrip_miles ?? undefined,
+    mileageOrigin: r.mileage_origin === 'other' ? 'other' : 'home',
     role: r.role ?? undefined,
     status: r.status,
     gameFee: r.game_fee ?? (r.pay_expected ?? undefined),
@@ -511,6 +513,7 @@ function settingsToRow(s: Settings, userId: string) {
   return {
     user_id: userId,
     home_address: s.homeAddress,
+    other_work_address: s.otherWorkAddress || null,
     assigning_platforms: s.assigningPlatforms,
     leagues: s.leagues,
     updated_at: nowISO(),
@@ -532,6 +535,7 @@ function toRows(k: keyof DB, userId: string, items: any[]): any[] {
         location_address: g.locationAddress,
         distance_miles: g.distanceMiles ?? null,
         roundtrip_miles: g.roundtripMiles ?? null,
+        mileage_origin: g.mileageOrigin ?? 'home',
         role: g.role || null,
         status: g.status,
         game_fee: g.gameFee ?? null,
