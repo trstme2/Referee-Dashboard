@@ -17,6 +17,12 @@ function getSupabaseAnonKey(): string {
   return key
 }
 
+function getSupabaseServiceRoleKey(): string {
+  const key = env('SUPABASE_SERVICE_ROLE_KEY')
+  if (!key) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
+  return key
+}
+
 export function getBearerToken(req: VercelRequest): string | null {
   const h = String(req.headers.authorization || '')
   if (!h.toLowerCase().startsWith('bearer ')) return null
@@ -26,6 +32,12 @@ export function getBearerToken(req: VercelRequest): string | null {
 export function createAuthedSupabase(token: string) {
   return createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
     global: { headers: { Authorization: `Bearer ${token}` } },
+  })
+}
+
+export function createServiceSupabase() {
+  return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+    auth: { autoRefreshToken: false, persistSession: false },
   })
 }
 

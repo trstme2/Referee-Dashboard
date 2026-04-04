@@ -14,6 +14,7 @@ begin
       user_id uuid primary key,
       home_address text not null,
       other_work_address text null,
+      calendar_export_token text null,
       assigning_platforms jsonb not null default '[]'::jsonb,
       leagues jsonb not null default '[]'::jsonb,
       updated_at timestamptz not null default now()
@@ -23,6 +24,9 @@ begin
   if exists (select 1 from information_schema.tables where table_schema='public' and table_name='user_settings') then
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='other_work_address') then
       alter table public.user_settings add column other_work_address text null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='calendar_export_token') then
+      alter table public.user_settings add column calendar_export_token text null;
     end if;
   end if;
 
@@ -131,6 +135,7 @@ create table if not exists public.user_settings (
   user_id uuid primary key,
   home_address text not null,
   other_work_address text null,
+  calendar_export_token text null,
   assigning_platforms jsonb not null default '[]'::jsonb,
   leagues jsonb not null default '[]'::jsonb,
   updated_at timestamptz not null default now()
@@ -353,6 +358,7 @@ begin
 end $$;
 
 create index if not exists idx_games_user_date on public.games(user_id, game_date);
+create unique index if not exists idx_user_settings_calendar_export_token on public.user_settings(calendar_export_token) where calendar_export_token is not null;
 create index if not exists idx_expenses_user_date on public.expenses(user_id, expense_date);
 create index if not exists idx_calendar_user_start on public.calendar_events(user_id, start_ts);
 create unique index if not exists idx_calendar_events_user_external_ref on public.calendar_events(user_id, external_ref) where external_ref is not null;

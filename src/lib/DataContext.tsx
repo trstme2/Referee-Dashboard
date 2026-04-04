@@ -30,13 +30,50 @@ export function useData() {
 
 function nowISO(){ return new Date().toISOString() }
 
+function isMissingColumnError(error: any, table: string, column: string): boolean {
+  const message = String(error?.message ?? error ?? '')
+  return message.includes(`Could not find the '${column}' column of '${table}'`) ||
+    message.includes(`column "${column}" of relation "${table}" does not exist`)
+}
+
+async function upsertUserSettingsCompat(client: any, payload: any, options?: { ignoreDuplicates?: boolean }) {
+  let result = await client
+    .from('user_settings')
+    .upsert([payload], { onConflict: 'user_id', ...(options ?? {}) })
+
+  if (result.error && isMissingColumnError(result.error, 'user_settings', 'other_work_address')) {
+    const { other_work_address, ...legacyPayload } = payload
+    result = await client
+      .from('user_settings')
+      .upsert([legacyPayload], { onConflict: 'user_id', ...(options ?? {}) })
+  }
+
+  return result
+}
+
+async function insertGamesCompat(client: any, rows: any[]) {
+  let result = await client.from('games').insert(rows)
+  if (result.error && isMissingColumnError(result.error, 'games', 'mileage_origin')) {
+    const legacyRows = rows.map(({ mileage_origin, ...rest }) => rest)
+    result = await client.from('games').insert(legacyRows)
+  }
+  return result
+}
+
+async function upsertGamesCompat(client: any, rows: any[]) {
+  let result = await client.from('games').upsert(rows, { onConflict: 'id' })
+  if (result.error && isMissingColumnError(result.error, 'games', 'mileage_origin')) {
+    const legacyRows = rows.map(({ mileage_origin, ...rest }) => rest)
+    result = await client.from('games').upsert(legacyRows, { onConflict: 'id' })
+  }
+  return result
+}
+
 async function ensureUserSettingsRow(userId: string, settings: Settings): Promise<void> {
   if (!supabase) throw new Error('Supabase not configured')
   const client = supabase
   const payload = settingsToRow(settings, userId)
-  const { error } = await client
-    .from('user_settings')
-    .upsert([payload], { onConflict: 'user_id', ignoreDuplicates: true })
+  const { error } = await upsertUserSettingsCompat(client, payload, { ignoreDuplicates: true })
   if (error) throw new Error(`Ensure user_settings: ${error.message}`)
 }
 
@@ -105,9 +142,7 @@ async function replaceAll(userId: string, db: DB): Promise<void> {
   }
 
   const settingsPayload = settingsToRow(db.settings, userId)
-  const { error: sErr } = await client
-    .from(map.userSettings)
-    .upsert([settingsPayload], { onConflict: 'user_id' })
+  const { error: sErr } = await upsertUserSettingsCompat(client, settingsPayload)
   if (sErr) throw new Error(`Insert user_settings: ${sErr.message}`)
 
   // Break circular FK between games.calendar_event_id and calendar_events.linked_game_id:
@@ -118,7 +153,7 @@ async function replaceAll(userId: string, db: DB): Promise<void> {
   for (const row of calendarRows) row.linked_game_id = null
 
   if (gameRows.length) {
-    const { error } = await client.from(map.games).insert(gameRows)
+    const { error } = await insertGamesCompat(client, gameRows)
     if (error) throw new Error(`Insert ${map.games}: ${error.message}`)
   }
   if (calendarRows.length) {
@@ -201,7 +236,7 @@ async function syncIncremental(userId: string, prev: DB, next: DB): Promise<void
 
   if (!jsonEqual(prev.settings, next.settings)) {
     const settingsPayload = settingsToRow(next.settings, userId)
-    const { error } = await client.from(map.userSettings).upsert([settingsPayload], { onConflict: 'user_id' })
+    const { error } = await upsertUserSettingsCompat(client, settingsPayload)
     if (error) throw new Error(`Upsert ${map.userSettings}: ${error.message}`)
   }
 
@@ -239,7 +274,7 @@ async function syncIncremental(userId: string, prev: DB, next: DB): Promise<void
   for (const row of calendarRows) row.linked_game_id = null
 
   if (gameRows.length) {
-    const { error } = await client.from(map.games).upsert(gameRows, { onConflict: 'id' })
+    const { error } = await upsertGamesCompat(client, gameRows)
     if (error) throw new Error(`Upsert ${map.games}: ${error.message}`)
   }
   if (calendarRows.length) {

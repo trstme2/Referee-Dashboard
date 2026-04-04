@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useData } from '../lib/DataContext'
 import { resetDB } from '../lib/storage'
 
@@ -16,6 +16,11 @@ export default function SettingsPage() {
   const [otherWork, setOtherWork] = useState(db.settings.otherWorkAddress ?? '')
   const [platforms, setPlatforms] = useState(toListString(db.settings.assigningPlatforms))
   const [leagues, setLeagues] = useState(toListString(db.settings.leagues))
+  const [calendarSubscriptionUrl, setCalendarSubscriptionUrl] = useState('')
+  const [calendarDownloadUrl, setCalendarDownloadUrl] = useState('')
+  const [calendarFeedLoading, setCalendarFeedLoading] = useState(false)
+  const [calendarFeedSaving, setCalendarFeedSaving] = useState(false)
+  const [calendarFeedError, setCalendarFeedError] = useState<string | null>(null)
 
   async function wipeLocal() {
     if (!confirm('Wipe local cache?')) return
@@ -40,6 +45,95 @@ export default function SettingsPage() {
       },
     }
     await write(next)
+  }
+
+  async function calendarApi(path: string, init?: RequestInit) {
+    if (!session?.access_token) throw new Error('Not authenticated')
+    const res = await fetch(path, {
+      ...init,
+      headers: {
+        ...(init?.headers || {}),
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(String(json?.error || res.statusText))
+    return json
+  }
+
+  async function loadCalendarExportInfo() {
+    if (mode !== 'supabase' || !session?.access_token) return
+    setCalendarFeedError(null)
+    setCalendarFeedLoading(true)
+    try {
+      const json = await calendarApi('/api/calendar-export-token')
+      setCalendarSubscriptionUrl(String(json.subscriptionUrl || ''))
+      setCalendarDownloadUrl(String(json.downloadUrl || ''))
+    } catch (e: any) {
+      setCalendarFeedError(String(e?.message ?? e))
+    } finally {
+      setCalendarFeedLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadCalendarExportInfo()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, session?.access_token])
+
+  async function copyCalendarSubscriptionUrl() {
+    if (!calendarSubscriptionUrl) return
+    await navigator.clipboard.writeText(calendarSubscriptionUrl)
+  }
+
+  async function regenerateCalendarFeedToken() {
+    if (mode !== 'supabase' || !session?.access_token) return
+    if (!confirm('Regenerate the calendar subscription token? Existing subscribed calendars will stop updating until you re-subscribe with the new URL.')) return
+    setCalendarFeedError(null)
+    setCalendarFeedSaving(true)
+    try {
+      const json = await calendarApi('/api/calendar-export-token', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'regenerate' }),
+      })
+      setCalendarSubscriptionUrl(String(json.subscriptionUrl || ''))
+      setCalendarDownloadUrl(String(json.downloadUrl || ''))
+    } catch (e: any) {
+      setCalendarFeedError(String(e?.message ?? e))
+    } finally {
+      setCalendarFeedSaving(false)
+    }
+  }
+
+  async function downloadCalendarIcsFile() {
+    if (!session?.access_token) return
+    setCalendarFeedError(null)
+    setCalendarFeedSaving(true)
+    try {
+      const res = await fetch('/api/calendar/download.ics', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || res.statusText)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'referee-dashboard-calendar.ics'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      setCalendarFeedError(String(e?.message ?? e))
+    } finally {
+      setCalendarFeedSaving(false)
+    }
   }
 
   return (
@@ -81,6 +175,30 @@ export default function SettingsPage() {
               <button className="btn" onClick={refresh} disabled={loading || mode !== 'supabase'}>Refresh from cloud</button>
               <button className="btn" onClick={pushLocalToCloud} disabled={loading || mode !== 'supabase' || !session}>Push local -&gt; cloud</button>
             </div>
+
+            {mode === 'supabase' && session ? (
+              <div className="card" style={{ marginTop: 16 }}>
+                <h2>Calendar Export</h2>
+                <div className="field">
+                  <label>Subscription URL</label>
+                  <input value={calendarSubscriptionUrl} readOnly placeholder={calendarFeedLoading ? 'Loading...' : 'Not available'} />
+                  <div className="small">Use this private ICS URL with Apple Calendar, Google Calendar, or Outlook subscriptions.</div>
+                </div>
+                <div className="btnbar">
+                  <button className="btn" onClick={copyCalendarSubscriptionUrl} disabled={calendarFeedLoading || calendarFeedSaving || !calendarSubscriptionUrl}>
+                    Copy Calendar Subscription URL
+                  </button>
+                  <button className="btn" onClick={downloadCalendarIcsFile} disabled={calendarFeedLoading || calendarFeedSaving}>
+                    Download ICS File
+                  </button>
+                  <button className="btn danger" onClick={regenerateCalendarFeedToken} disabled={calendarFeedLoading || calendarFeedSaving}>
+                    Regenerate Calendar Feed Token
+                  </button>
+                </div>
+                {calendarFeedError ? <p className="small"><span className="pill bad">{calendarFeedError}</span></p> : null}
+                {calendarDownloadUrl ? <p className="small">Authenticated download endpoint: <code>{calendarDownloadUrl}</code></p> : null}
+              </div>
+            ) : null}
 
             <div className="footer-note">
               Distance uses <code>/api/distance</code> and requires <code>GOOGLE_MAPS_API_KEY</code> in Vercel env vars.
