@@ -87,6 +87,55 @@ function inferRole(platform: Feed['platform'], sport: 'Soccer' | 'Lacrosse', tex
   return null
 }
 
+function cleanupDragonFlyTeamName(value: string): string {
+  return value
+    .replace(/\s+/g, ' ')
+    .replace(/\.$/, '')
+    .trim()
+}
+
+function parseDragonFlySummary(summary: string, sport: 'Soccer' | 'Lacrosse') {
+  const raw = String(summary || '').replace(/\s+/g, ' ').trim()
+  if (!raw) return { role: null as string | null, awayTeam: null as string | null, homeTeam: null as string | null, levelDetail: null as string | null }
+
+  const roleMatch = raw.match(/^([^:]+):\s*(.+)$/)
+  const roleRaw = roleMatch ? roleMatch[1].trim() : ''
+  const remainder = roleMatch ? roleMatch[2].trim() : raw
+
+  const parenMatch = remainder.match(/\(([^)]+)\)/)
+  const detailsRaw = parenMatch ? parenMatch[1].trim() : ''
+  const matchupRaw = parenMatch ? remainder.slice(0, parenMatch.index).trim() : remainder
+  const teams = matchupRaw.match(/(.+?)\s+vs\s+(.+)$/i)
+
+  const normalizedRole = (() => {
+    const u = roleRaw.toUpperCase()
+    if (sport === 'Lacrosse') {
+      if (u === 'REFEREE') return 'Lead'
+      if (u === 'UMPIRE' || u === 'FIELD JUDGE') return 'Ref'
+    }
+    return roleRaw || null
+  })()
+
+  const normalizedLevelDetail = (() => {
+    const s = detailsRaw.replace(/\.\s*$/, '').trim()
+    if (!s) return null
+    if (sport === 'Lacrosse') {
+      return s.replace(/\bBoys?\s+Lacrosse\b/i, '').replace(/\bGirls?\s+Lacrosse\b/i, '').replace(/\bLacrosse\b/i, '').trim() || s
+    }
+    if (sport === 'Soccer') {
+      return s.replace(/\bBoys?\s+Soccer\b/i, '').replace(/\bGirls?\s+Soccer\b/i, '').replace(/\bSoccer\b/i, '').trim() || s
+    }
+    return s
+  })()
+
+  return {
+    role: normalizedRole,
+    awayTeam: teams ? cleanupDragonFlyTeamName(teams[1]) : null,
+    homeTeam: teams ? cleanupDragonFlyTeamName(teams[2]) : null,
+    levelDetail: normalizedLevelDetail,
+  }
+}
+
 function inferEventType(text: string, allDay: boolean, startTime: string | null, location: string | null): 'Game' | 'Block' | 'Admin' | 'Travel' {
   if (/\btravel\b|\bhotel\b|\bflight\b|\bdrive\b|\bout of town\b/i.test(text)) return 'Travel'
   if (/\bmeeting\b|\bclinic\b|\btraining\b|\badmin\b|\bclass\b/i.test(text)) return 'Admin'
@@ -156,8 +205,9 @@ async function syncFeed(client: any, feed: Feed) {
     const text = eventDesc(ev)
     const sport = inferSport(feed.sport, text)
     const competitionLevel = inferCompetitionLevel(text)
-    const levelDetail = inferLevelDetail(text)
-    const role = inferRole(feed.platform, sport, text)
+    const dragonFlySummary = feed.platform === 'DragonFly' ? parseDragonFlySummary(String(ev.summary || ''), sport) : null
+    const levelDetail = dragonFlySummary?.levelDetail ?? inferLevelDetail(text)
+    const role = dragonFlySummary?.role ?? inferRole(feed.platform, sport, text)
     const externalRef = `${feed.platform}:${feed.id}:${String(ev.uid)}`
     const allDay = Boolean((ev as any).datetype === 'date')
     const location = trimOrNull(ev.location)
@@ -178,6 +228,8 @@ async function syncFeed(client: any, feed: Feed) {
       competitionLevel,
       levelDetail,
       role,
+      awayTeam: dragonFlySummary?.awayTeam ?? null,
+      homeTeam: dragonFlySummary?.homeTeam ?? null,
       gameDate: ymdInZone(start, userDefaultTimezone),
       startTime,
     }
@@ -299,8 +351,8 @@ async function syncFeed(client: any, feed: Feed) {
       paid_confirmed: keepPaidConfirmed,
       paid_date: existing?.paid_date ?? null,
       pay_expected: existing?.pay_expected ?? null,
-      home_team: existing?.home_team ?? null,
-      away_team: existing?.away_team ?? null,
+      home_team: existing?.home_team ?? n.homeTeam ?? null,
+      away_team: existing?.away_team ?? n.awayTeam ?? null,
       notes: existing?.notes ?? n.notes ?? null,
       platform_confirmations: existing?.platform_confirmations ?? {},
       calendar_event_id: ev.id,
