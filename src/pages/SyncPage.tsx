@@ -35,6 +35,7 @@ export default function SyncPage() {
   const [form, setForm] = useState<FeedForm>(() => emptyForm())
   const [result, setResult] = useState<SyncIcsResult | null>(null)
   const [cleanupResult, setCleanupResult] = useState<any>(null)
+  const [selectedCleanupKeys, setSelectedCleanupKeys] = useState<string[]>([])
   const [cleaning, setCleaning] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -63,9 +64,11 @@ export default function SyncPage() {
         }
       })
       const relinks = (cleanupResult.relinks ?? []).filter((r: any) => r.keeperGameId === sample.keepGameId)
-      return { sample, keeper, deletions, relinks }
+      return { sample, keeper, deletions, relinks, selected: selectedCleanupKeys.includes(sample.key) }
     })
-  }, [cleanupResult, db.games, db.calendarEvents])
+  }, [cleanupResult, db.games, db.calendarEvents, selectedCleanupKeys])
+
+  const selectedCleanupCount = selectedCleanupKeys.length
 
   async function api(path: string, init?: RequestInit) {
     if (!token) throw new Error('Not authenticated')
@@ -193,15 +196,19 @@ export default function SyncPage() {
     setErr(null)
     setCleaning(true)
     try {
-      if (apply && !confirm('Apply cleanup? This will permanently delete duplicate games/events selected by the cleanup plan.')) {
+      if (apply && !selectedCleanupKeys.length) {
+        throw new Error('Select at least one duplicate group to apply cleanup.')
+      }
+      if (apply && !confirm('Apply cleanup to the selected duplicate groups? This will permanently delete only the selected games/events.')) {
         setCleaning(false)
         return
       }
       const json = await api('/api/cleanup-sync', {
         method: 'POST',
-        body: JSON.stringify({ apply }),
+        body: JSON.stringify(apply ? { apply, selectedKeys: selectedCleanupKeys } : { apply }),
       })
       setCleanupResult(json)
+      setSelectedCleanupKeys((json.samples ?? []).map((sample: any) => sample.key))
       await refresh()
       await loadFeeds()
     } catch (e: any) {
@@ -237,8 +244,8 @@ export default function SyncPage() {
           <button className="btn" onClick={() => runCleanup(false)} disabled={cleaning || syncing || loading}>
             {cleaning ? 'Working...' : 'Preview Cleanup'}
           </button>
-          <button className="btn danger" onClick={() => runCleanup(true)} disabled={cleaning || syncing || loading}>
-            Apply Cleanup
+          <button className="btn danger" onClick={() => runCleanup(true)} disabled={cleaning || syncing || loading || !selectedCleanupKeys.length}>
+            Apply Selected Cleanup
           </button>
           <button className="btn" onClick={loadFeeds} disabled={loading}>Refresh feeds</button>
         </div>
@@ -297,11 +304,41 @@ export default function SyncPage() {
             <p className="small">
               Duplicate groups: {cleanupResult.duplicateGroups} | Delete games: {cleanupResult.deleteGames?.length ?? 0} | Delete events: {cleanupResult.deleteEvents?.length ?? 0}
             </p>
+            {cleanupResult.mode === 'dry-run' ? (
+              <p className="small">
+                Selected groups: {selectedCleanupCount} of {cleanupResult.samples?.length ?? 0}
+              </p>
+            ) : null}
+            {cleanupResult.mode === 'dry-run' && cleanupResult.samples?.length ? (
+              <div className="btnbar" style={{ marginBottom: 8 }}>
+                <button className="btn" onClick={() => setSelectedCleanupKeys((cleanupResult.samples ?? []).map((s: any) => s.key))}>
+                  Select all
+                </button>
+                <button className="btn" onClick={() => setSelectedCleanupKeys([])}>
+                  Clear all
+                </button>
+              </div>
+            ) : null}
             {cleanupResult.relinks?.length ? <p className="small">Relinks: {cleanupResult.relinks.length}</p> : null}
             {cleanupReview.length > 0 && (
               <div>
-                {cleanupReview.slice(0, 8).map((entry: any, i: number) => (
+                {cleanupReview.map((entry: any, i: number) => (
                   <div key={i} className="card" style={{ marginTop: 8, padding: 10 }}>
+                    {cleanupResult.mode === 'dry-run' ? (
+                      <label className="small" style={{ display: 'block', marginBottom: 8, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={entry.selected}
+                          onChange={() => setSelectedCleanupKeys((prev) =>
+                            prev.includes(entry.sample.key)
+                              ? prev.filter((key) => key !== entry.sample.key)
+                              : [...prev, entry.sample.key]
+                          )}
+                          style={{ marginRight: 8 }}
+                        />
+                        Include this duplicate group in cleanup
+                      </label>
+                    ) : null}
                     <p className="small">
                       <span className="pill ok">Keep</span>{' '}
                       {entry.keeper
@@ -324,7 +361,6 @@ export default function SyncPage() {
                     ))}
                   </div>
                 ))}
-                {cleanupReview.length > 8 ? <p className="small">Showing 8 of {cleanupReview.length} duplicate groups.</p> : null}
               </div>
             )}
             {cleanupResult.errors?.length > 0 && (

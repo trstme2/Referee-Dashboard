@@ -31,7 +31,13 @@ type CleanupPlan = {
   deleteGames: string[]
   relinks: Array<{ eventId: string; keeperGameId: string }>
   deleteEvents: string[]
-  samples: Array<{ key: string; keepGameId: string; deleteGameIds: string[] }>
+  samples: Array<{
+    key: string
+    keepGameId: string
+    deleteGameIds: string[]
+    relinks: Array<{ eventId: string; keeperGameId: string }>
+    deleteEventIds: string[]
+  }>
 }
 
 function buildPlan(games: any[], events: any[]): CleanupPlan {
@@ -60,7 +66,7 @@ function buildPlan(games: any[], events: any[]): CleanupPlan {
   const deleteGames = new Set<string>()
   const relinks: Array<{ eventId: string; keeperGameId: string }> = []
   const deleteEvents = new Set<string>()
-  const samples: Array<{ key: string; keepGameId: string; deleteGameIds: string[] }> = []
+  const samples: CleanupPlan['samples'] = []
   let duplicateGroups = 0
   let keepCount = 0
 
@@ -79,6 +85,8 @@ function buildPlan(games: any[], events: any[]): CleanupPlan {
     const toDelete = sorted.slice(1)
 
     const deleteIds: string[] = []
+    const groupRelinks: Array<{ eventId: string; keeperGameId: string }> = []
+    const groupDeleteEventIds = new Set<string>()
     for (const g of toDelete) {
       const gid = String(g.id)
       deleteGames.add(gid)
@@ -91,13 +99,22 @@ function buildPlan(games: any[], events: any[]): CleanupPlan {
       const keeperEventId = keeper.calendar_event_id ? String(keeper.calendar_event_id) : null
       const synced = isSyncedRef(ev.external_ref)
       if (!keeperEventId) {
-        relinks.push({ eventId: evId, keeperGameId: String(keeper.id) })
+        const relink = { eventId: evId, keeperGameId: String(keeper.id) }
+        relinks.push(relink)
+        groupRelinks.push(relink)
       } else if (synced) {
         deleteEvents.add(evId)
+        groupDeleteEventIds.add(evId)
       }
     }
 
-    samples.push({ key, keepGameId: String(keeper.id), deleteGameIds: deleteIds })
+    samples.push({
+      key,
+      keepGameId: String(keeper.id),
+      deleteGameIds: deleteIds,
+      relinks: groupRelinks,
+      deleteEventIds: Array.from(groupDeleteEventIds),
+    })
   }
 
   return {
@@ -122,6 +139,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const body = toJsonBody(req)
     const apply = Boolean(body.apply)
+    const selectedKeys = Array.isArray(body.selectedKeys)
+      ? body.selectedKeys.map((x: unknown) => String(x || '')).filter(Boolean)
+      : null
 
     const { data: games, error: gErr } = await client.from('games').select('*').eq('user_id', userId)
     if (gErr) return res.status(400).json({ error: `games lookup: ${gErr.message}` })
@@ -131,7 +151,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq('user_id', userId)
     if (eErr) return res.status(400).json({ error: `calendar_events lookup: ${eErr.message}` })
 
-    const plan = buildPlan(games ?? [], events ?? [])
+    const fullPlan = buildPlan(games ?? [], events ?? [])
+    const selectedSamples = selectedKeys ? fullPlan.samples.filter((s) => selectedKeys.includes(s.key)) : fullPlan.samples
+    const plan: CleanupPlan = {
+      duplicateGroups: selectedSamples.length,
+      keepCount: selectedSamples.length,
+      deleteGames: selectedSamples.flatMap((s) => s.deleteGameIds),
+      relinks: selectedSamples.flatMap((s) => s.relinks),
+      deleteEvents: selectedSamples.flatMap((s) => s.deleteEventIds),
+      samples: selectedSamples,
+    }
     if (!apply) {
       return res.status(200).json({
         mode: 'dry-run',
