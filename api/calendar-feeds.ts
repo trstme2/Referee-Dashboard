@@ -4,6 +4,12 @@ import { createAuthedSupabase, getBearerToken, maskUrl, toJsonBody } from './aut
 type FeedPlatform = 'RefQuest' | 'DragonFly'
 type FeedSport = 'Soccer' | 'Lacrosse' | null
 
+function normalizeDateOnly(x: unknown): string | null {
+  const s = String(x || '').trim()
+  if (!s) return null
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null
+}
+
 function isValidPlatform(x: unknown): x is FeedPlatform {
   return x === 'RefQuest' || x === 'DragonFly'
 }
@@ -49,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'GET') {
       const { data, error } = await client
         .from('calendar_feeds')
-        .select('id,user_id,platform,name,feed_url,enabled,sport,default_league,last_synced_at,created_at,updated_at')
+        .select('id,user_id,platform,name,feed_url,enabled,sport,default_league,import_start_date,last_synced_at,created_at,updated_at')
         .eq('user_id', userId)
         .order('platform', { ascending: true })
         .order('created_at', { ascending: true })
@@ -61,6 +67,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         enabled: Boolean(f.enabled),
         sport: f.sport ?? null,
         defaultLeague: f.default_league ?? null,
+        importStartDate: f.import_start_date ?? null,
         lastSyncedAt: f.last_synced_at ?? null,
         createdAt: f.created_at,
         updatedAt: f.updated_at,
@@ -81,6 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const enabled = body.enabled == null ? true : Boolean(body.enabled)
       const sport = normalizeSport(body.sport)
       const defaultLeague = String(body.defaultLeague || '').trim() || null
+      const importStartDate = normalizeDateOnly(body.importStartDate)
 
       const { data, error } = await client
         .from('calendar_feeds')
@@ -92,8 +100,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           enabled,
           sport,
           default_league: defaultLeague,
+          import_start_date: importStartDate,
         }])
-        .select('id,platform,name,feed_url,enabled,sport,default_league,last_synced_at,created_at,updated_at')
+        .select('id,platform,name,feed_url,enabled,sport,default_league,import_start_date,last_synced_at,created_at,updated_at')
         .single()
       if (error) return res.status(400).json({ error: error.message })
       return res.status(200).json({
@@ -104,6 +113,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           enabled: Boolean(data.enabled),
           sport: data.sport ?? null,
           defaultLeague: data.default_league ?? null,
+          importStartDate: data.import_start_date ?? null,
           lastSyncedAt: data.last_synced_at ?? null,
           createdAt: data.created_at,
           updatedAt: data.updated_at,
@@ -140,13 +150,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (body.enabled != null) updates.enabled = Boolean(body.enabled)
       if (body.sport !== undefined) updates.sport = normalizeSport(body.sport)
       if (body.defaultLeague !== undefined) updates.default_league = String(body.defaultLeague || '').trim() || null
+      if (body.importStartDate !== undefined) updates.import_start_date = normalizeDateOnly(body.importStartDate)
 
       const { data, error } = await client
         .from('calendar_feeds')
         .update(updates)
         .eq('user_id', userId)
         .eq('id', id)
-        .select('id,platform,name,feed_url,enabled,sport,default_league,last_synced_at,created_at,updated_at')
+        .select('id,platform,name,feed_url,enabled,sport,default_league,import_start_date,last_synced_at,created_at,updated_at')
         .single()
       if (error) return res.status(400).json({ error: error.message })
       return res.status(200).json({
@@ -157,6 +168,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           enabled: Boolean(data.enabled),
           sport: data.sport ?? null,
           defaultLeague: data.default_league ?? null,
+          importStartDate: data.import_start_date ?? null,
           lastSyncedAt: data.last_synced_at ?? null,
           createdAt: data.created_at,
           updatedAt: data.updated_at,

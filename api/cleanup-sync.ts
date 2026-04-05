@@ -40,13 +40,20 @@ function buildPlan(games: any[], events: any[]): CleanupPlan {
   const groups = new Map<string, any[]>()
 
   for (const g of games) {
-    const key = [
-      g.game_date || '',
-      (g.start_time ? String(g.start_time).slice(0, 5) : ''),
-      g.sport || '',
-      g.competition_level || '',
-      normText(g.location_address),
-    ].join('|')
+    const startKey = g.start_time ? String(g.start_time).slice(0, 5) : ''
+    const key = startKey
+      ? [
+          g.game_date || '',
+          startKey,
+          g.sport || '',
+        ].join('|')
+      : [
+          g.game_date || '',
+          '',
+          g.sport || '',
+          g.competition_level || '',
+          normText(g.location_address),
+        ].join('|')
     groups.set(key, [...(groups.get(key) ?? []), g])
   }
 

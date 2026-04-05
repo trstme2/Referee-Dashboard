@@ -11,6 +11,7 @@ type Feed = {
   enabled: boolean
   sport: 'Soccer' | 'Lacrosse' | null
   default_league: string | null
+  import_start_date: string | null
 }
 
 const APP_TIMEZONE = 'America/New_York'
@@ -86,6 +87,15 @@ function inferRole(platform: Feed['platform'], sport: 'Soccer' | 'Lacrosse', tex
   return null
 }
 
+function inferEventType(text: string, allDay: boolean, startTime: string | null, location: string | null): 'Game' | 'Block' | 'Admin' | 'Travel' {
+  if (/\btravel\b|\bhotel\b|\bflight\b|\bdrive\b|\bout of town\b/i.test(text)) return 'Travel'
+  if (/\bmeeting\b|\bclinic\b|\btraining\b|\badmin\b|\bclass\b/i.test(text)) return 'Admin'
+  if (allDay) return 'Block'
+  if (/\bblocked\b|\bblock\b|\bunavailable\b|\bnot available\b|\bblackout\b|\bhold\b/i.test(text)) return 'Block'
+  if ((startTime === '08:00' || startTime === '08:30') && !location) return 'Block'
+  return 'Game'
+}
+
 function trimOrNull(x: unknown): string | null {
   const s = String(x || '').trim()
   return s || null
@@ -150,24 +160,28 @@ async function syncFeed(client: any, feed: Feed) {
     const role = inferRole(feed.platform, sport, text)
     const externalRef = `${feed.platform}:${feed.id}:${String(ev.uid)}`
     const allDay = Boolean((ev as any).datetype === 'date')
+    const location = trimOrNull(ev.location)
+    const startTime = allDay ? null : hhmmInZone(start, userDefaultTimezone)
+    const eventType = inferEventType(text, allDay, startTime, location)
 
     return {
       uid: String(ev.uid),
       externalRef,
       title: String(ev.summary || 'Assigned Game'),
-      location: trimOrNull(ev.location),
+      location,
       notes: trimOrNull(ev.description),
       start,
       end,
       allDay,
+      eventType,
       sport,
       competitionLevel,
       levelDetail,
       role,
       gameDate: ymdInZone(start, userDefaultTimezone),
-      startTime: allDay ? null : hhmmInZone(start, userDefaultTimezone),
+      startTime,
     }
-  })
+  }).filter((n) => !feed.import_start_date || n.gameDate >= feed.import_start_date)
 
   const eventDates = Array.from(new Set(normalized.map((n) => n.gameDate)))
   const { data: dayGames, error: dayGamesErr } = await client
@@ -180,6 +194,7 @@ async function syncFeed(client: any, feed: Feed) {
   const manualMatchByExternalRef = new Map<string, any>()
 
   for (const n of normalized) {
+    if (n.eventType !== 'Game') continue
     const candidates = (dayGames ?? []).filter((g: any) => {
       if (!unusedGameIds.has(String(g.id))) return false
       if (String(g.game_date) !== n.gameDate) return false
@@ -211,7 +226,7 @@ async function syncFeed(client: any, feed: Feed) {
     return {
       id: existing?.id ?? reusedCalendarEventId ?? crypto.randomUUID(),
       user_id: feed.user_id,
-      event_type: 'Game',
+      event_type: n.eventType,
       title: n.title,
       start_ts: n.start.toISOString(),
       end_ts: n.end.toISOString(),
@@ -222,7 +237,7 @@ async function syncFeed(client: any, feed: Feed) {
       source: 'Manual',
       external_ref: n.externalRef,
       status: 'Scheduled',
-      linked_game_id: existing?.linked_game_id ?? null,
+      linked_game_id: n.eventType === 'Game' ? (existing?.linked_game_id ?? null) : null,
       platform_confirmations: {},
       created_at: existing?.created_at ?? now,
       updated_at: now,
@@ -241,17 +256,24 @@ async function syncFeed(client: any, feed: Feed) {
   }
 
   const eventByRef = new Map<string, any>((upsertedEvents ?? []).map((e: any) => [String(e.external_ref), e]))
-  const eventIds = Array.from(eventByRef.values()).map((e: any) => String(e.id))
+  const gameNormalized = normalized.filter((n) => n.eventType === 'Game')
+  const eventIds = gameNormalized
+    .map((n) => eventByRef.get(n.externalRef)?.id ? String(eventByRef.get(n.externalRef).id) : null)
+    .filter(Boolean) as string[]
 
-  const { data: existingGames, error: gamesLookupErr } = await client
-    .from('games')
-    .select('*')
-    .eq('user_id', feed.user_id)
-    .in('calendar_event_id', eventIds)
-  if (gamesLookupErr) throw new Error(`games lookup: ${gamesLookupErr.message}`)
+  let existingGames: any[] = []
+  if (eventIds.length) {
+    const { data, error: gamesLookupErr } = await client
+      .from('games')
+      .select('*')
+      .eq('user_id', feed.user_id)
+      .in('calendar_event_id', eventIds)
+    if (gamesLookupErr) throw new Error(`games lookup: ${gamesLookupErr.message}`)
+    existingGames = data ?? []
+  }
   const gameByEventId = new Map<string, any>((existingGames ?? []).map((g: any) => [String(g.calendar_event_id), g]))
 
-  const gameRows = normalized.map((n) => {
+  const gameRows = gameNormalized.map((n) => {
     const ev = eventByRef.get(n.externalRef)
     const matchedManual = manualMatchByExternalRef.get(n.externalRef)
     const existing = gameByEventId.get(String(ev.id)) ?? matchedManual
@@ -287,11 +309,15 @@ async function syncFeed(client: any, feed: Feed) {
     }
   })
 
-  const { data: upsertedGames, error: gamesUpsertErr } = await client
-    .from('games')
-    .upsert(gameRows, { onConflict: 'id' })
-    .select('id,calendar_event_id')
-  if (gamesUpsertErr) throw new Error(`games upsert: ${gamesUpsertErr.message}`)
+  let upsertedGames: any[] = []
+  if (gameRows.length) {
+    const { data, error: gamesUpsertErr } = await client
+      .from('games')
+      .upsert(gameRows, { onConflict: 'id' })
+      .select('id,calendar_event_id')
+    if (gamesUpsertErr) throw new Error(`games upsert: ${gamesUpsertErr.message}`)
+    upsertedGames = data ?? []
+  }
 
   for (const row of gameRows) {
     if (gameByEventId.has(String(row.calendar_event_id))) updatedGames += 1

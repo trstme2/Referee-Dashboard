@@ -168,6 +168,7 @@ export interface CalendarFeed {
   enabled: boolean
   sport?: Sport
   defaultLeague?: string
+  importStartDate?: string
   lastSyncedAt?: string
   createdAt: string
   updatedAt: string

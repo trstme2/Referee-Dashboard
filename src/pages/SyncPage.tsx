@@ -10,6 +10,7 @@ type FeedForm = {
   enabled: boolean
   sport: '' | Sport
   defaultLeague: string
+  importStartDate: string
 }
 
 function emptyForm(): FeedForm {
@@ -21,6 +22,7 @@ function emptyForm(): FeedForm {
     enabled: true,
     sport: '',
     defaultLeague: '',
+    importStartDate: '',
   }
 }
 
@@ -108,6 +110,7 @@ export default function SyncPage() {
       enabled: Boolean(f.enabled),
       sport: (f.sport as '' | Sport | undefined) || '',
       defaultLeague: f.defaultLeague ?? '',
+      importStartDate: f.importStartDate ?? '',
     })
   }
 
@@ -129,6 +132,7 @@ export default function SyncPage() {
             enabled: form.enabled,
             sport: form.sport || null,
             defaultLeague: form.defaultLeague.trim() || null,
+            importStartDate: form.importStartDate || null,
           }),
         })
       } else {
@@ -141,6 +145,7 @@ export default function SyncPage() {
             enabled: form.enabled,
             sport: form.sport || null,
             defaultLeague: form.defaultLeague.trim() || null,
+            importStartDate: form.importStartDate || null,
           }),
         })
       }
@@ -249,7 +254,11 @@ export default function SyncPage() {
               <tr key={f.id}>
                 <td>
                   <div>{f.name}</div>
-                  <div className="small">{f.sport || 'Any sport'}{f.defaultLeague ? ` | ${f.defaultLeague}` : ''}</div>
+                  <div className="small">
+                    {f.sport || 'Any sport'}
+                    {f.defaultLeague ? ` | ${f.defaultLeague}` : ''}
+                    {f.importStartDate ? ` | from ${f.importStartDate}` : ''}
+                  </div>
                 </td>
                 <td>{f.platform}</td>
                 <td className="small">{f.maskedFeedUrl || '(hidden)'}</td>
@@ -368,6 +377,16 @@ export default function SyncPage() {
             <label>Default league (optional)</label>
             <input value={form.defaultLeague} onChange={e => setForm({ ...form, defaultLeague: e.target.value })} />
           </div>
+        </div>
+
+        <div className="field">
+          <label>Import events on/after (optional)</label>
+          <input
+            type="date"
+            value={form.importStartDate}
+            onChange={e => setForm({ ...form, importStartDate: e.target.value })}
+          />
+          <div className="small">Older feed entries will be ignored during sync for this feed.</div>
         </div>
 
         <div className="field">
