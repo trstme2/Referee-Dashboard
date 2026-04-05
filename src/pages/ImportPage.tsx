@@ -355,7 +355,6 @@ export default function ImportPage() {
           start: row.start,
           end: row.end,
           allDay: row.allDay,
-          timezone: 'America/New_York',
           notes: row.notes,
           source: 'CSV Import',
           status: 'Scheduled',

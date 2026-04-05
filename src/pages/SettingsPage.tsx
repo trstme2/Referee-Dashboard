@@ -14,6 +14,7 @@ export default function SettingsPage() {
 
   const [home, setHome] = useState(db.settings.homeAddress)
   const [otherWork, setOtherWork] = useState(db.settings.otherWorkAddress ?? '')
+  const [defaultTimezone, setDefaultTimezone] = useState(db.settings.defaultTimezone ?? 'America/New_York')
   const [platforms, setPlatforms] = useState(toListString(db.settings.assigningPlatforms))
   const [leagues, setLeagues] = useState(toListString(db.settings.leagues))
   const [calendarSubscriptionUrl, setCalendarSubscriptionUrl] = useState('')
@@ -40,6 +41,7 @@ export default function SettingsPage() {
       settings: {
         homeAddress: home.trim() || db.settings.homeAddress,
         otherWorkAddress: otherWork.trim(),
+        defaultTimezone: defaultTimezone.trim() || 'America/New_York',
         assigningPlatforms: parseList(platforms),
         leagues: parseList(leagues).sort(),
       },
@@ -156,6 +158,12 @@ export default function SettingsPage() {
               <label>Secondary work location (optional)</label>
               <input value={otherWork} onChange={e => setOtherWork(e.target.value)} placeholder="Office, school, or other work address" />
               <div className="small">Use this for another IRS work location you sometimes travel from.</div>
+            </div>
+
+            <div className="field">
+              <label>Default timezone</label>
+              <input value={defaultTimezone} onChange={e => setDefaultTimezone(e.target.value)} placeholder="America/New_York" />
+              <div className="small">Use an IANA timezone like <code>America/Chicago</code> or <code>America/Los_Angeles</code>.</div>
             </div>
 
             <div className="field">

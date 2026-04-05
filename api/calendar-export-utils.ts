@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 
-const APP_TIMEZONE = 'America/New_York'
+const FALLBACK_TIMEZONE = 'America/New_York'
 const DEFAULT_GAME_START = '17:00'
 const DEFAULT_GAME_DURATION_HOURS = 2
 const DEFAULT_HOME_ADDRESS = '399 S. Columbia Ave, Bexley, OH 43209'
@@ -13,6 +13,7 @@ type GameRow = {
   level_detail: string | null
   game_date: string
   start_time: string | null
+  timezone: string | null
   location_address: string
   roundtrip_miles: number | null
   role: string | null
@@ -47,8 +48,9 @@ type ExportEvent = {
   description: string
   location?: string
   dtstamp: string
-  startUtc?: string
-  endUtc?: string
+  timezone?: string
+  startLocal?: string
+  endLocal?: string
   allDayStart?: string
   allDayEndExclusive?: string
 }
@@ -72,14 +74,22 @@ function timePart(value: string | null | undefined): string {
   return /^\d{2}:\d{2}$/.test(raw) ? raw : DEFAULT_GAME_START
 }
 
-function gameStartIso(gameDate: string, startTime: string | null | undefined): string {
-  return new Date(`${toDateOnly(gameDate)}T${timePart(startTime)}:00`).toISOString()
+function localDateTimeStamp(dateOnly: string, time: string): string {
+  return `${toDateStamp(dateOnly)}T${time.replace(':', '')}00`
 }
 
-function gameEndIso(gameDate: string, startTime: string | null | undefined): string {
-  const start = new Date(gameStartIso(gameDate, startTime))
-  start.setHours(start.getHours() + DEFAULT_GAME_DURATION_HOURS)
-  return start.toISOString()
+function gameStartLocal(gameDate: string, startTime: string | null | undefined): string {
+  return localDateTimeStamp(toDateOnly(gameDate), timePart(startTime))
+}
+
+function gameEndLocal(gameDate: string, startTime: string | null | undefined): string {
+  const [hourString, minuteString] = timePart(startTime).split(':')
+  const totalMinutes = Number(hourString) * 60 + Number(minuteString) + DEFAULT_GAME_DURATION_HOURS * 60
+  const endDate = addDays(toDateOnly(gameDate), Math.floor(totalMinutes / (24 * 60)))
+  const endMinutes = totalMinutes % (24 * 60)
+  const endHour = String(Math.floor(endMinutes / 60)).padStart(2, '0')
+  const endMinute = String(endMinutes % 60).padStart(2, '0')
+  return localDateTimeStamp(endDate, `${endHour}:${endMinute}`)
 }
 
 function toUtcStamp(value: string): string {
@@ -96,6 +106,25 @@ function toUtcStamp(value: string): string {
 function toDateStamp(value: string): string {
   const dateOnly = toDateOnly(value)
   return dateOnly.replace(/-/g, '')
+}
+
+function localStampFromIso(value: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(value))
+  const get = (type: string) => String(parts.find((p) => p.type === type)?.value || '')
+  return `${get('year')}${get('month')}${get('day')}T${get('hour')}${get('minute')}${get('second')}`
+}
+
+function resolveTimezone(value: string | null | undefined, defaultTimezone: string): string {
+  return String(value || defaultTimezone || FALLBACK_TIMEZONE)
 }
 
 function escapeIcsText(value: string): string {
@@ -151,29 +180,33 @@ function buildCalendarDescription(event: CalendarEventRow): string {
   return event.notes?.trim() || ''
 }
 
-function toGameExportEvent(game: GameRow, userId: string): ExportEvent {
+function toGameExportEvent(game: GameRow, userId: string, defaultTimezone: string): ExportEvent {
+  const timezone = resolveTimezone(game.timezone, defaultTimezone)
   return {
     uid: `game-${game.id}@${userId}.referee-dashboard`,
     summary: buildGameSummary(game),
     description: buildGameDescription(game),
     location: game.location_address || undefined,
     dtstamp: toUtcStamp(game.updated_at || game.created_at || new Date().toISOString()),
-    startUtc: toUtcStamp(gameStartIso(game.game_date, game.start_time)),
-    endUtc: toUtcStamp(gameEndIso(game.game_date, game.start_time)),
+    timezone,
+    startLocal: gameStartLocal(game.game_date, game.start_time),
+    endLocal: gameEndLocal(game.game_date, game.start_time),
   }
 }
 
-function toCalendarExportEvent(event: CalendarEventRow, userId: string): ExportEvent {
+function toCalendarExportEvent(event: CalendarEventRow, userId: string, defaultTimezone: string): ExportEvent {
   const startDateOnly = toDateOnly(event.start_ts)
   const endDateOnly = toDateOnly(event.end_ts)
+  const timezone = resolveTimezone(event.timezone, defaultTimezone)
   return {
     uid: `event-${event.id}@${userId}.referee-dashboard`,
     summary: event.title || event.event_type || 'Calendar Event',
     description: buildCalendarDescription(event),
     location: event.location_address || undefined,
     dtstamp: toUtcStamp(event.updated_at || event.created_at || new Date().toISOString()),
-    startUtc: event.all_day ? undefined : toUtcStamp(event.start_ts),
-    endUtc: event.all_day ? undefined : toUtcStamp(event.end_ts),
+    timezone: event.all_day ? undefined : timezone,
+    startLocal: event.all_day ? undefined : localStampFromIso(event.start_ts, timezone),
+    endLocal: event.all_day ? undefined : localStampFromIso(event.end_ts, timezone),
     allDayStart: event.all_day ? toDateStamp(startDateOnly) : undefined,
     allDayEndExclusive: event.all_day ? toDateStamp(addDays(endDateOnly, 1)) : undefined,
   }
@@ -184,8 +217,8 @@ function serializeEvent(event: ExportEvent): string[] {
     'BEGIN:VEVENT',
     `UID:${escapeIcsText(event.uid)}`,
     `DTSTAMP:${event.dtstamp}`,
-    event.allDayStart ? `DTSTART;VALUE=DATE:${event.allDayStart}` : `DTSTART:${event.startUtc}`,
-    event.allDayEndExclusive ? `DTEND;VALUE=DATE:${event.allDayEndExclusive}` : `DTEND:${event.endUtc}`,
+    event.allDayStart ? `DTSTART;VALUE=DATE:${event.allDayStart}` : `DTSTART;TZID=${escapeIcsText(event.timezone || FALLBACK_TIMEZONE)}:${event.startLocal}`,
+    event.allDayEndExclusive ? `DTEND;VALUE=DATE:${event.allDayEndExclusive}` : `DTEND;TZID=${escapeIcsText(event.timezone || FALLBACK_TIMEZONE)}:${event.endLocal}`,
     `SUMMARY:${escapeIcsText(event.summary)}`,
     `DESCRIPTION:${escapeIcsText(event.description || '')}`,
     event.location ? `LOCATION:${escapeIcsText(event.location)}` : null,
@@ -194,15 +227,16 @@ function serializeEvent(event: ExportEvent): string[] {
   return lines.map(foldLine)
 }
 
-export function buildIcsCalendar(params: { userId: string; games: GameRow[]; calendarEvents: CalendarEventRow[] }) {
+export function buildIcsCalendar(params: { userId: string; defaultTimezone?: string | null; games: GameRow[]; calendarEvents: CalendarEventRow[] }) {
+  const defaultTimezone = resolveTimezone(params.defaultTimezone, FALLBACK_TIMEZONE)
   const events = [
-    ...params.games.filter(g => g.status !== 'Canceled').map(g => toGameExportEvent(g, params.userId)),
+    ...params.games.filter(g => g.status !== 'Canceled').map(g => toGameExportEvent(g, params.userId, defaultTimezone)),
     ...params.calendarEvents
       .filter(e => e.status !== 'Canceled' && !e.linked_game_id)
-      .map(e => toCalendarExportEvent(e, params.userId)),
+      .map(e => toCalendarExportEvent(e, params.userId, defaultTimezone)),
   ].sort((a, b) => {
-    const aKey = a.allDayStart ?? a.startUtc ?? ''
-    const bKey = b.allDayStart ?? b.startUtc ?? ''
+    const aKey = a.allDayStart ?? a.startLocal ?? ''
+    const bKey = b.allDayStart ?? b.startLocal ?? ''
     return aKey.localeCompare(bKey)
   })
 
@@ -213,7 +247,7 @@ export function buildIcsCalendar(params: { userId: string; games: GameRow[]; cal
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     `X-WR-CALNAME:${escapeIcsText('Referee Dashboard')}`,
-    `X-WR-TIMEZONE:${APP_TIMEZONE}`,
+    `X-WR-TIMEZONE:${escapeIcsText(defaultTimezone)}`,
     ...events.flatMap(serializeEvent),
     'END:VCALENDAR',
   ]
@@ -242,6 +276,7 @@ export async function ensureCalendarExportToken(client: any, userId: string) {
     const payload = {
       user_id: userId,
       home_address: DEFAULT_HOME_ADDRESS,
+      default_timezone: FALLBACK_TIMEZONE,
       assigning_platforms: [],
       leagues: [],
       calendar_export_token: token,
@@ -276,6 +311,7 @@ export async function regenerateCalendarExportToken(client: any, userId: string)
       .insert([{
         user_id: userId,
         home_address: DEFAULT_HOME_ADDRESS,
+        default_timezone: FALLBACK_TIMEZONE,
         assigning_platforms: [],
         leagues: [],
         calendar_export_token: token,
@@ -287,10 +323,10 @@ export async function regenerateCalendarExportToken(client: any, userId: string)
 }
 
 export async function loadCalendarExportDataForUser(client: any, userId: string) {
-  const [{ data: games, error: gamesError }, { data: events, error: eventsError }] = await Promise.all([
+  const [{ data: games, error: gamesError }, { data: events, error: eventsError }, { data: settings, error: settingsError }] = await Promise.all([
     client
       .from('games')
-      .select('id,sport,competition_level,league,level_detail,game_date,start_time,location_address,roundtrip_miles,role,game_fee,notes,home_team,away_team,updated_at,created_at,status')
+      .select('id,sport,competition_level,league,level_detail,game_date,start_time,timezone,location_address,roundtrip_miles,role,game_fee,notes,home_team,away_team,updated_at,created_at,status')
       .eq('user_id', userId)
       .order('game_date', { ascending: true })
       .order('start_time', { ascending: true }),
@@ -299,12 +335,19 @@ export async function loadCalendarExportDataForUser(client: any, userId: string)
       .select('id,event_type,title,start_ts,end_ts,all_day,timezone,location_address,notes,updated_at,created_at,status,linked_game_id')
       .eq('user_id', userId)
       .order('start_ts', { ascending: true }),
+    client
+      .from('user_settings')
+      .select('default_timezone')
+      .eq('user_id', userId)
+      .maybeSingle(),
   ])
 
   if (gamesError) throw new Error(`games: ${gamesError.message}`)
   if (eventsError) throw new Error(`calendar_events: ${eventsError.message}`)
+  if (settingsError) throw new Error(`user_settings: ${settingsError.message}`)
 
   return {
+    defaultTimezone: settings?.default_timezone ?? FALLBACK_TIMEZONE,
     games: (games ?? []) as GameRow[],
     calendarEvents: (events ?? []) as CalendarEventRow[],
   }

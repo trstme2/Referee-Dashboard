@@ -15,6 +15,16 @@ type Feed = {
 
 const APP_TIMEZONE = 'America/New_York'
 
+async function loadUserDefaultTimezone(client: any, userId: string): Promise<string> {
+  const { data, error } = await client
+    .from('user_settings')
+    .select('default_timezone')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) return APP_TIMEZONE
+  return String(data?.default_timezone || APP_TIMEZONE)
+}
+
 function datePartsInZone(d: Date, timeZone: string): { y: number; m: number; day: number; hh: number; mm: number } {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -98,6 +108,7 @@ function sameLocation(a: string | null | undefined, b: string | null | undefined
 }
 
 async function syncFeed(client: any, feed: Feed) {
+  const userDefaultTimezone = await loadUserDefaultTimezone(client, feed.user_id)
   const now = new Date().toISOString()
   let createdEvents = 0
   let updatedEvents = 0
@@ -153,8 +164,8 @@ async function syncFeed(client: any, feed: Feed) {
       competitionLevel,
       levelDetail,
       role,
-      gameDate: ymdInZone(start, APP_TIMEZONE),
-      startTime: allDay ? null : hhmmInZone(start, APP_TIMEZONE),
+      gameDate: ymdInZone(start, userDefaultTimezone),
+      startTime: allDay ? null : hhmmInZone(start, userDefaultTimezone),
     }
   })
 
@@ -187,7 +198,7 @@ async function syncFeed(client: any, feed: Feed) {
   const refPrefix = `${feed.platform}:${feed.id}:`
   const { data: existingEvents, error: evLookupErr } = await client
     .from('calendar_events')
-    .select('id,external_ref,linked_game_id,created_at')
+    .select('id,external_ref,linked_game_id,created_at,timezone')
     .eq('user_id', feed.user_id)
     .like('external_ref', `${refPrefix}%`)
   if (evLookupErr) throw new Error(`calendar_events lookup: ${evLookupErr.message}`)
@@ -205,7 +216,7 @@ async function syncFeed(client: any, feed: Feed) {
       start_ts: n.start.toISOString(),
       end_ts: n.end.toISOString(),
       all_day: n.allDay,
-      timezone: 'America/New_York',
+      timezone: existing?.timezone ?? manualMatch?.timezone ?? userDefaultTimezone,
       location_address: n.location,
       notes: n.notes,
       source: 'Manual',
@@ -256,6 +267,7 @@ async function syncFeed(client: any, feed: Feed) {
       level_detail: n.levelDetail ?? existing?.level_detail ?? null,
       game_date: n.gameDate,
       start_time: n.startTime ?? existing?.start_time ?? null,
+      timezone: existing?.timezone ?? userDefaultTimezone,
       location_address: n.location ?? existing?.location_address ?? '',
       distance_miles: existing?.distance_miles ?? null,
       roundtrip_miles: keepRoundtripMiles,

@@ -89,7 +89,6 @@ export default function CalendarPage() {
       start: start.toISOString(),
       end: end.toISOString(),
       allDay: form.allDay,
-      timezone: 'America/New_York',
       notes: form.notes || undefined,
       source: 'Manual',
       status: 'Scheduled',

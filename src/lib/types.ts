@@ -20,6 +20,7 @@ export type MileageOrigin = 'home' | 'other'
 export interface Settings {
   homeAddress: string
   otherWorkAddress?: string
+  defaultTimezone?: string
   assigningPlatforms: string[]
   leagues: string[]
 }
@@ -33,6 +34,7 @@ export interface Game {
   levelDetail?: string
   gameDate: string
   startTime?: string
+  timezone?: string
 
   locationAddress: string
   distanceMiles?: number

@@ -3,6 +3,7 @@ import type { DB, CalendarEvent, Expense, Game, RequirementActivity, Requirement
 import { toISOFromDateTime } from './utils'
 
 function nowISO() { return new Date().toISOString() }
+function defaultTimezone(db: DB) { return db.settings.defaultTimezone || 'America/New_York' }
 
 function addHoursToTime(time: string, hours: number): string {
   const [hS, mS] = time.split(':')
@@ -69,6 +70,7 @@ export function upsertGameIn(db: DB, input: Partial<Game> & Pick<Game, 'sport'|'
     league: input.league ?? existing?.league,
     gameDate: input.gameDate,
     startTime: input.startTime ?? existing?.startTime,
+    timezone: input.timezone ?? existing?.timezone ?? defaultTimezone(db),
     locationAddress: input.locationAddress,
     distanceMiles: input.distanceMiles ?? existing?.distanceMiles,
     roundtripMiles: input.roundtripMiles ?? existing?.roundtripMiles,
@@ -106,7 +108,7 @@ export function upsertGameIn(db: DB, input: Partial<Game> & Pick<Game, 'sport'|'
       start: startIso,
       end: endIso,
       allDay: false,
-      timezone: 'America/New_York',
+      timezone: merged.timezone ?? existingCe?.timezone ?? defaultTimezone(db),
       locationAddress: merged.locationAddress,
       notes: merged.notes,
       source: existingCe?.source ?? 'Manual',
@@ -146,7 +148,7 @@ export function deleteGameIn(db: DB, gameId: string): DB {
   return next
 }
 
-export function upsertCalendarEventIn(db: DB, input: Partial<CalendarEvent> & Pick<CalendarEvent, 'eventType'|'title'|'start'|'end'|'allDay'|'timezone'|'source'|'status'> & { id?: string }): DB {
+export function upsertCalendarEventIn(db: DB, input: Partial<CalendarEvent> & Pick<CalendarEvent, 'eventType'|'title'|'start'|'end'|'allDay'|'source'|'status'> & { id?: string }): DB {
   const now = nowISO()
   const id = input.id ?? uuid()
   const existing = db.calendarEvents.find(e => e.id === id)
@@ -163,7 +165,7 @@ export function upsertCalendarEventIn(db: DB, input: Partial<CalendarEvent> & Pi
     start: input.start,
     end: input.end,
     allDay: input.allDay,
-    timezone: input.timezone,
+    timezone: input.timezone ?? existing?.timezone ?? defaultTimezone(db),
     locationAddress: input.locationAddress ?? existing?.locationAddress,
     notes: input.notes ?? existing?.notes,
     source: input.source,
