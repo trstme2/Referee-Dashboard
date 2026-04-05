@@ -55,6 +55,13 @@ type ExportEvent = {
   allDayEndExclusive?: string
 }
 
+type TimeZoneTransition = {
+  stamp: string
+  offsetFrom: string
+  offsetTo: string
+  name: string
+}
+
 function toDateOnly(value: string): string {
   return String(value).slice(0, 10)
 }
@@ -125,6 +132,150 @@ function localStampFromIso(value: string, timeZone: string): string {
 
 function resolveTimezone(value: string | null | undefined, defaultTimezone: string): string {
   return String(value || defaultTimezone || FALLBACK_TIMEZONE)
+}
+
+function offsetString(timeZone: string, date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    timeZoneName: 'shortOffset',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const raw = String(parts.find(p => p.type === 'timeZoneName')?.value || 'GMT+0')
+  const match = raw.match(/^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/i)
+  if (!match) return '+0000'
+  const sign = match[1] === '-' ? '-' : '+'
+  const hours = String(Number(match[2])).padStart(2, '0')
+  const minutes = String(Number(match[3] || '0')).padStart(2, '0')
+  return `${sign}${hours}${minutes}`
+}
+
+function timeZoneAbbreviation(timeZone: string, date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    timeZoneName: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  return String(parts.find(p => p.type === 'timeZoneName')?.value || timeZone)
+}
+
+function localYmdHm(timeZone: string, date: Date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value || 0)
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+    hour: get('hour'),
+    minute: get('minute'),
+  }
+}
+
+function transitionStamp(timeZone: string, date: Date): string {
+  const local = localYmdHm(timeZone, date)
+  return `${String(local.year).padStart(4, '0')}${String(local.month).padStart(2, '0')}${String(local.day).padStart(2, '0')}T${String(local.hour).padStart(2, '0')}${String(local.minute).padStart(2, '0')}00`
+}
+
+function sameLocalMinute(a: Date, b: Date, timeZone: string): boolean {
+  const aa = localYmdHm(timeZone, a)
+  const bb = localYmdHm(timeZone, b)
+  return aa.year === bb.year && aa.month === bb.month && aa.day === bb.day && aa.hour === bb.hour && aa.minute === bb.minute
+}
+
+function findTransition(timeZone: string, start: Date, end: Date, offsetFrom: string, offsetTo: string): Date {
+  let lo = start
+  let hi = end
+  while (hi.getTime() - lo.getTime() > 60_000) {
+    const mid = new Date(Math.floor((lo.getTime() + hi.getTime()) / 2))
+    const midOffset = offsetString(timeZone, mid)
+    if (midOffset === offsetFrom) lo = mid
+    else hi = mid
+  }
+  let probe = new Date(lo.getTime())
+  while (probe <= end && offsetString(timeZone, probe) === offsetFrom) {
+    probe = new Date(probe.getTime() + 60_000)
+  }
+  return probe <= end ? probe : hi
+}
+
+function collectTransitions(timeZone: string, years: number[]): TimeZoneTransition[] {
+  const transitions: TimeZoneTransition[] = []
+  for (const year of years) {
+    let cursor = new Date(Date.UTC(year, 0, 1, 0, 0, 0))
+    const limit = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0))
+    let prevOffset = offsetString(timeZone, cursor)
+    while (cursor < limit) {
+      const next = new Date(cursor.getTime() + 24 * 60 * 60 * 1000)
+      const nextOffset = offsetString(timeZone, next)
+      if (nextOffset !== prevOffset) {
+        const transition = findTransition(timeZone, cursor, next, prevOffset, nextOffset)
+        const previousMinute = new Date(transition.getTime() - 60_000)
+        const transitionLocal = transitionStamp(timeZone, transition)
+        const previousLocal = transitionStamp(timeZone, previousMinute)
+        transitions.push({
+          stamp: sameLocalMinute(transition, previousMinute, timeZone) ? previousLocal : transitionLocal,
+          offsetFrom: prevOffset,
+          offsetTo: nextOffset,
+          name: timeZoneAbbreviation(timeZone, transition),
+        })
+        prevOffset = nextOffset
+      }
+      cursor = next
+    }
+  }
+  return transitions
+}
+
+function vtimezoneBlock(timeZone: string): string[] {
+  const currentYear = new Date().getUTCFullYear()
+  const transitions = collectTransitions(timeZone, [currentYear - 1, currentYear, currentYear + 1, currentYear + 2])
+  if (!transitions.length) {
+    const now = new Date()
+    const offset = offsetString(timeZone, now)
+    const name = timeZoneAbbreviation(timeZone, now)
+    return [
+      'BEGIN:VTIMEZONE',
+      `TZID:${escapeIcsText(timeZone)}`,
+      'BEGIN:STANDARD',
+      `DTSTART:${transitionStamp(timeZone, now)}`,
+      `TZOFFSETFROM:${offset}`,
+      `TZOFFSETTO:${offset}`,
+      `TZNAME:${escapeIcsText(name)}`,
+      'END:STANDARD',
+      'END:VTIMEZONE',
+    ].map(foldLine)
+  }
+
+  const sections = transitions.map((transition, index) => {
+    const kind = Number(transition.offsetTo) > Number(transition.offsetFrom) ? 'DAYLIGHT' : 'STANDARD'
+    return [
+      `BEGIN:${kind}`,
+      `DTSTART:${transition.stamp}`,
+      `TZOFFSETFROM:${transition.offsetFrom}`,
+      `TZOFFSETTO:${transition.offsetTo}`,
+      `TZNAME:${escapeIcsText(transition.name)}`,
+      `COMMENT:Generated transition ${index + 1}`,
+      `END:${kind}`,
+    ].map(foldLine)
+  })
+
+  return [
+    foldLine('BEGIN:VTIMEZONE'),
+    foldLine(`TZID:${escapeIcsText(timeZone)}`),
+    ...sections.flat(),
+    foldLine('END:VTIMEZONE'),
+  ]
 }
 
 function escapeIcsText(value: string): string {
@@ -239,6 +390,7 @@ export function buildIcsCalendar(params: { userId: string; defaultTimezone?: str
     const bKey = b.allDayStart ?? b.startLocal ?? ''
     return aKey.localeCompare(bKey)
   })
+  const timeZones = Array.from(new Set(events.map(event => event.timezone).filter(Boolean) as string[])).sort()
 
   const lines = [
     'BEGIN:VCALENDAR',
@@ -248,6 +400,7 @@ export function buildIcsCalendar(params: { userId: string; defaultTimezone?: str
     'METHOD:PUBLISH',
     `X-WR-CALNAME:${escapeIcsText('Referee Dashboard')}`,
     `X-WR-TIMEZONE:${escapeIcsText(defaultTimezone)}`,
+    ...timeZones.flatMap(vtimezoneBlock),
     ...events.flatMap(serializeEvent),
     'END:VCALENDAR',
   ]
