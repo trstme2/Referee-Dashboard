@@ -23,8 +23,18 @@ Frontend (Vite):
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
-Serverless (Distance lookup):
+Serverless:
 - `GOOGLE_MAPS_API_KEY` (optional, only needed if you want distance-from-home)
+- `SUPABASE_SERVICE_ROLE_KEY` (needed for scheduled server jobs)
+- `CRON_SECRET` (used by Vercel Cron to authorize scheduled requests)
+- `RESEND_API_KEY` (needed for weekly schedule emails)
+- `WEEKLY_EMAIL_FROM` (optional, defaults to Resend's test sender)
+- `WEEKLY_EMAIL_REPLY_TO` (optional)
+- `APP_URL` (optional, used for the dashboard link in emails)
+
+The weekly schedule email runs from `/api/weekly-games-email` every Sunday at `13:00 UTC`.
+It sends opted-in users a "Games Next 7 Days" email using the same Scheduled-game date window as the Home page.
+Users opt in or out from Settings with the Weekly Sunday game email checkbox.
 
 ## 5) Deploy
 Push to GitHub, import into Vercel, deploy.

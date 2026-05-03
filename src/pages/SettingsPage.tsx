@@ -15,6 +15,7 @@ export default function SettingsPage() {
   const [home, setHome] = useState(db.settings.homeAddress)
   const [otherWork, setOtherWork] = useState(db.settings.otherWorkAddress ?? '')
   const [defaultTimezone, setDefaultTimezone] = useState(db.settings.defaultTimezone ?? 'America/New_York')
+  const [weeklyGamesEmailEnabled, setWeeklyGamesEmailEnabled] = useState(Boolean(db.settings.weeklyGamesEmailEnabled))
   const [platforms, setPlatforms] = useState(toListString(db.settings.assigningPlatforms))
   const [leagues, setLeagues] = useState(toListString(db.settings.leagues))
   const [calendarSubscriptionUrl, setCalendarSubscriptionUrl] = useState('')
@@ -42,6 +43,7 @@ export default function SettingsPage() {
         homeAddress: home.trim() || db.settings.homeAddress,
         otherWorkAddress: otherWork.trim(),
         defaultTimezone: defaultTimezone.trim() || 'America/New_York',
+        weeklyGamesEmailEnabled,
         assigningPlatforms: parseList(platforms),
         leagues: parseList(leagues).sort(),
       },
@@ -164,6 +166,17 @@ export default function SettingsPage() {
               <label>Default timezone</label>
               <input value={defaultTimezone} onChange={e => setDefaultTimezone(e.target.value)} placeholder="America/New_York" />
               <div className="small">Use an IANA timezone like <code>America/Chicago</code> or <code>America/Los_Angeles</code>.</div>
+            </div>
+
+            <div className="field">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={weeklyGamesEmailEnabled}
+                  onChange={e => setWeeklyGamesEmailEnabled(e.target.checked)}
+                /> Weekly Sunday game email
+              </label>
+              <div className="small">Send your Games Next 7 Days schedule to your signed-in email address each Sunday.</div>
             </div>
 
             <div className="field">

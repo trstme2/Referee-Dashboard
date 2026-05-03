@@ -43,9 +43,10 @@ async function upsertUserSettingsCompat(client: any, payload: any, options?: { i
 
   if (result.error && (
     isMissingColumnError(result.error, 'user_settings', 'other_work_address') ||
-    isMissingColumnError(result.error, 'user_settings', 'default_timezone')
+    isMissingColumnError(result.error, 'user_settings', 'default_timezone') ||
+    isMissingColumnError(result.error, 'user_settings', 'weekly_games_email_enabled')
   )) {
-    const { other_work_address, default_timezone, ...legacyPayload } = payload
+    const { other_work_address, default_timezone, weekly_games_email_enabled, ...legacyPayload } = payload
     result = await client
       .from('user_settings')
       .upsert([legacyPayload], { onConflict: 'user_id', ...(options ?? {}) })
@@ -406,6 +407,7 @@ function rowToSettings(r: any): Settings {
     homeAddress: r.home_address ?? '399 S. Columbia Ave, Bexley, OH 43209',
     otherWorkAddress: r.other_work_address ?? '',
     defaultTimezone: r.default_timezone ?? 'America/New_York',
+    weeklyGamesEmailEnabled: Boolean(r.weekly_games_email_enabled ?? false),
     assigningPlatforms: Array.isArray(r.assigning_platforms) ? r.assigning_platforms : (r.assigning_platforms ?? []),
     leagues: Array.isArray(r.leagues) ? r.leagues : (r.leagues ?? []),
   }
@@ -561,6 +563,7 @@ function settingsToRow(s: Settings, userId: string) {
     home_address: s.homeAddress,
     other_work_address: s.otherWorkAddress || null,
     default_timezone: s.defaultTimezone || 'America/New_York',
+    weekly_games_email_enabled: Boolean(s.weeklyGamesEmailEnabled),
     assigning_platforms: s.assigningPlatforms,
     leagues: s.leagues,
     updated_at: nowISO(),

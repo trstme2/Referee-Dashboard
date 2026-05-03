@@ -94,6 +94,8 @@ export default function ExpensesPage() {
 
   async function del(id: string) {
     const expense = db.expenses.find(x => x.id === id)
+    if (!expense) return
+    if (!confirm(`Delete this ${expense.category} expense from ${expense.expenseDate}?`)) return
     if (expense?.receiptStoragePath && mode === 'supabase') {
       try {
         await deleteExpenseReceipt(expense.receiptStoragePath)
@@ -336,6 +338,7 @@ export default function ExpensesPage() {
         <div className="btnbar">
           <button className="btn primary" onClick={save} disabled={loading || !form.expenseDate || !form.amount}>Save</button>
           <button className="btn" onClick={startNew} disabled={loading}>New</button>
+          {form.id ? <button className="btn danger" onClick={() => del(form.id)} disabled={loading}>Delete expense</button> : null}
         </div>
       </section>
     </div>

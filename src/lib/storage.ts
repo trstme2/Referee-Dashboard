@@ -42,6 +42,7 @@ function seedDB(): DB {
       homeAddress: '399 S. Columbia Ave, Bexley, OH 43209',
       otherWorkAddress: '',
       defaultTimezone: 'America/New_York',
+      weeklyGamesEmailEnabled: false,
       assigningPlatforms: ['DragonFly', 'RefQuest'],
       leagues: [],
     },

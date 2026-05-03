@@ -129,7 +129,7 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="grid cols2">
+    <div className="grid calendar-page">
       <section className="card">
         <h2>Calendar</h2>
         <div className="btnbar" style={{justifyContent:'space-between'}}>
@@ -141,40 +141,42 @@ export default function CalendarPage() {
           <span className="pill">{cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</span>
         </div>
 
-        <div className="calhead">
-          {DOW.map(d => <div key={d}>{d}</div>)}
-        </div>
+        <div className="calendar-scroll" aria-label="Month calendar">
+          <div className="calhead">
+            {DOW.map(d => <div key={d}>{d}</div>)}
+          </div>
 
-        <div className="calendar">
-          {days.map(d => {
-            const ymd = yyyyMmDd(d)
-            const inMonth = d >= monthStart && d <= monthEnd
-            const items = eventsByDay.get(ymd) ?? []
-            return (
-              <div key={ymd} className="day" style={{opacity: inMonth ? 1 : 0.45}}>
-                <div className="d">
-                  <span>{d.getDate()}</span>
-                  <span className="small">{items.length ? `${items.length}` : ''}</span>
-                </div>
-                <div className="items">
-                  {items.slice(0,3).map((e:any) => (
-                    <div key={e.id} className="item" onClick={() => edit(e.id)} style={{cursor:'pointer'}}>
-                      <div className="t">{e.eventType}: {e.title}</div>
-                      <div className="m">{new Date(e.start).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-                      <div className="platform-row" style={{marginTop: 6}}>
-                        {db.settings.assigningPlatforms.slice(0, 2).map((p) => (
-                          <span key={p} className={'platform-chip ' + (e.platformConfirmations?.[p] ? 'on' : 'off')}>
-                            {p}
-                          </span>
-                        ))}
+          <div className="calendar">
+            {days.map(d => {
+              const ymd = yyyyMmDd(d)
+              const inMonth = d >= monthStart && d <= monthEnd
+              const items = eventsByDay.get(ymd) ?? []
+              return (
+                <div key={ymd} className="day" style={{opacity: inMonth ? 1 : 0.45}}>
+                  <div className="d">
+                    <span>{d.getDate()}</span>
+                    <span className="small">{items.length ? `${items.length}` : ''}</span>
+                  </div>
+                  <div className="items">
+                    {items.slice(0,3).map((e:any) => (
+                      <div key={e.id} className="item" onClick={() => edit(e.id)} style={{cursor:'pointer'}}>
+                        <div className="t">{e.eventType}: {e.title}</div>
+                        <div className="m">{new Date(e.start).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                        <div className="platform-row" style={{marginTop: 6}}>
+                          {db.settings.assigningPlatforms.slice(0, 2).map((p) => (
+                            <span key={p} className={'platform-chip ' + (e.platformConfirmations?.[p] ? 'on' : 'off')}>
+                              {p}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {items.length > 3 && <div className="small">+{items.length - 3} more</div>}
+                    ))}
+                    {items.length > 3 && <div className="small">+{items.length - 3} more</div>}
+                  </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
 
         <div className="footer-note">
