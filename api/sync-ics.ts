@@ -242,15 +242,39 @@ function summarizeNormalizedGame(n: any): string {
   ].filter(Boolean).join(' | ')
 }
 
+function sameExactSlot(g: any, n: any): boolean {
+  const gameStart = g.start_time ? String(g.start_time).slice(0, 5) : null
+  return (
+    String(g.game_date) === n.gameDate &&
+    gameStart != null &&
+    n.startTime != null &&
+    gameStart === n.startTime &&
+    String(g.sport || '') === n.sport &&
+    String(g.competition_level || '') === n.competitionLevel
+  )
+}
+
 function findManualMatch(dayGames: any[], unusedGameIds: Set<string>, n: any): {
   match: any | null
   topScore?: number
   competingScore?: number
   ambiguous: boolean
 } {
+  const exactSlotCandidates = dayGames.filter((g: any) =>
+    unusedGameIds.has(String(g.id)) &&
+    g.status !== 'Canceled' &&
+    sameExactSlot(g, n)
+  )
+
   const scored = dayGames
     .filter((g: any) => unusedGameIds.has(String(g.id)))
-    .map((g: any) => ({ game: g, score: manualCandidateScore(g, n) }))
+    .map((g: any) => {
+      let score = manualCandidateScore(g, n)
+      if (score > 0 && exactSlotCandidates.length === 1 && String(exactSlotCandidates[0].id) === String(g.id)) {
+        score += 18
+      }
+      return { game: g, score }
+    })
     .filter((x) => x.score >= (n.location ? 55 : 70))
     .sort((a, b) => b.score - a.score)
 
