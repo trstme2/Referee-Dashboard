@@ -20,7 +20,7 @@ export default function Nav() {
       )}
       {mode === 'supabase' && session && (
         <a href="#" onClick={(e) => { e.preventDefault(); signOut() }} title="Sign out">
-          {loading ? 'Syncing…' : 'Sign out'}
+          {loading ? 'Syncing...' : 'Sign out'}
         </a>
       )}
     </nav>

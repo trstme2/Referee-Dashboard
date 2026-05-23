@@ -999,3 +999,313 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Libe
   }
 }
 
+/* Whistle Keeper product workspace refresh. */
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 90% -10%, rgba(220, 38, 38, 0.18), transparent 30%),
+    linear-gradient(180deg, #07111f 0%, #0e1726 42%, #111827 100%);
+}
+
+.container {
+  max-width: 1240px;
+  padding: 22px;
+}
+
+.topbar {
+  gap: 18px;
+  padding: 12px 14px;
+  border-color: rgba(148, 163, 184, 0.22);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.06), rgba(15, 23, 42, 0.86)),
+    rgba(15, 23, 42, 0.84);
+  box-shadow: 0 22px 54px rgba(0,0,0,0.24);
+}
+
+.topbar.accent-frame::before,
+.topbar.accent-frame::after {
+  display: none;
+}
+
+.brand-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  border-color: rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.055);
+}
+
+.brand h1 {
+  color: #f8fafc;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.brand p {
+  max-width: 410px;
+  color: #9fb0c5;
+  font-size: 12px;
+}
+
+.nav {
+  gap: 6px;
+}
+
+.nav a {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-color: transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #b8c4d6;
+  font-size: 13px;
+}
+
+.nav a:hover {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(255,255,255,0.045);
+  color: #fff;
+}
+
+.nav a.active {
+  border-color: rgba(220, 38, 38, 0.54);
+  background: rgba(220, 38, 38, 0.14);
+  color: #fff;
+  box-shadow: none;
+}
+
+.grid {
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.card {
+  border-color: rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.048), rgba(15, 23, 42, 0.64)),
+    rgba(15, 23, 42, 0.74);
+  box-shadow: none;
+}
+
+.card:hover {
+  border-color: rgba(148, 163, 184, 0.32);
+  transform: none;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.18);
+}
+
+.card.accent-frame::before,
+.card.accent-frame::after {
+  display: none;
+}
+
+.card h2 {
+  color: #dbeafe;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.card .sub,
+.small,
+.field label,
+.footer-note {
+  color: #97a7bc;
+}
+
+.footer-note {
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.kpi {
+  gap: 12px;
+}
+
+.kpi .box {
+  border-color: rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.038);
+}
+
+.kpi .box .label {
+  color: #97a7bc;
+}
+
+.kpi .box .value {
+  color: #f8fafc;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.field input,
+.field select,
+.field textarea {
+  border-color: rgba(148, 163, 184, 0.24);
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.34);
+  color: #f8fafc;
+}
+
+.field input:hover,
+.field select:hover,
+.field textarea:hover {
+  border-color: rgba(148, 163, 184, 0.38);
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: rgba(239, 68, 68, 0.72);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.16);
+}
+
+.btn {
+  min-height: 38px;
+  border-color: rgba(148, 163, 184, 0.24);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.045);
+  color: #e5edf8;
+}
+
+.btn:hover {
+  border-color: rgba(148, 163, 184, 0.42);
+  background: rgba(255,255,255,0.07);
+  transform: translateY(-1px);
+}
+
+.btn.primary {
+  border-color: rgba(239, 68, 68, 0.72);
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.92), rgba(153, 27, 27, 0.92));
+  color: #fff;
+  box-shadow: 0 14px 28px rgba(220, 38, 38, 0.18);
+}
+
+.btn.danger {
+  border-color: rgba(248, 113, 113, 0.54);
+  background: rgba(127, 29, 29, 0.18);
+  color: #fecaca;
+}
+
+.btn.compact {
+  min-height: 28px;
+}
+
+.table {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.22);
+}
+
+.table th,
+.table td {
+  border-bottom-color: rgba(148, 163, 184, 0.14);
+}
+
+.table th {
+  color: #9fb0c5;
+  background: rgba(255,255,255,0.025);
+  font-weight: 800;
+}
+
+.table tr:hover td {
+  background: rgba(255,255,255,0.035);
+}
+
+.table tr:focus-within td:first-child,
+.table tr:hover td:first-child {
+  box-shadow: inset 2px 0 0 rgba(239, 68, 68, 0.72);
+}
+
+.table-wrap {
+  scrollbar-color: rgba(148, 163, 184, 0.42) rgba(255,255,255,0.04);
+}
+
+.table-wrap::-webkit-scrollbar-thumb,
+.calendar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.44);
+  border-color: rgba(15, 23, 42, 0.82);
+}
+
+.pill {
+  border-color: rgba(148, 163, 184, 0.25);
+  background: rgba(255,255,255,0.035);
+  color: #aebcd0;
+}
+
+.pill.ok,
+.platform-chip.on {
+  border-color: rgba(16, 185, 129, 0.5);
+  background: rgba(16, 185, 129, 0.13);
+  color: #bbf7d0;
+}
+
+.pill.warn {
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.12);
+  color: #fde68a;
+}
+
+.pill.bad,
+.platform-chip.off {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(127, 29, 29, 0.18);
+  color: #fecaca;
+}
+
+.pill.info {
+  border-color: rgba(96, 165, 250, 0.46);
+  background: rgba(37, 99, 235, 0.12);
+  color: #bfdbfe;
+}
+
+.game-card,
+.day,
+.day .item,
+.platform-chip {
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(255,255,255,0.035);
+}
+
+.modal-backdrop {
+  background: rgba(2, 6, 23, 0.76);
+  backdrop-filter: blur(8px);
+}
+
+.modal-card {
+  border-color: rgba(148, 163, 184, 0.26);
+  box-shadow: 0 28px 80px rgba(0,0,0,0.46);
+}
+
+@media (max-width: 720px) {
+  .container {
+    padding: 12px;
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .brand-logo {
+    width: 48px;
+    height: 48px;
+  }
+
+  .nav {
+    justify-content: flex-start;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 2px;
+  }
+
+  .nav a {
+    white-space: nowrap;
+  }
+}
+
