@@ -13,6 +13,17 @@ type FeedForm = {
   importStartDate: string
 }
 
+const platformSuggestions = [
+  'DragonFly',
+  'RefQuest',
+  'Arbiter',
+  'Assignr',
+  'HorizonWebRef',
+  'Stack Officials',
+  'GameOfficials',
+  'ZebraWeb',
+]
+
 function emptyForm(): FeedForm {
   return {
     id: '',
@@ -44,6 +55,7 @@ export default function SyncPage() {
   const feedCounts = useMemo(() => ({
     DragonFly: feeds.filter(f => f.platform === 'DragonFly').length,
     RefQuest: feeds.filter(f => f.platform === 'RefQuest').length,
+    Other: feeds.filter(f => f.platform !== 'DragonFly' && f.platform !== 'RefQuest').length,
   }), [feeds])
 
   const cleanupReview = useMemo(() => {
@@ -256,7 +268,7 @@ export default function SyncPage() {
       <section className="card">
         <h2>Calendar Feeds</h2>
         <p className="sub">
-          DragonFly: <span className="pill">{feedCounts.DragonFly}/1</span> | RefQuest: <span className="pill">{feedCounts.RefQuest}/8</span>
+          DragonFly: <span className="pill">{feedCounts.DragonFly}/1</span> | RefQuest: <span className="pill">{feedCounts.RefQuest}/8</span> | Other: <span className="pill">{feedCounts.Other}</span>
         </p>
 
         <div className="btnbar" style={{ marginBottom: 10 }}>
@@ -312,6 +324,34 @@ export default function SyncPage() {
             <p className="small">
               Events: +{result.createdEvents} created, {result.updatedEvents} updated | Games: +{result.createdGames} created, {result.updatedGames} updated
             </p>
+            {result.diagnostics ? (
+              <div style={{ marginTop: 8 }}>
+                <p className="small">
+                  Existing synced matches: {result.diagnostics.existingRefMatches} | Manual matches: {result.diagnostics.manualMatches} | New games created: {result.diagnostics.createdFromFeed} | Ambiguous cases skipped: {result.diagnostics.ambiguousCandidates}
+                </p>
+                {result.diagnostics.samples?.length ? (
+                  <div>
+                    {result.diagnostics.samples.map((sample, i) => (
+                      <p key={`${sample.feedName}-${sample.action}-${i}`} className="small">
+                        <span className={`pill ${
+                          sample.action === 'matched-existing' || sample.action === 'matched-manual'
+                            ? 'ok'
+                            : sample.action === 'ambiguous'
+                              ? 'warn'
+                              : ''
+                        }`}>
+                          {sample.action}
+                        </span>{' '}
+                        {sample.summary}
+                        {sample.score != null ? ` | score ${sample.score}` : ''}
+                        {sample.competingScore != null ? ` | next ${sample.competingScore}` : ''}
+                        {sample.reason ? ` | ${sample.reason}` : ''}
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {result.errors?.length > 0 && (
               <div>
                 {result.errors.map((x, i) => <p key={i} className="small"><span className="pill bad">{x}</span></p>)}
@@ -398,10 +438,16 @@ export default function SyncPage() {
 
         <div className="field">
           <label>Platform</label>
-          <select value={form.platform} onChange={e => setForm({ ...form, platform: e.target.value as FeedPlatform })}>
-            <option value="DragonFly">DragonFly</option>
-            <option value="RefQuest">RefQuest</option>
-          </select>
+          <input
+            list="platformSuggestions"
+            value={form.platform}
+            onChange={e => setForm({ ...form, platform: e.target.value as FeedPlatform })}
+            placeholder="DragonFly, RefQuest, Arbiter, Assignr..."
+          />
+          <datalist id="platformSuggestions">
+            {platformSuggestions.map((platform) => <option key={platform} value={platform} />)}
+          </datalist>
+          <div className="small">DragonFly and RefQuest keep their special feed rules. Other platforms are stored as custom names and sync through their ICS feed.</div>
         </div>
 
         <div className="field">

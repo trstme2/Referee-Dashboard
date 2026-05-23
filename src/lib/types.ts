@@ -1,6 +1,6 @@
 export type Sport = 'Soccer' | 'Lacrosse'
 export type CompetitionLevel = 'High School' | 'College' | 'Club'
-export type FeedPlatform = 'RefQuest' | 'DragonFly'
+export type FeedPlatform = 'RefQuest' | 'DragonFly' | (string & {})
 
 export type GameStatus = 'Scheduled' | 'Played' | 'Paid / Complete' | 'Canceled'
 export type EventType = 'Game' | 'Block' | 'Admin' | 'Travel'
@@ -13,7 +13,7 @@ export type ExpenseCategory =
 export type RequirementStatus = 'Not Started' | 'In Progress' | 'Complete' | 'Waived' | 'Overdue'
 
 export type SoccerRole = 'Center' | 'AR' | '4th' | 'Dual' | 'Mentor'
-export type LacrosseRole = 'Lead' | 'Ref' | 'Mentor'
+export type LacrosseRole = 'Lead' | 'Field Judge' | 'Alternate' | 'Mentor'
 export type Role = SoccerRole | LacrosseRole
 export type MileageOrigin = 'home' | 'other'
 
@@ -182,6 +182,20 @@ export interface SyncIcsResult {
   createdGames: number
   updatedGames: number
   errors: string[]
+  diagnostics?: {
+    existingRefMatches: number
+    manualMatches: number
+    createdFromFeed: number
+    ambiguousCandidates: number
+    samples: Array<{
+      feedName: string
+      action: 'matched-existing' | 'matched-manual' | 'created-new' | 'ambiguous'
+      summary: string
+      score?: number
+      competingScore?: number
+      reason?: string
+    }>
+  }
 }
 
 export interface DB {

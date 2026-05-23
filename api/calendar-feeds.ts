@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createAuthedSupabase, getBearerToken, maskUrl, toJsonBody } from './auth-utils.js'
 
-type FeedPlatform = 'RefQuest' | 'DragonFly'
+type FeedPlatform = 'RefQuest' | 'DragonFly' | string
 type FeedSport = 'Soccer' | 'Lacrosse' | null
 
 function normalizeDateOnly(x: unknown): string | null {
@@ -10,8 +10,11 @@ function normalizeDateOnly(x: unknown): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null
 }
 
-function isValidPlatform(x: unknown): x is FeedPlatform {
-  return x === 'RefQuest' || x === 'DragonFly'
+function normalizePlatform(x: unknown): FeedPlatform {
+  const raw = String(x || '').trim()
+  if (!raw) throw new Error('platform is required')
+  if (raw.length > 60) throw new Error('platform must be 60 characters or fewer')
+  return raw
 }
 
 function normalizeSport(x: unknown): FeedSport {
@@ -78,8 +81,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'POST') {
       const body = toJsonBody(req)
-      const platform = body.platform
-      if (!isValidPlatform(platform)) return res.status(400).json({ error: 'platform must be RefQuest or DragonFly' })
+      const platform = normalizePlatform(body.platform)
       await enforcePlatformLimit(client, userId, platform)
 
       const name = String(body.name || '').trim()
@@ -137,10 +139,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!existing) return res.status(404).json({ error: 'Feed not found' })
 
       const nextPlatform = body.platform ?? existing.platform
-      if (!isValidPlatform(nextPlatform)) return res.status(400).json({ error: 'platform must be RefQuest or DragonFly' })
-      await enforcePlatformLimit(client, userId, nextPlatform, id)
+      const normalizedPlatform = normalizePlatform(nextPlatform)
+      await enforcePlatformLimit(client, userId, normalizedPlatform, id)
 
-      const updates: any = { updated_at: new Date().toISOString(), platform: nextPlatform }
+      const updates: any = { updated_at: new Date().toISOString(), platform: normalizedPlatform }
       if (body.name != null) {
         const name = String(body.name).trim()
         if (!name) return res.status(400).json({ error: 'name cannot be blank' })

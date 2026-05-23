@@ -5,6 +5,20 @@ function normText(s: string | null | undefined): string {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 }
 
+function timeText(value: unknown): string {
+  return value ? String(value).slice(0, 5) : ''
+}
+
+function minutesBetween(a: unknown, b: unknown): number | null {
+  const aa = timeText(a)
+  const bb = timeText(b)
+  if (!aa || !bb) return null
+  const [ah, am] = aa.split(':').map(Number)
+  const [bh, bm] = bb.split(':').map(Number)
+  if (![ah, am, bh, bm].every(Number.isFinite)) return null
+  return Math.abs((ah * 60 + am) - (bh * 60 + bm))
+}
+
 function isSyncedRef(x: unknown): boolean {
   const s = String(x || '')
   return s.startsWith('DragonFly:') || s.startsWith('RefQuest:')
@@ -84,31 +98,102 @@ function snapshotGame(g: any, externalRefByEventId: Map<string, string | null>) 
   }
 }
 
+function sameLocation(a: any, b: any): boolean {
+  const aa = normText(a.location_address)
+  const bb = normText(b.location_address)
+  if (!aa || !bb) return false
+  return aa === bb || aa.includes(bb) || bb.includes(aa)
+}
+
+function sameTeams(a: any, b: any): boolean {
+  const aHome = normText(a.home_team)
+  const aAway = normText(a.away_team)
+  const bHome = normText(b.home_team)
+  const bAway = normText(b.away_team)
+  return Boolean(aHome && aAway && bHome && bAway && aHome === bHome && aAway === bAway)
+}
+
+function oneTeamMatches(a: any, b: any): boolean {
+  const teamsA = [normText(a.home_team), normText(a.away_team)].filter(Boolean)
+  const teamsB = new Set([normText(b.home_team), normText(b.away_team)].filter(Boolean))
+  return teamsA.some((team) => teamsB.has(team))
+}
+
+function duplicateCandidateScore(a: any, b: any): number {
+  if (String(a.game_date || '') !== String(b.game_date || '')) return 0
+  if (String(a.sport || '') && String(b.sport || '') && String(a.sport) !== String(b.sport)) return 0
+
+  let score = 0
+  const delta = minutesBetween(a.start_time, b.start_time)
+  const hasTime = delta != null
+  if (hasTime) {
+    if (delta === 0) score += 30
+    else if (delta <= 10) score += 24
+    else if (delta <= 20) score += 16
+    else if (delta <= 30) score += 10
+    else return 0
+  } else {
+    score += 4
+  }
+
+  const locMatch = sameLocation(a, b)
+  const fullTeams = sameTeams(a, b)
+  const partialTeam = !fullTeams && oneTeamMatches(a, b)
+  const missingLocation = !normText(a.location_address) || !normText(b.location_address)
+
+  if (locMatch) score += 24
+  else if (missingLocation) score += 8
+
+  if (fullTeams) score += 28
+  else if (partialTeam) score += 12
+
+  if (normText(a.level_detail) && normText(a.level_detail) === normText(b.level_detail)) score += 10
+  if (String(a.competition_level || '') && String(a.competition_level || '') === String(b.competition_level || '')) score += 8
+  if (normText(a.league) && normText(a.league) === normText(b.league)) score += 6
+
+  const corroborated = locMatch || fullTeams || partialTeam || missingLocation
+  if (!corroborated) return 0
+  return score
+}
+
 function buildPlan(games: any[], events: any[]): CleanupPlan {
   const externalRefByEventId = new Map<string, string | null>(events.map((e: any) => [String(e.id), e.external_ref ?? null]))
   const eventById = new Map<string, any>(events.map((e: any) => [String(e.id), e]))
-  const groups = new Map<string, any[]>()
+  const groupedIds = new Map<string, Set<string>>()
+  const gameById = new Map<string, any>(games.map((g: any) => [String(g.id), g]))
 
+  for (let i = 0; i < games.length; i += 1) {
+    const a = games[i]
+    const aId = String(a.id)
+    if (!groupedIds.has(aId)) groupedIds.set(aId, new Set([aId]))
+    for (let j = i + 1; j < games.length; j += 1) {
+      const b = games[j]
+      const bId = String(b.id)
+      const aRef = a.calendar_event_id ? externalRefByEventId.get(String(a.calendar_event_id)) : null
+      const bRef = b.calendar_event_id ? externalRefByEventId.get(String(b.calendar_event_id)) : null
+      if (!(isSyncedRef(aRef) || isSyncedRef(bRef))) continue
+
+      const score = duplicateCandidateScore(a, b)
+      if (score < 42) continue
+
+      const aSet = groupedIds.get(aId) ?? new Set([aId])
+      const bSet = groupedIds.get(bId) ?? new Set([bId])
+      const merged = new Set<string>([...aSet, ...bSet])
+      for (const id of merged) groupedIds.set(id, merged)
+    }
+  }
+
+  const groups = new Map<string, any[]>()
+  const seenGroupIds = new Set<string>()
   for (const g of games) {
-    const startKey = g.start_time ? String(g.start_time).slice(0, 5) : ''
-    const teamKey = [normText(g.home_team), normText(g.away_team)].filter(Boolean).join(' vs ')
-    const placeKey = normText(g.location_address)
-    const detailKey = teamKey || placeKey || String(g.competition_level || '')
-    const key = startKey
-      ? [
-          g.game_date || '',
-          startKey,
-          g.sport || '',
-          detailKey,
-        ].join('|')
-      : [
-          g.game_date || '',
-          '',
-          g.sport || '',
-          g.competition_level || '',
-          placeKey,
-        ].join('|')
-    groups.set(key, [...(groups.get(key) ?? []), g])
+    const id = String(g.id)
+    const set = groupedIds.get(id)
+    if (!set || set.size < 2) continue
+    const groupIds = Array.from(set).sort()
+    const key = groupIds.join('|')
+    if (seenGroupIds.has(key)) continue
+    seenGroupIds.add(key)
+    groups.set(key, groupIds.map((gid) => gameById.get(gid)).filter(Boolean))
   }
 
   const deleteGames = new Set<string>()

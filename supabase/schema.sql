@@ -95,7 +95,7 @@ begin
     create table public.calendar_feeds (
       id uuid primary key default gen_random_uuid(),
       user_id uuid not null,
-      platform text not null check (platform in ('RefQuest','DragonFly')),
+      platform text not null,
       name text not null,
       feed_url text not null,
       enabled boolean not null default true,
@@ -109,6 +109,14 @@ begin
   end if;
 
   if exists (select 1 from information_schema.tables where table_schema='public' and table_name='calendar_feeds') then
+    if exists (
+      select 1
+      from pg_constraint
+      where conname = 'calendar_feeds_platform_check'
+        and conrelid = 'public.calendar_feeds'::regclass
+    ) then
+      alter table public.calendar_feeds drop constraint calendar_feeds_platform_check;
+    end if;
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='calendar_feeds' and column_name='import_start_date') then
       alter table public.calendar_feeds add column import_start_date date null;
     end if;
@@ -213,7 +221,7 @@ create table if not exists public.calendar_events (
 create table if not exists public.calendar_feeds (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
-  platform text not null check (platform in ('RefQuest','DragonFly')),
+  platform text not null,
   name text not null,
   feed_url text not null,
   enabled boolean not null default true,

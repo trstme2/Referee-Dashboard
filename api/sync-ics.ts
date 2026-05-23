@@ -15,6 +15,15 @@ export type Feed = {
   import_start_date: string | null
 }
 
+type SyncDiagnostic = {
+  feedName: string
+  action: 'matched-existing' | 'matched-manual' | 'created-new' | 'ambiguous'
+  summary: string
+  score?: number
+  competingScore?: number
+  reason?: string
+}
+
 const APP_TIMEZONE = 'America/New_York'
 
 function stableFeedKey(feed: Feed): string {
@@ -188,6 +197,14 @@ function sameTeam(a: string | null | undefined, b: string | null | undefined): b
   return aa === bb || aa.includes(bb) || bb.includes(aa)
 }
 
+function minutesBetween(a: string | null | undefined, b: string | null | undefined): number | null {
+  if (!a || !b) return null
+  const [ah, am] = String(a).slice(0, 5).split(':').map(Number)
+  const [bh, bm] = String(b).slice(0, 5).split(':').map(Number)
+  if (![ah, am, bh, bm].every(Number.isFinite)) return null
+  return Math.abs((ah * 60 + am) - (bh * 60 + bm))
+}
+
 function manualCandidateScore(g: any, n: any): number {
   if (String(g.game_date) !== n.gameDate) return 0
   if (g.status === 'Canceled') return 0
@@ -196,7 +213,11 @@ function manualCandidateScore(g: any, n: any): number {
   const gameStart = g.start_time ? String(g.start_time).slice(0, 5) : null
   if (gameStart && n.startTime && gameStart === n.startTime) score += 45
   else if (!gameStart || !n.startTime) score += 10
-  else return 0
+  else {
+    const delta = minutesBetween(gameStart, n.startTime)
+    if (delta == null || delta > 30) return 0
+    score += delta <= 10 ? 28 : delta <= 20 ? 18 : 10
+  }
 
   if (String(g.sport || '') === n.sport) score += 12
   if (String(g.competition_level || '') === n.competitionLevel) score += 8
@@ -211,14 +232,50 @@ function manualCandidateScore(g: any, n: any): number {
   return score
 }
 
-function findManualMatch(dayGames: any[], unusedGameIds: Set<string>, n: any): any | null {
+function summarizeNormalizedGame(n: any): string {
+  const teams = n.homeTeam || n.awayTeam ? `${n.homeTeam || 'TBD'} vs ${n.awayTeam || 'TBD'}` : null
+  return [
+    n.gameDate,
+    n.startTime,
+    teams || n.levelDetail || n.competitionLevel || n.sport,
+    n.location || 'No location',
+  ].filter(Boolean).join(' | ')
+}
+
+function findManualMatch(dayGames: any[], unusedGameIds: Set<string>, n: any): {
+  match: any | null
+  topScore?: number
+  competingScore?: number
+  ambiguous: boolean
+} {
   const scored = dayGames
     .filter((g: any) => unusedGameIds.has(String(g.id)))
     .map((g: any) => ({ game: g, score: manualCandidateScore(g, n) }))
     .filter((x) => x.score >= (n.location ? 55 : 70))
     .sort((a, b) => b.score - a.score)
 
-  return scored[0]?.game ?? null
+  const best = scored[0]
+  const second = scored[1]
+  if (!best) return { match: null, ambiguous: false }
+
+  const margin = best.score - (second?.score ?? 0)
+  const strongEnough = best.score >= (n.location ? 70 : 82)
+  const clearlyBest = !second || margin >= 15
+  if (strongEnough && clearlyBest) {
+    return {
+      match: best.game,
+      topScore: best.score,
+      competingScore: second?.score,
+      ambiguous: false,
+    }
+  }
+
+  return {
+    match: null,
+    topScore: best.score,
+    competingScore: second?.score,
+    ambiguous: Boolean(second || best.score >= 60),
+  }
 }
 
 export async function syncFeed(client: any, feed: Feed) {
@@ -229,6 +286,7 @@ export async function syncFeed(client: any, feed: Feed) {
   let createdGames = 0
   let updatedGames = 0
   const errors: string[] = []
+  const diagnostics: SyncDiagnostic[] = []
 
   let raw = ''
   try {
@@ -305,13 +363,27 @@ export async function syncFeed(client: any, feed: Feed) {
   if (dayGamesErr) throw new Error(`games day lookup: ${dayGamesErr.message}`)
   const unusedGameIds = new Set<string>((dayGames ?? []).map((g: any) => String(g.id)))
   const manualMatchByExternalRef = new Map<string, any>()
+  const manualMatchMetaByExternalRef = new Map<string, { topScore?: number; competingScore?: number }>()
 
   for (const n of normalized) {
     if (n.eventType !== 'Game') continue
-    const c = findManualMatch(dayGames ?? [], unusedGameIds, n)
-    if (c) {
-      manualMatchByExternalRef.set(n.externalRef, c)
-      unusedGameIds.delete(String(c.id))
+    const candidate = findManualMatch(dayGames ?? [], unusedGameIds, n)
+    if (candidate.match) {
+      manualMatchByExternalRef.set(n.externalRef, candidate.match)
+      manualMatchMetaByExternalRef.set(n.externalRef, {
+        topScore: candidate.topScore,
+        competingScore: candidate.competingScore,
+      })
+      unusedGameIds.delete(String(candidate.match.id))
+    } else if (candidate.ambiguous) {
+      diagnostics.push({
+        feedName: feed.name,
+        action: 'ambiguous',
+        summary: summarizeNormalizedGame(n),
+        score: candidate.topScore,
+        competingScore: candidate.competingScore,
+        reason: 'Multiple possible existing games looked close, so sync created a new game instead of guessing.',
+      })
     }
   }
 
@@ -335,6 +407,12 @@ export async function syncFeed(client: any, feed: Feed) {
   for (const n of normalized) {
     if (existingByRef.has(n.externalRef) || existingByRef.has(n.legacyExternalRef)) {
       refsAlreadySeen.add(n.externalRef)
+      diagnostics.push({
+        feedName: feed.name,
+        action: 'matched-existing',
+        summary: summarizeNormalizedGame(n),
+        reason: 'Matched an existing synced event by source reference.',
+      })
     }
   }
 
@@ -446,8 +524,38 @@ export async function syncFeed(client: any, feed: Feed) {
   }
 
   for (const row of gameRows) {
-    if (existingGameIds.has(String(row.id))) updatedGames += 1
-    else createdGames += 1
+    const normalizedGame = gameNormalized.find((g) => eventByRef.get(g.externalRef)?.id === row.calendar_event_id)
+    if (existingGameIds.has(String(row.id))) {
+      updatedGames += 1
+      if (normalizedGame && manualMatchByExternalRef.has(normalizedGame.externalRef)) {
+        const meta = manualMatchMetaByExternalRef.get(normalizedGame.externalRef)
+        diagnostics.push({
+          feedName: feed.name,
+          action: 'matched-manual',
+          summary: summarizeNormalizedGame(normalizedGame),
+          score: meta?.topScore,
+          competingScore: meta?.competingScore,
+          reason: 'Matched an existing manual game with a clear confidence lead.',
+        })
+      }
+    } else {
+      createdGames += 1
+      if (normalizedGame && !refsAlreadySeen.has(normalizedGame.externalRef)) {
+        const wasAlreadyLogged = diagnostics.some((d) =>
+          d.feedName === feed.name &&
+          d.summary === summarizeNormalizedGame(normalizedGame) &&
+          d.action === 'ambiguous'
+        )
+        if (!wasAlreadyLogged) {
+          diagnostics.push({
+            feedName: feed.name,
+            action: 'created-new',
+            summary: summarizeNormalizedGame(normalizedGame),
+            reason: 'No confident existing game match was found, so sync created a new game.',
+          })
+        }
+      }
+    }
   }
 
   for (const g of upsertedGames ?? []) {
@@ -466,7 +574,20 @@ export async function syncFeed(client: any, feed: Feed) {
     .eq('user_id', feed.user_id)
   if (stampErr) errors.push(`${feed.name}: last_synced_at update failed: ${stampErr.message}`)
 
-  return { createdEvents, updatedEvents, createdGames, updatedGames, errors }
+  return {
+    createdEvents,
+    updatedEvents,
+    createdGames,
+    updatedGames,
+    errors,
+    diagnostics: {
+      existingRefMatches: diagnostics.filter((d) => d.action === 'matched-existing').length,
+      manualMatches: diagnostics.filter((d) => d.action === 'matched-manual').length,
+      createdFromFeed: diagnostics.filter((d) => d.action === 'created-new').length,
+      ambiguousCandidates: diagnostics.filter((d) => d.action === 'ambiguous').length,
+      samples: diagnostics.slice(0, 20),
+    },
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -503,6 +624,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let createdGames = 0
     let updatedGames = 0
     const errors: string[] = []
+    const diagnostics = {
+      existingRefMatches: 0,
+      manualMatches: 0,
+      createdFromFeed: 0,
+      ambiguousCandidates: 0,
+      samples: [] as SyncDiagnostic[],
+    }
 
     for (const feed of feeds as Feed[]) {
       try {
@@ -512,12 +640,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         createdGames += result.createdGames
         updatedGames += result.updatedGames
         errors.push(...result.errors)
+        diagnostics.existingRefMatches += result.diagnostics?.existingRefMatches ?? 0
+        diagnostics.manualMatches += result.diagnostics?.manualMatches ?? 0
+        diagnostics.createdFromFeed += result.diagnostics?.createdFromFeed ?? 0
+        diagnostics.ambiguousCandidates += result.diagnostics?.ambiguousCandidates ?? 0
+        diagnostics.samples.push(...(result.diagnostics?.samples ?? []))
       } catch (e: any) {
         errors.push(`${feed.name}: ${String(e?.message || e)}`)
       }
     }
 
-    return res.status(200).json({ createdEvents, updatedEvents, createdGames, updatedGames, errors })
+    return res.status(200).json({
+      createdEvents,
+      updatedEvents,
+      createdGames,
+      updatedGames,
+      errors,
+      diagnostics: {
+        ...diagnostics,
+        samples: diagnostics.samples.slice(0, 20),
+      },
+    })
   } catch (e: any) {
     return res.status(500).json({ error: String(e?.message || e || 'Unknown error') })
   }

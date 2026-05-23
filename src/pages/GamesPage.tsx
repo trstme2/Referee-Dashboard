@@ -11,7 +11,7 @@ const levels: CompetitionLevel[] = ['High School', 'College', 'Club']
 const statuses: GameStatus[] = ['Scheduled', 'Played', 'Paid / Complete', 'Canceled']
 
 const soccerRoles: SoccerRole[] = ['Center', 'AR', '4th', 'Dual', 'Mentor']
-const lacrosseRoles: LacrosseRole[] = ['Lead', 'Ref', 'Mentor']
+const lacrosseRoles: LacrosseRole[] = ['Lead', 'Field Judge', 'Alternate', 'Mentor']
 
 type Meridiem = 'AM' | 'PM'
 
