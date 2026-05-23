@@ -53,16 +53,25 @@ export default function SyncPage() {
     const eventById = new Map(db.calendarEvents.map((e) => [e.id, e]))
 
     return cleanupResult.samples.map((sample: any) => {
-      const keeper = gameById.get(sample.keepGameId)
-      const deletions = (sample.deleteGameIds ?? []).map((id: string) => {
-        const game = gameById.get(id)
-        const event = game?.calendarEventId ? eventById.get(game.calendarEventId) : undefined
+      const keeper = gameById.get(sample.keepGameId) ?? sample.keepGame
+      const deletions = (sample.deleteGames ?? []).map((snap: any) => {
+        const game = gameById.get(snap.id) ?? snap
+        const eventId = game?.calendarEventId ?? snap.calendarEventId
+        const event = eventId ? eventById.get(eventId) : undefined
         return {
-          id,
+          id: snap.id,
           game,
           event,
+          externalRef: snap.externalRef ?? event?.externalRef,
         }
       })
+      if (!sample.deleteGames?.length) {
+        for (const id of sample.deleteGameIds ?? []) {
+          const game = gameById.get(id)
+          const event = game?.calendarEventId ? eventById.get(game.calendarEventId) : undefined
+          deletions.push({ id, game, event, externalRef: event?.externalRef })
+        }
+      }
       const relinks = (cleanupResult.relinks ?? []).filter((r: any) => r.keeperGameId === sample.keepGameId)
       return { sample, keeper, deletions, relinks, selected: selectedCleanupKeys.includes(sample.key) }
     })
@@ -218,6 +227,19 @@ export default function SyncPage() {
     }
   }
 
+  function describeGame(game: any) {
+    if (!game) return 'Game details unavailable'
+    const teams = game.homeTeam || game.awayTeam ? `${game.homeTeam || 'TBD'} vs ${game.awayTeam || 'TBD'}` : null
+    const detail = game.levelDetail || game.competitionLevel || game.sport || 'Assignment'
+    const place = game.locationAddress || 'No location saved'
+    return [
+      game.gameDate || '',
+      game.startTime || '',
+      teams || detail,
+      place,
+    ].filter(Boolean).join(' | ')
+  }
+
   if (mode !== 'supabase') {
     return (
       <div className="grid">
@@ -341,17 +363,13 @@ export default function SyncPage() {
                     ) : null}
                     <p className="small">
                       <span className="pill ok">Keep</span>{' '}
-                      {entry.keeper
-                        ? `${entry.keeper.gameDate}${entry.keeper.startTime ? ` ${entry.keeper.startTime}` : ''} | ${entry.keeper.locationAddress}`
-                        : entry.sample.keepGameId}
+                      {entry.keeper ? describeGame(entry.keeper) : entry.sample.keepGameId}
                     </p>
                     {entry.deletions.map((d: any) => (
                       <p key={d.id} className="small">
                         <span className="pill bad">Delete</span>{' '}
-                        {d.game
-                          ? `${d.game.gameDate}${d.game.startTime ? ` ${d.game.startTime}` : ''} | ${d.game.locationAddress}`
-                          : d.id}
-                        {d.event?.externalRef ? ` | synced event ${d.event.externalRef}` : ''}
+                        {d.game ? describeGame(d.game) : d.id}
+                        {d.externalRef ? ` | synced event ${d.externalRef}` : ''}
                       </p>
                     ))}
                     {entry.relinks.map((r: any) => (

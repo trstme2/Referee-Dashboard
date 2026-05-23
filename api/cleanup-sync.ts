@@ -34,10 +34,54 @@ type CleanupPlan = {
   samples: Array<{
     key: string
     keepGameId: string
+    keepGame?: {
+      id: string
+      gameDate: string
+      startTime: string | null
+      sport: string | null
+      competitionLevel: string | null
+      locationAddress: string | null
+      homeTeam: string | null
+      awayTeam: string | null
+      league: string | null
+      levelDetail: string | null
+      calendarEventId: string | null
+    }
     deleteGameIds: string[]
+    deleteGames: Array<{
+      id: string
+      gameDate: string
+      startTime: string | null
+      sport: string | null
+      competitionLevel: string | null
+      locationAddress: string | null
+      homeTeam: string | null
+      awayTeam: string | null
+      league: string | null
+      levelDetail: string | null
+      calendarEventId: string | null
+      externalRef: string | null
+    }>
     relinks: Array<{ eventId: string; keeperGameId: string }>
     deleteEventIds: string[]
   }>
+}
+
+function snapshotGame(g: any, externalRefByEventId: Map<string, string | null>) {
+  return {
+    id: String(g.id),
+    gameDate: String(g.game_date || ''),
+    startTime: g.start_time ? String(g.start_time).slice(0, 5) : null,
+    sport: g.sport ?? null,
+    competitionLevel: g.competition_level ?? null,
+    locationAddress: g.location_address ?? null,
+    homeTeam: g.home_team ?? null,
+    awayTeam: g.away_team ?? null,
+    league: g.league ?? null,
+    levelDetail: g.level_detail ?? null,
+    calendarEventId: g.calendar_event_id ? String(g.calendar_event_id) : null,
+    externalRef: g.calendar_event_id ? (externalRefByEventId.get(String(g.calendar_event_id)) ?? null) : null,
+  }
 }
 
 function buildPlan(games: any[], events: any[]): CleanupPlan {
@@ -89,12 +133,14 @@ function buildPlan(games: any[], events: any[]): CleanupPlan {
     const toDelete = sorted.slice(1)
 
     const deleteIds: string[] = []
+    const deleteGamesSnapshot: CleanupPlan['samples'][number]['deleteGames'] = []
     const groupRelinks: Array<{ eventId: string; keeperGameId: string }> = []
     const groupDeleteEventIds = new Set<string>()
     for (const g of toDelete) {
       const gid = String(g.id)
       deleteGames.add(gid)
       deleteIds.push(gid)
+      deleteGamesSnapshot.push(snapshotGame(g, externalRefByEventId))
 
       const evId = g.calendar_event_id ? String(g.calendar_event_id) : null
       if (!evId) continue
@@ -115,7 +161,9 @@ function buildPlan(games: any[], events: any[]): CleanupPlan {
     samples.push({
       key,
       keepGameId: String(keeper.id),
+      keepGame: snapshotGame(keeper, externalRefByEventId),
       deleteGameIds: deleteIds,
+      deleteGames: deleteGamesSnapshot,
       relinks: groupRelinks,
       deleteEventIds: Array.from(groupDeleteEventIds),
     })
