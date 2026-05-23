@@ -47,18 +47,22 @@ function buildPlan(games: any[], events: any[]): CleanupPlan {
 
   for (const g of games) {
     const startKey = g.start_time ? String(g.start_time).slice(0, 5) : ''
+    const teamKey = [normText(g.home_team), normText(g.away_team)].filter(Boolean).join(' vs ')
+    const placeKey = normText(g.location_address)
+    const detailKey = teamKey || placeKey || String(g.competition_level || '')
     const key = startKey
       ? [
           g.game_date || '',
           startKey,
           g.sport || '',
+          detailKey,
         ].join('|')
       : [
           g.game_date || '',
           '',
           g.sport || '',
           g.competition_level || '',
-          normText(g.location_address),
+          placeKey,
         ].join('|')
     groups.set(key, [...(groups.get(key) ?? []), g])
   }

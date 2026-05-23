@@ -80,6 +80,7 @@ export default function GamesPage() {
   const [q, setQ] = useState<string>('')
   const [yearFilter, setYearFilter] = useState<string>('All years')
   const [expandedGameId, setExpandedGameId] = useState<string | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
 
   const [form, setForm] = useState({
     id: '',
@@ -172,7 +173,7 @@ export default function GamesPage() {
     }))
   }
 
-  function startNew() {
+  function resetForm() {
     setForm({
       id: '',
       sport: 'Soccer',
@@ -195,6 +196,11 @@ export default function GamesPage() {
       distanceMiles: '',
       roundtripMiles: '',
     })
+  }
+
+  function startNew() {
+    resetForm()
+    setFormOpen(true)
   }
 
   async function save() {
@@ -222,7 +228,8 @@ export default function GamesPage() {
       roundtripMiles: form.roundtripMiles ? Number(form.roundtripMiles) : undefined,
     })
     await write(next)
-    startNew()
+    resetForm()
+    setFormOpen(false)
   }
 
   async function edit(id: string) {
@@ -251,13 +258,17 @@ export default function GamesPage() {
       distanceMiles: g.distanceMiles != null ? String(g.distanceMiles) : '',
       roundtripMiles: (g as any).roundtripMiles != null ? String((g as any).roundtripMiles) : '',
     })
+    setFormOpen(true)
   }
 
   async function del(id: string) {
     const next = deleteGameIn(db, id)
     await write(next)
     if (expandedGameId === id) setExpandedGameId(null)
-    if (form.id === id) startNew()
+    if (form.id === id) {
+      resetForm()
+      setFormOpen(false)
+    }
   }
 
   async function updateStatus(id: string, nextStatus: GameStatus) {
@@ -305,7 +316,7 @@ export default function GamesPage() {
   }
 
   return (
-    <div className="grid cols2">
+    <div className="grid games-page">
       <section className="card accent-frame">
         <h2>Games</h2>
         <div className="kpi compact-kpi">
@@ -326,6 +337,12 @@ export default function GamesPage() {
             <div className="value">{strip.milesLogged.toFixed(1)} mi</div>
           </div>
         </div>
+        <div className="btnbar games-actions">
+          <button className="btn primary" onClick={startNew}>Add game</button>
+          <button className="btn" onClick={() => navigate('/sync')}>Sync calendars</button>
+          <button className="btn" onClick={() => navigate('/import')}>Import CSV</button>
+        </div>
+
         <div className="row">
           <div className="field">
             <label>Status filter</label>
@@ -500,11 +517,57 @@ export default function GamesPage() {
             </tbody>
           </table>
         </div>
+
+        <div className="game-card-list">
+          {rows.map(g => {
+            const payBadge = paymentBadge(g)
+            return (
+              <article key={g.id} className="game-card">
+                <div className="game-card-head">
+                  <div>
+                    <div className="game-card-date">{g.gameDate}{g.startTime ? ` at ${g.startTime}` : ''}</div>
+                    <div className="game-card-title">
+                      {g.homeTeam || g.awayTeam ? `${g.homeTeam || 'TBD'} vs ${g.awayTeam || 'TBD'}` : `${g.sport} (${g.competitionLevel})`}
+                    </div>
+                  </div>
+                  <span className={`pill ${gameStatusTone(g.status)}`}>{g.status}</span>
+                </div>
+                <div className="game-card-meta">
+                  <span>{g.levelDetail || g.competitionLevel}</span>
+                  <span>{g.league || 'No league'}</span>
+                  <span>{g.roundtripMiles != null ? `${Number(g.roundtripMiles).toFixed(0)} mi` : 'No mileage'}</span>
+                  <span>{g.gameFee != null ? `$${Number(g.gameFee).toFixed(0)}` : 'No pay'}</span>
+                </div>
+                <div className="small">{g.locationAddress || 'No location entered'}</div>
+                <div className="game-card-foot">
+                  <span className={`pill ${payBadge.tone}`}>{payBadge.label}</span>
+                  <div className="platform-row">
+                    {db.settings.assigningPlatforms.slice(0, 2).map(p => (
+                      <span key={p} className={'platform-chip ' + (g.platformConfirmations?.[p] ? 'on' : 'off')}>
+                        {p}
+                      </span>
+                    ))}
+                  </div>
+                  <button className="btn compact" onClick={() => edit(g.id)}>Edit</button>
+                </div>
+              </article>
+            )
+          })}
+        </div>
       </section>
 
-      <section className="card">
-        <h2>{form.id ? 'Edit game' : 'Add game'}</h2>
-        <p className="sub">Saving a game also creates/updates a linked calendar entry (2-hour default).</p>
+      {formOpen && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(e) => {
+          if (e.target === e.currentTarget) setFormOpen(false)
+        }}>
+          <section className="card modal-card game-editor-modal" role="dialog" aria-modal="true" aria-label={form.id ? 'Edit game' : 'Add game'}>
+            <div className="modal-titlebar">
+              <div>
+                <h2>{form.id ? 'Edit game' : 'Add game'}</h2>
+                <p className="sub">Saving a game also creates/updates a linked calendar entry (2-hour default).</p>
+              </div>
+              <button className="btn compact" onClick={() => setFormOpen(false)}>Close</button>
+            </div>
 
         <div className="row">
           <div className="field">
@@ -713,7 +776,9 @@ export default function GamesPage() {
           </button>
           <button className="btn" onClick={startNew} disabled={loading}>New</button>
         </div>
-      </section>
+          </section>
+        </div>
+      )}
     </div>
   )
 }

@@ -308,6 +308,101 @@ button, input, select, textarea { font: inherit; }
   font-size: 18px;
 }
 
+.games-actions {
+  margin: 0 0 12px;
+}
+
+.game-card-list {
+  display: none;
+}
+
+.game-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  background: rgba(255,255,255,0.025);
+}
+
+.game-card-head,
+.game-card-foot {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.game-card-date {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.game-card-title {
+  margin-top: 3px;
+  color: var(--text);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.game-card-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 10px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.game-card-meta span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.game-card-foot {
+  align-items: center;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 28px 14px;
+  background: rgba(2, 6, 23, 0.72);
+  overflow-y: auto;
+}
+
+.modal-card {
+  width: min(980px, 100%);
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.42);
+}
+
+.modal-card:hover {
+  transform: none;
+}
+
+.modal-titlebar {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.modal-titlebar h2,
+.modal-titlebar .sub {
+  margin-left: 0;
+}
+
+.game-editor-modal {
+  padding-bottom: 18px;
+}
+
 .calendar-scroll {
   overflow-x: auto;
   padding-bottom: 8px;
@@ -356,6 +451,22 @@ button, input, select, textarea { font: inherit; }
 .item .m { color: var(--muted); margin-top: 2px; font-size: 11px; }
 
 @media (max-width: 720px) {
+  .games-page .table-wrap {
+    display: none;
+  }
+  .games-page .game-card-list {
+    display: grid;
+    gap: 10px;
+  }
+  .modal-backdrop {
+    align-items: flex-end;
+    padding: 14px 10px 0;
+  }
+  .modal-card {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 14px 14px 0 0;
+  }
   .calendar,
   .calhead {
     min-width: 760px;
