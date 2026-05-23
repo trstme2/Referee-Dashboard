@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/scheduled-sync",
-      "schedule": "0 * * * *"
+      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/weekly-games-email",
