@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ics = buildIcsCalendar({ userId: authData.user.id, ...exportData })
 
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8')
-    res.setHeader('Content-Disposition', 'attachment; filename="referee-dashboard-calendar.ics"')
+    res.setHeader('Content-Disposition', 'attachment; filename="whistle-keeper-calendar.ics"')
     res.setHeader('Cache-Control', 'private, no-store')
     return res.status(200).send(ics)
   } catch (e: any) {

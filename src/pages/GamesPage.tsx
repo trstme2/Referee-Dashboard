@@ -733,7 +733,7 @@ export default function GamesPage() {
               <div className="small">Set to 0 if you're stacking multiple games at one site and only claiming mileage once.</div>
             </div>
           </div>
-          <p className="small">Distance uses <code>/api/distance</code>. Add <code>GOOGLE_MAPS_API_KEY</code> in Vercel env vars if you want this.</p>
+          <p className="small">Mileage lookup is available when the Maps integration has been configured.</p>
         </div>
 
         <div className="row">

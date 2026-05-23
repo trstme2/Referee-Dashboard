@@ -395,10 +395,10 @@ export function buildIcsCalendar(params: { userId: string; defaultTimezone?: str
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Referee Dashboard//Calendar Export//EN',
+    'PRODID:-//Whistle Keeper//Calendar Export//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    `X-WR-CALNAME:${escapeIcsText('Referee Dashboard')}`,
+    `X-WR-CALNAME:${escapeIcsText('Whistle Keeper')}`,
     `X-WR-TIMEZONE:${escapeIcsText(defaultTimezone)}`,
     ...timeZones.flatMap(vtimezoneBlock),
     ...events.flatMap(serializeEvent),

@@ -180,7 +180,7 @@ export default function CalendarPage() {
         </div>
 
         <div className="footer-note">
-          Games auto-create calendar events. Use this page for blocks/admin/travel and confirm you entered blocks in the assigning systems.
+          Games appear here automatically. Use this page for blocked time, travel, and admin events.
         </div>
       </section>
 

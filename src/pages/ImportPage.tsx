@@ -521,7 +521,7 @@ export default function ImportPage() {
         </table>
 
         <div className="footer-note">
-          Rollback removes game/events created by that import using stored import row IDs.
+          Rollback removes only the records created by that import.
         </div>
       </section>
     </div>

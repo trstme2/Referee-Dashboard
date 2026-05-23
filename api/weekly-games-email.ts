@@ -108,7 +108,7 @@ function gamesHtml(games: GameRow[], timeZone: string, appUrl?: string): string 
     : '<tr><td colspan="4" style="padding:14px 8px;color:#64748b;">No scheduled games in the next 7 days.</td></tr>'
 
   const dashboardLink = appUrl
-    ? `<p style="margin:20px 0 0;"><a href="${escapeHtml(appUrl)}" style="color:#2563eb;">Open Referee Dashboard</a></p>`
+    ? `<p style="margin:20px 0 0;"><a href="${escapeHtml(appUrl)}" style="color:#2563eb;">Open Whistle Keeper</a></p>`
     : ''
 
   return `<!doctype html>
@@ -116,7 +116,7 @@ function gamesHtml(games: GameRow[], timeZone: string, appUrl?: string): string 
   <body style="margin:0;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a;">
     <div style="max-width:720px;margin:0 auto;padding:28px 18px;">
       <h1 style="font-size:22px;line-height:1.25;margin:0 0 6px;">Games Next 7 Days</h1>
-      <p style="margin:0 0 18px;color:#475569;">Your weekly Sunday referee schedule.</p>
+      <p style="margin:0 0 18px;color:#475569;">Your upcoming schedule for the next 7 days.</p>
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;border-collapse:collapse;border:1px solid #e5e7eb;">
         <thead>
           <tr>
@@ -150,7 +150,7 @@ async function sendEmail(input: { to: string; subject: string; text: string; htm
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) throw new Error('Missing RESEND_API_KEY')
 
-  const from = process.env.WEEKLY_EMAIL_FROM || 'Referee Dashboard <onboarding@resend.dev>'
+  const from = process.env.WEEKLY_EMAIL_FROM || 'Whistle Keeper <onboarding@resend.dev>'
   const replyTo = process.env.WEEKLY_EMAIL_REPLY_TO
   const body = {
     from,

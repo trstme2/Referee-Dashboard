@@ -167,7 +167,7 @@ export default function RequirementsPage() {
   async function uploadEvidence(activityId: string, file: File | null) {
     if (!file) return
     if (mode !== 'supabase' || !session?.user?.id) {
-      alert('File uploads require Supabase mode and a signed-in user.')
+      alert('Sign in to upload supporting files.')
       return
     }
     const activity = db.requirementActivities.find(a => a.id === activityId)

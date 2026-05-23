@@ -257,7 +257,7 @@ export default function SyncPage() {
       <div className="grid">
         <section className="card">
           <h2>Calendar Feed Sync</h2>
-          <p className="small">Sync is available only in Supabase mode.</p>
+          <p className="small">Feed sync is available when cloud sync is enabled.</p>
         </section>
       </div>
     )
@@ -266,7 +266,7 @@ export default function SyncPage() {
   return (
     <div className="grid cols2">
       <section className="card">
-        <h2>Calendar Feeds</h2>
+        <h2>Assignment Feeds</h2>
         <p className="sub">
           DragonFly: <span className="pill">{feedCounts.DragonFly}/1</span> | RefQuest: <span className="pill">{feedCounts.RefQuest}/8</span> | Other: <span className="pill">{feedCounts.Other}</span>
         </p>
@@ -434,7 +434,7 @@ export default function SyncPage() {
 
       <section className="card">
         <h2>{form.id ? 'Edit feed' : 'Add feed'}</h2>
-        <p className="small">Feed URLs are stored server-side in Supabase and are not returned to the browser.</p>
+        <p className="small">Feed URLs are stored securely and hidden after they are saved.</p>
 
         <div className="field">
           <label>Platform</label>
@@ -447,7 +447,7 @@ export default function SyncPage() {
           <datalist id="platformSuggestions">
             {platformSuggestions.map((platform) => <option key={platform} value={platform} />)}
           </datalist>
-          <div className="small">DragonFly and RefQuest keep their special feed rules. Other platforms are stored as custom names and sync through their ICS feed.</div>
+          <div className="small">DragonFly and RefQuest keep their current feed limits. Other platforms can be added with any calendar feed name.</div>
         </div>
 
         <div className="field">
@@ -486,7 +486,7 @@ export default function SyncPage() {
             value={form.importStartDate}
             onChange={e => setForm({ ...form, importStartDate: e.target.value })}
           />
-          <div className="small">Older feed entries will be ignored during sync for this feed.</div>
+          <div className="small">Only assignments on or after this date will be imported from this feed.</div>
         </div>
 
         <div className="field">

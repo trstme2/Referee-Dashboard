@@ -79,7 +79,7 @@ export default function HomePage() {
   return (
     <div className="grid">
       <section className="card hero accent-frame">
-        <h2>Status</h2>
+        <h2>Overview</h2>
         <p className="sub">
           Mode: <span className="pill">{mode}</span>
           {mode === 'supabase' && session?.user?.email ? (
@@ -108,7 +108,7 @@ export default function HomePage() {
         </div>
 
         <div className="footer-note">
-          Dashboard is now optimized for quick weekly planning and requirement tracking.
+          A clear weekly view of upcoming matches, mileage, expenses, and open requirements.
         </div>
       </section>
 

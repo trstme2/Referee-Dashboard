@@ -224,7 +224,7 @@ export default function TaxPage() {
           <table className="table">
             <thead>
               <tr>
-                <th>Payor</th><th>Dashboard</th><th>1099 entered</th><th>Variance</th>
+                <th>Payor</th><th>Whistle Keeper</th><th>1099 entered</th><th>Variance</th>
               </tr>
             </thead>
             <tbody>
@@ -253,7 +253,7 @@ export default function TaxPage() {
             </tbody>
           </table>
           <div className="footer-note">
-            Set payor via game league/assignor for cleaner 1099 matching.
+            Use a consistent payor name on games and income entries for cleaner 1099 matching.
           </div>
         </div>
 

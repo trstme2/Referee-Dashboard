@@ -13,8 +13,8 @@ export default function AuthPage() {
     return (
       <div className="grid">
         <section className="card">
-          <h2>Local mode</h2>
-          <p className="small">Supabase isn’t configured, so auth is disabled. Set env vars to enable it.</p>
+          <h2>Offline mode</h2>
+          <p className="small">Cloud sign-in is not available in this environment.</p>
         </section>
       </div>
     )
@@ -24,8 +24,8 @@ export default function AuthPage() {
     return (
       <div className="grid">
         <section className="card">
-          <h2>Supabase not configured</h2>
-          <p className="small">Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> (or <code>VITE_SUPABASE_PUBLISHABLE_KEY</code>).</p>
+          <h2>Cloud sign-in unavailable</h2>
+          <p className="small">Complete the Whistle Keeper cloud configuration to enable sign-in.</p>
         </section>
       </div>
     )
@@ -41,7 +41,7 @@ export default function AuthPage() {
             <button className="btn primary" onClick={refresh}>Refresh from cloud</button>
           </div>
           <div className="footer-note">
-            Make sure Supabase Auth has your Vercel domain in Redirect URLs and Site URL.
+            For custom domains, add this site to the approved sign-in redirect list.
           </div>
         </section>
       </div>
@@ -49,7 +49,8 @@ export default function AuthPage() {
   }
 
   async function sendLink() {
-    setErr(null); setMsg(null)
+    setErr(null)
+    setMsg(null)
     const e = email.trim()
     if (!e) return setErr('Enter an email.')
     setSending(true)
@@ -57,10 +58,10 @@ export default function AuthPage() {
       if (!supabase) throw new Error('Supabase client missing')
       const { error } = await supabase.auth.signInWithOtp({
         email: e,
-        options: { emailRedirectTo: `${window.location.origin}/auth` }
+        options: { emailRedirectTo: `${window.location.origin}/auth` },
       })
       if (error) throw error
-      setMsg('Magic link sent. Check your email.')
+      setMsg('Sign-in link sent. Check your email.')
     } catch (ex: any) {
       setErr(String(ex?.message ?? ex))
     } finally {
@@ -72,17 +73,17 @@ export default function AuthPage() {
     <div className="grid">
       <section className="card">
         <h2>Sign in</h2>
-        <p className="sub">Passwordless login via magic link.</p>
+        <p className="sub">Secure email sign-in for your Whistle Keeper account.</p>
 
         <div className="row">
-          <div className="field" style={{flex: 2}}>
+          <div className="field" style={{ flex: 2 }}>
             <label>Email</label>
             <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
           </div>
-          <div className="field" style={{flex: 1}}>
+          <div className="field" style={{ flex: 1 }}>
             <label>&nbsp;</label>
             <button className="btn primary" onClick={sendLink} disabled={sending}>
-              {sending ? 'Sending…' : 'Send magic link'}
+              {sending ? 'Sending...' : 'Send sign-in link'}
             </button>
           </div>
         </div>
@@ -91,7 +92,7 @@ export default function AuthPage() {
         {err && <p className="small"><span className="pill bad">{err}</span></p>}
 
         <div className="footer-note">
-          In Supabase: Authentication → URL Configuration. Add your Vercel URLs to Redirect URLs.
+          Use your current app address as an approved sign-in redirect URL.
         </div>
       </section>
     </div>

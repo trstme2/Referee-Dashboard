@@ -112,7 +112,7 @@ export default function ExpensesPage() {
   async function uploadReceipt(expenseId: string, file: File | null) {
     if (!file) return
     if (mode !== 'supabase' || !session?.user?.id) {
-      alert('Receipt uploads require Supabase mode and a signed-in user.')
+      alert('Sign in to upload receipts.')
       return
     }
     const expense = db.expenses.find(x => x.id === expenseId)
@@ -324,7 +324,7 @@ export default function ExpensesPage() {
                     evt.currentTarget.value = ''
                   }}
                   />
-              ) : <span className="small">Sign in with Supabase mode to upload receipts you can reopen after restart or from another device.</span>}
+              ) : <span className="small">Sign in to upload receipts and keep them available across devices.</span>}
               {form.id && db.expenses.find(x => x.id === form.id)?.receiptStoragePath ? (
                 <>
                   <button className="btn" onClick={() => openReceipt(form.id)}>Open receipt</button>

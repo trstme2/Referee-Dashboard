@@ -16,7 +16,7 @@ export default function Nav() {
       <NavLink to="/import" className={linkClass}>CSV Import</NavLink>
       <NavLink to="/settings" className={linkClass}>Settings</NavLink>
       {mode === 'supabase' && (
-        <NavLink to="/auth" className={linkClass}>Auth</NavLink>
+        <NavLink to="/auth" className={linkClass}>Account</NavLink>
       )}
       {mode === 'supabase' && session && (
         <a href="#" onClick={(e) => { e.preventDefault(); signOut() }} title="Sign out">

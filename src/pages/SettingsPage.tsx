@@ -128,7 +128,7 @@ export default function SettingsPage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = 'referee-dashboard-calendar.ics'
+      a.download = 'whistle-keeper-calendar.ics'
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -144,7 +144,7 @@ export default function SettingsPage() {
     <div className="grid">
       <section className="card">
         <h2>Settings</h2>
-        <p className="sub">Stuff you change once, not every time you add a game.</p>
+        <p className="sub">Set your defaults once so new records are faster and more consistent.</p>
 
         <div className="row">
           <div className="card" style={{flex:1}}>
@@ -194,7 +194,7 @@ export default function SettingsPage() {
             <div className="btnbar">
               <button className="btn primary" onClick={saveSettings} disabled={loading}>Save settings</button>
               <button className="btn" onClick={refresh} disabled={loading || mode !== 'supabase'}>Refresh from cloud</button>
-              <button className="btn" onClick={pushLocalToCloud} disabled={loading || mode !== 'supabase' || !session}>Push local -&gt; cloud</button>
+              <button className="btn" onClick={pushLocalToCloud} disabled={loading || mode !== 'supabase' || !session}>Replace cloud with local</button>
             </div>
 
             {mode === 'supabase' && session ? (
@@ -222,7 +222,7 @@ export default function SettingsPage() {
             ) : null}
 
             <div className="footer-note">
-              Distance uses <code>/api/distance</code> and requires <code>GOOGLE_MAPS_API_KEY</code> in Vercel env vars.
+              Mileage lookup is available when the Maps integration has been configured.
             </div>
           </div>
 
@@ -234,7 +234,7 @@ export default function SettingsPage() {
         </div>
 
         <div className="footer-note">
-          Default sync is incremental upserts/deletes. Use Push local to cloud only when you want a full overwrite.
+          Replacing cloud data is a full overwrite and should be used only when you want local data to become the source of truth.
         </div>
       </section>
     </div>

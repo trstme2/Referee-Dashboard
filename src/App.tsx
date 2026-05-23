@@ -10,6 +10,7 @@ import SettingsPage from './pages/SettingsPage'
 import AuthPage from './pages/AuthPage'
 import SyncPage from './pages/SyncPage'
 import TaxPage from './pages/TaxPage'
+import LandingPage from './pages/LandingPage'
 import { useData } from './lib/DataContext'
 import logo from './assets/logo.png'
 
@@ -17,19 +18,22 @@ export default function App() {
   const { mode, session, error } = useData()
   const requireAuth = mode === 'supabase'
   const location = useLocation()
+  const showLanding = requireAuth && !session && location.pathname === '/'
 
   return (
-    <div className="container">
-      <header className="topbar accent-frame">
-        <div className="brand-wrap">
-          <img src={logo} alt="Referee Career Dashboard logo" className="brand-logo" />
-          <div className="brand">
-            <h1>Referee Career Dashboard</h1>
-            <p>Games, expenses, compliance, calendar. Humanity: still winging it.</p>
+    <div className={showLanding ? 'landing-container' : 'container'}>
+      {!showLanding && (
+        <header className="topbar accent-frame">
+          <div className="brand-wrap">
+            <img src={logo} alt="Whistle Keeper logo" className="brand-logo" />
+            <div className="brand">
+              <h1>Whistle Keeper</h1>
+              <p>Keep assignments, pay, mileage, and compliance in one place.</p>
+            </div>
           </div>
-        </div>
-        <Nav />
-      </header>
+          <Nav />
+        </header>
+      )}
 
       {error && (
         <div className="card" style={{marginTop: 14}}>
@@ -43,7 +47,7 @@ export default function App() {
           <Route path="/auth" element={<AuthPage />} />
 
           {/* Guard routes when in supabase mode */}
-          <Route path="/" element={requireAuth && !session ? <Navigate to="/auth" /> : <HomePage />} />
+          <Route path="/" element={requireAuth && !session ? <LandingPage /> : <HomePage />} />
           <Route path="/games" element={requireAuth && !session ? <Navigate to="/auth" /> : <GamesPage />} />
           <Route path="/calendar" element={requireAuth && !session ? <Navigate to="/auth" /> : <CalendarPage />} />
           <Route path="/expenses" element={requireAuth && !session ? <Navigate to="/auth" /> : <ExpensesPage />} />
