@@ -3,18 +3,32 @@ import { useNavigate } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
 import { addDays, endOfMonth, startOfMonth, yyyyMmDd } from '../lib/utils'
 import { upsertCalendarEventIn, deleteCalendarEventIn } from '../lib/mutate'
-import type { EventType } from '../lib/types'
+import type { CalendarEvent, EventType } from '../lib/types'
 
-const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
 function hhmmLocal(iso: string): string {
   const d = new Date(iso)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+function timeLabel(event: CalendarEvent): string {
+  if (event.allDay) return 'All day'
+  return new Date(event.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+function eventTone(type: EventType): string {
+  if (type === 'Game') return 'game'
+  if (type === 'Block') return 'block'
+  if (type === 'Travel') return 'travel'
+  return 'admin'
 }
 
 export default function CalendarPage() {
   const { db, write, loading } = useData()
   const navigate = useNavigate()
   const [cursor, setCursor] = useState(() => new Date())
+  const [selectedDay, setSelectedDay] = useState(() => yyyyMmDd(new Date()))
   const [notice, setNotice] = useState<string | null>(null)
   const [form, setForm] = useState({
     id: '',
@@ -31,6 +45,7 @@ export default function CalendarPage() {
 
   const monthStart = startOfMonth(cursor)
   const monthEnd = endOfMonth(cursor)
+  const monthLabel = cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' })
 
   const gridStart = useMemo(() => {
     const s = new Date(monthStart)
@@ -40,29 +55,57 @@ export default function CalendarPage() {
 
   const days = useMemo(() => {
     const arr: Date[] = []
-    for (let i=0; i<42; i++) arr.push(addDays(gridStart, i))
+    for (let i = 0; i < 42; i += 1) arr.push(addDays(gridStart, i))
     return arr
   }, [gridStart])
 
   const eventsByDay = useMemo(() => {
-    const map = new Map<string, any[]>()
-    for (const e of db.calendarEvents) {
-      const d = yyyyMmDd(new Date(e.start))
-      map.set(d, [...(map.get(d) ?? []), e])
+    const map = new Map<string, CalendarEvent[]>()
+    for (const event of db.calendarEvents) {
+      const day = yyyyMmDd(new Date(event.start))
+      map.set(day, [...(map.get(day) ?? []), event])
     }
-    for (const [, v] of map) v.sort((a,b) => (a.start < b.start ? -1 : 1))
+    for (const [, events] of map) events.sort((a, b) => (a.start < b.start ? -1 : 1))
     return map
   }, [db.calendarEvents])
 
-  function startNew() {
+  const selectedEvents = eventsByDay.get(selectedDay) ?? []
+
+  const monthEvents = useMemo(() => {
+    const monthStartKey = yyyyMmDd(monthStart)
+    const monthEndKey = yyyyMmDd(monthEnd)
+    return db.calendarEvents.filter(event => {
+      const key = yyyyMmDd(new Date(event.start))
+      return key >= monthStartKey && key <= monthEndKey
+    })
+  }, [db.calendarEvents, monthEnd, monthStart])
+
+  const monthStats = useMemo(() => {
+    return {
+      games: monthEvents.filter(e => e.eventType === 'Game').length,
+      blocks: monthEvents.filter(e => e.eventType === 'Block').length,
+      admin: monthEvents.filter(e => e.eventType === 'Admin').length,
+      travel: monthEvents.filter(e => e.eventType === 'Travel').length,
+    }
+  }, [monthEvents])
+
+  const upcomingEvents = useMemo(() => {
+    const now = new Date()
+    return [...db.calendarEvents]
+      .filter(event => new Date(event.end) >= now)
+      .sort((a, b) => (a.start < b.start ? -1 : 1))
+      .slice(0, 6)
+  }, [db.calendarEvents])
+
+  function startNew(day = selectedDay) {
     setNotice(null)
     setForm({
       id: '',
       eventType: 'Block',
       title: 'Blocked',
-      startDate: '',
+      startDate: day,
       startTime: '',
-      endDate: '',
+      endDate: day,
       endTime: '',
       allDay: true,
       notes: '',
@@ -73,7 +116,7 @@ export default function CalendarPage() {
   function togglePlatform(p: string) {
     setForm(prev => ({
       ...prev,
-      platformConfirmations: { ...(prev.platformConfirmations ?? {}), [p]: !prev.platformConfirmations?.[p] }
+      platformConfirmations: { ...(prev.platformConfirmations ?? {}), [p]: !prev.platformConfirmations?.[p] },
     }))
   }
 
@@ -95,174 +138,254 @@ export default function CalendarPage() {
       platformConfirmations: form.platformConfirmations,
     })
     await write(next)
-    startNew()
+    setSelectedDay(form.startDate)
+    startNew(form.startDate)
   }
 
   async function edit(id: string) {
-    const e = db.calendarEvents.find(x => x.id === id)
-    if (!e) return
-    if (e.eventType === 'Game' || e.linkedGameId) {
-      setNotice('Game events are managed on the Games page. Use Calendar for Block/Admin/Travel.')
+    const event = db.calendarEvents.find(x => x.id === id)
+    if (!event) return
+    if (event.eventType === 'Game' || event.linkedGameId) {
+      setNotice('Game events are managed on the Games page.')
+      setSelectedDay(yyyyMmDd(new Date(event.start)))
       return
     }
     setNotice(null)
-    const sd = yyyyMmDd(new Date(e.start))
-    const ed = yyyyMmDd(new Date(e.end))
+    const startDate = yyyyMmDd(new Date(event.start))
+    const endDate = yyyyMmDd(new Date(event.end))
+    setSelectedDay(startDate)
     setForm({
-      id: e.id,
-      eventType: e.eventType,
-      title: e.title,
-      startDate: sd,
-      startTime: hhmmLocal(e.start),
-      endDate: ed,
-      endTime: hhmmLocal(e.end),
-      allDay: e.allDay,
-      notes: e.notes ?? '',
-      platformConfirmations: e.platformConfirmations ?? {},
+      id: event.id,
+      eventType: event.eventType,
+      title: event.title,
+      startDate,
+      startTime: hhmmLocal(event.start),
+      endDate,
+      endTime: hhmmLocal(event.end),
+      allDay: event.allDay,
+      notes: event.notes ?? '',
+      platformConfirmations: event.platformConfirmations ?? {},
     })
   }
 
   async function del(id: string) {
+    const event = db.calendarEvents.find(x => x.id === id)
+    if (!event) return
+    if (!confirm(`Delete ${event.title}?`)) return
     const next = deleteCalendarEventIn(db, id)
     await write(next)
     if (form.id === id) startNew()
   }
 
+  function moveMonth(offset: number) {
+    const next = new Date(cursor.getFullYear(), cursor.getMonth() + offset, 1)
+    setCursor(next)
+  }
+
+  function jumpToday() {
+    const today = new Date()
+    setCursor(today)
+    setSelectedDay(yyyyMmDd(today))
+  }
+
   return (
     <div className="grid calendar-page">
-      <section className="card">
-        <h2>Calendar</h2>
-        <div className="btnbar" style={{justifyContent:'space-between'}}>
-          <div className="btnbar">
-            <button className="btn" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth()-1, 1))}>Prev</button>
-            <button className="btn" onClick={() => setCursor(new Date())}>Today</button>
-            <button className="btn" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth()+1, 1))}>Next</button>
+      <section className="card calendar-board-card">
+        <div className="page-section-head calendar-head">
+          <div>
+            <h2>Calendar</h2>
+            <p className="sub">Review games, blocks, travel, and admin time in one working month view.</p>
           </div>
-          <span className="pill">{cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</span>
+          <div className="btnbar calendar-nav-actions">
+            <button className="btn compact" onClick={() => moveMonth(-1)}>Prev</button>
+            <button className="btn compact" onClick={jumpToday}>Today</button>
+            <button className="btn compact" onClick={() => moveMonth(1)}>Next</button>
+            <button className="btn primary" onClick={() => startNew()}>Add event</button>
+          </div>
         </div>
 
-        <div className="calendar-scroll" aria-label="Month calendar">
-          <div className="calhead">
-            {DOW.map(d => <div key={d}>{d}</div>)}
+        <div className="calendar-month-bar">
+          <div>
+            <span className="landing-eyebrow">{monthLabel}</span>
           </div>
+          <div className="calendar-stat-strip">
+            <span><strong>{monthStats.games}</strong> games</span>
+            <span><strong>{monthStats.blocks}</strong> blocks</span>
+            <span><strong>{monthStats.admin}</strong> admin</span>
+            <span><strong>{monthStats.travel}</strong> travel</span>
+          </div>
+        </div>
 
-          <div className="calendar">
-            {days.map(d => {
-              const ymd = yyyyMmDd(d)
-              const inMonth = d >= monthStart && d <= monthEnd
-              const items = eventsByDay.get(ymd) ?? []
-              return (
-                <div key={ymd} className="day" style={{opacity: inMonth ? 1 : 0.45}}>
-                  <div className="d">
-                    <span>{d.getDate()}</span>
-                    <span className="small">{items.length ? `${items.length}` : ''}</span>
-                  </div>
-                  <div className="items">
-                    {items.slice(0,3).map((e:any) => (
-                      <div key={e.id} className="item" onClick={() => edit(e.id)} style={{cursor:'pointer'}}>
-                        <div className="t">{e.eventType}: {e.title}</div>
-                        <div className="m">{new Date(e.start).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-                        <div className="platform-row" style={{marginTop: 6}}>
-                          {db.settings.assigningPlatforms.slice(0, 2).map((p) => (
-                            <span key={p} className={'platform-chip ' + (e.platformConfirmations?.[p] ? 'on' : 'off')}>
-                              {p}
-                            </span>
-                          ))}
+        <div className="calendar-shell">
+          <div className="calendar-scroll" aria-label="Month calendar">
+            <div className="calhead">
+              {DOW.map(d => <div key={d}>{d}</div>)}
+            </div>
+
+            <div className="calendar">
+              {days.map(d => {
+                const ymd = yyyyMmDd(d)
+                const inMonth = d >= monthStart && d <= monthEnd
+                const items = eventsByDay.get(ymd) ?? []
+                const isToday = ymd === yyyyMmDd(new Date())
+                const isSelected = ymd === selectedDay
+                return (
+                  <button
+                    key={ymd}
+                    className={`day calendar-day ${inMonth ? '' : 'is-muted'} ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected' : ''}`}
+                    onClick={() => setSelectedDay(ymd)}
+                    type="button"
+                  >
+                    <div className="d">
+                      <span>{d.getDate()}</span>
+                      {items.length ? <span className="calendar-count">{items.length}</span> : <span />}
+                    </div>
+                    <div className="items">
+                      {items.slice(0, 3).map(event => (
+                        <div key={event.id} className={`item calendar-item is-${eventTone(event.eventType)}`} onClick={(e) => { e.stopPropagation(); void edit(event.id) }}>
+                          <div className="t">{event.title}</div>
+                          <div className="m">{event.eventType} | {timeLabel(event)}</div>
                         </div>
-                      </div>
-                    ))}
-                    {items.length > 3 && <div className="small">+{items.length - 3} more</div>}
-                  </div>
-                </div>
-              )
-            })}
+                      ))}
+                      {items.length > 3 && <div className="small">+{items.length - 3} more</div>}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
           </div>
-        </div>
 
-        <div className="footer-note">
-          Games appear here automatically. Use this page for blocked time, travel, and admin events.
+          <aside className="calendar-agenda">
+            <div className="calendar-agenda-head">
+              <div>
+                <h3>{selectedDay}</h3>
+                <p>{selectedEvents.length ? `${selectedEvents.length} event${selectedEvents.length === 1 ? '' : 's'}` : 'No events'}</p>
+              </div>
+              <button className="btn compact" onClick={() => startNew(selectedDay)}>Add</button>
+            </div>
+            <div className="calendar-agenda-list">
+              {selectedEvents.map(event => (
+                <button key={event.id} className={`agenda-item is-${eventTone(event.eventType)}`} onClick={() => edit(event.id)} type="button">
+                  <span>{timeLabel(event)}</span>
+                  <strong>{event.title}</strong>
+                  <em>{event.eventType}</em>
+                </button>
+              ))}
+              {selectedEvents.length === 0 ? (
+                <div className="empty-state calendar-empty-day">
+                  <h3>Open day</h3>
+                  <p>Add blocked time, travel, or admin work here.</p>
+                </div>
+              ) : null}
+            </div>
+          </aside>
         </div>
       </section>
 
-      <section className="card">
-        <h2>{form.id ? 'Edit event' : 'Add block/admin'}</h2>
-        {notice && (
-          <p className="small"><span className="pill warn">{notice}</span> <button className="btn" onClick={() => navigate('/games')}>Go to Games</button></p>
-        )}
+      <section className="grid cols2 calendar-side-grid">
+        <section className="card calendar-editor-card">
+          <h2>{form.id ? 'Edit event' : 'Add calendar event'}</h2>
+          <p className="sub">Use this for blocked time, travel, and admin work. Game events come from Games.</p>
+          {notice && (
+            <p className="small calendar-notice">
+              <span className="pill warn">{notice}</span>
+              <button className="btn compact" onClick={() => navigate('/games')}>Go to Games</button>
+            </p>
+          )}
 
-        <div className="row">
-          <div className="field">
-            <label>Type</label>
-            <select value={form.eventType} onChange={e => setForm({ ...form, eventType: e.target.value as EventType })}>
-              <option value="Block">Block</option>
-              <option value="Admin">Admin</option>
-              <option value="Travel">Travel</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Title</label>
-            <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
-          </div>
-        </div>
-
-        <div className="row">
-          <div className="field">
-            <label>All day</label>
-            <select value={form.allDay ? 'Yes' : 'No'} onChange={e => setForm({ ...form, allDay: e.target.value === 'Yes' })}>
-              <option>Yes</option>
-              <option>No</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Start date</label>
-            <input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} />
-          </div>
-          <div className="field">
-            <label>End date</label>
-            <input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} />
-          </div>
-        </div>
-
-        {!form.allDay && (
           <div className="row">
             <div className="field">
-              <label>Start time (15-min increments)</label>
-              <input type="time" step={900} value={form.startTime} onChange={e => setForm({ ...form, startTime: e.target.value })} />
+              <label>Type</label>
+              <select value={form.eventType} onChange={e => setForm({ ...form, eventType: e.target.value as EventType })}>
+                <option value="Block">Block</option>
+                <option value="Admin">Admin</option>
+                <option value="Travel">Travel</option>
+              </select>
             </div>
             <div className="field">
-              <label>End time (15-min increments)</label>
-              <input type="time" step={900} value={form.endTime} onChange={e => setForm({ ...form, endTime: e.target.value })} />
+              <label>Title</label>
+              <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
             </div>
           </div>
-        )}
 
-        <div className="field">
-          <label>Assigning platforms confirmation</label>
-          <div className="btnbar">
-            {db.settings.assigningPlatforms.map(p => (
-              <label key={p} className="pill" style={{cursor:'pointer'}}>
-                <input
-                  type="checkbox"
-                  checked={Boolean(form.platformConfirmations?.[p])}
-                  onChange={() => togglePlatform(p)}
-                  style={{marginRight: 8}}
-                />
-                {p}
-              </label>
-            ))}
+          <div className="row">
+            <div className="field">
+              <label>All day</label>
+              <select value={form.allDay ? 'Yes' : 'No'} onChange={e => setForm({ ...form, allDay: e.target.value === 'Yes' })}>
+                <option>Yes</option>
+                <option>No</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Start date</label>
+              <input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>End date</label>
+              <input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} />
+            </div>
           </div>
-        </div>
 
-        <div className="field">
-          <label>Notes</label>
-          <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
-        </div>
+          {!form.allDay && (
+            <div className="row">
+              <div className="field">
+                <label>Start time</label>
+                <input type="time" step={900} value={form.startTime} onChange={e => setForm({ ...form, startTime: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>End time</label>
+                <input type="time" step={900} value={form.endTime} onChange={e => setForm({ ...form, endTime: e.target.value })} />
+              </div>
+            </div>
+          )}
 
-        <div className="btnbar">
-          <button className="btn primary" onClick={saveBlock} disabled={loading || !form.startDate || !form.endDate}>Save</button>
-          <button className="btn" onClick={startNew} disabled={loading}>New</button>
-          {form.id && <button className="btn danger" onClick={() => del(form.id)} disabled={loading}>Delete</button>}
-        </div>
+          <div className="field">
+            <label>Assigning platform confirmations</label>
+            <div className="calendar-platform-list">
+              {db.settings.assigningPlatforms.map(p => (
+                <label key={p} className={`platform-chip ${form.platformConfirmations?.[p] ? 'on' : 'off'}`}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.platformConfirmations?.[p])}
+                    onChange={() => togglePlatform(p)}
+                  />
+                  {p}
+                </label>
+              ))}
+              {db.settings.assigningPlatforms.length === 0 ? <span className="small">No assigning platforms configured yet.</span> : null}
+            </div>
+          </div>
+
+          <div className="field">
+            <label>Notes</label>
+            <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+          </div>
+
+          <div className="btnbar">
+            <button className="btn primary" onClick={saveBlock} disabled={loading || !form.startDate || !form.endDate}>Save event</button>
+            <button className="btn" onClick={() => startNew()} disabled={loading}>New</button>
+            {form.id && <button className="btn danger" onClick={() => del(form.id)} disabled={loading}>Delete</button>}
+          </div>
+        </section>
+
+        <section className="card upcoming-card">
+          <h2>Upcoming</h2>
+          <div className="upcoming-list">
+            {upcomingEvents.map(event => (
+              <button key={event.id} className={`upcoming-item is-${eventTone(event.eventType)}`} onClick={() => edit(event.id)} type="button">
+                <span>{yyyyMmDd(new Date(event.start))} | {timeLabel(event)}</span>
+                <strong>{event.title}</strong>
+                <em>{event.eventType}</em>
+              </button>
+            ))}
+            {upcomingEvents.length === 0 ? (
+              <div className="empty-state">
+                <h3>No upcoming calendar events</h3>
+                <p>Blocks, travel, admin work, and synced games will appear here.</p>
+              </div>
+            ) : null}
+          </div>
+        </section>
       </section>
     </div>
   )
