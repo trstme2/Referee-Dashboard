@@ -31,14 +31,54 @@ export default function ExpensesPage() {
     const y = String(year)
     const list = db.expenses.filter(e => e.expenseDate.startsWith(y))
     const total = list.reduce((s,e) => s + e.amount, 0)
+    const deductible = list.filter(e => e.taxDeductible).reduce((s,e) => s + e.amount, 0)
     const miles = list.filter(e => e.category === 'Mileage').reduce((s,e) => s + (e.miles ?? 0), 0)
-    return { total, miles }
+    const receipts = list.filter(e => e.receiptFileName || e.receiptStoragePath).length
+    return { total, deductible, miles, receipts, count: list.length }
   }, [db.expenses, year])
 
   const rows = useMemo(() => {
     return [...db.expenses].sort((a,b) => (a.expenseDate < b.expenseDate ? 1 : -1))
   }, [db.expenses])
   const noExpensesYet = db.expenses.length === 0
+
+  function linkedGameLabel(gameId?: string) {
+    if (!gameId) return ''
+    const game = db.games.find(g => g.id === gameId)
+    if (!game) return ''
+    const matchup = game.homeTeam && game.awayTeam ? `${game.homeTeam} vs ${game.awayTeam}` : game.locationAddress
+    return `${game.gameDate} ${matchup}`
+  }
+
+  function expenseTitle(e: typeof rows[number]) {
+    return e.description || e.vendor || e.category
+  }
+
+  function receiptControls(expenseId: string, compact = false) {
+    const expense = db.expenses.find(x => x.id === expenseId)
+    if (!expense) return null
+    return (
+      <div className="receipt-actions">
+        {expense.receiptFileName ? <span className="pill ok receipt-name">{expense.receiptFileName}</span> : <span className="pill">No receipt</span>}
+        {expense.receiptStoragePath ? <button className="btn compact" onClick={() => openReceipt(expense.id)}>Open</button> : null}
+        {mode === 'supabase' && session ? (
+          <label className={`btn compact receipt-upload-trigger${compact ? ' is-compact' : ''}`}>
+            Upload
+            <input
+              type="file"
+              accept=".pdf,image/jpeg,image/png,image/webp"
+              onChange={evt => {
+                const file = evt.target.files?.[0] ?? null
+                void uploadReceipt(expense.id, file)
+                evt.currentTarget.value = ''
+              }}
+            />
+          </label>
+        ) : null}
+        {expense.receiptStoragePath ? <button className="btn compact" onClick={() => removeReceipt(expense.id)}>Remove</button> : null}
+      </div>
+    )
+  }
 
   function startNew() {
     setForm({
@@ -167,73 +207,116 @@ export default function ExpensesPage() {
   }
 
   return (
-    <div className="grid cols2">
-      <section className="card">
-        <h2>Expenses</h2>
-        <p className="sub">
-          This year: <span className="pill ok">{formatMoney(totals.total)}</span> | Mileage: <span className="pill">{totals.miles.toFixed(1)} mi</span>
-        </p>
+    <div className="grid cols2 expenses-page">
+      <section className="card expense-ledger-card">
+        <div className="page-section-head">
+          <div>
+            <h2>Expense Ledger</h2>
+            <p className="sub">Track deductible costs, mileage, and receipts for the current season.</p>
+          </div>
+          <button className="btn primary" onClick={startNew}>Add expense</button>
+        </div>
 
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Date</th><th>Category</th><th>Amount</th><th>Miles</th><th>Description</th><th>Receipt</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(e => (
-              <tr key={e.id}>
-                <td>{e.expenseDate}</td>
-                <td>{e.category}</td>
-                <td>{formatMoney(e.amount)}</td>
-                <td>{e.category === 'Mileage' ? (e.miles ?? 0).toFixed(1) : ''}</td>
-                <td>{e.description ?? e.vendor ?? ''}</td>
-                <td>
-                  <div className="btnbar">
-                    {e.receiptFileName ? <span className="pill ok">{e.receiptFileName}</span> : <span className="pill">None</span>}
-                    {e.receiptStoragePath ? <button className="btn compact" onClick={() => openReceipt(e.id)}>Open</button> : null}
-                    {mode === 'supabase' && session ? (
-                      <input
-                        type="file"
-                        accept=".pdf,image/jpeg,image/png,image/webp"
-                        onChange={evt => {
-                          const file = evt.target.files?.[0] ?? null
-                          void uploadReceipt(e.id, file)
-                          evt.currentTarget.value = ''
-                        }}
-                        style={{ maxWidth: 180 }}
-                      />
-                    ) : null}
-                    {e.receiptStoragePath ? <button className="btn compact" onClick={() => removeReceipt(e.id)}>Remove</button> : null}
-                  </div>
-                </td>
-                <td>
-                  <div className="btnbar">
-                    <button className="btn" onClick={() => edit(e.id)}>Edit</button>
-                    <button className="btn danger" onClick={() => del(e.id)}>Delete</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
+        <div className="kpi compact-kpi expense-kpi">
+          <div className="box">
+            <div className="label">{year} expenses</div>
+            <div className="value">{formatMoney(totals.total)}</div>
+          </div>
+          <div className="box">
+            <div className="label">Deductible</div>
+            <div className="value">{formatMoney(totals.deductible)}</div>
+          </div>
+          <div className="box">
+            <div className="label">Mileage</div>
+            <div className="value">{totals.miles.toFixed(1)} mi</div>
+          </div>
+          <div className="box">
+            <div className="label">Receipts</div>
+            <div className="value">{totals.receipts}/{totals.count}</div>
+          </div>
+        </div>
+
+        <div className="expense-card-list">
+          {rows.map(e => (
+            <article key={e.id} className="expense-card">
+              <div className="expense-card-head">
+                <div>
+                  <div className="expense-date">{e.expenseDate}</div>
+                  <div className="expense-title">{expenseTitle(e)}</div>
+                </div>
+                <div className="expense-amount">{formatMoney(e.amount)}</div>
+              </div>
+              <div className="expense-card-meta">
+                <span>{e.category}</span>
+                <span>{e.taxDeductible ? 'Deductible' : 'Not deductible'}</span>
+                {e.category === 'Mileage' ? <span>{(e.miles ?? 0).toFixed(1)} mi</span> : null}
+                {linkedGameLabel(e.gameId) ? <span>{linkedGameLabel(e.gameId)}</span> : null}
+              </div>
+              {receiptControls(e.id, true)}
+              <div className="expense-card-actions">
+                <button className="btn compact" onClick={() => edit(e.id)}>Edit</button>
+                <button className="btn compact danger" onClick={() => del(e.id)}>Delete</button>
+              </div>
+            </article>
+          ))}
+          {rows.length === 0 && (
+            <div className="empty-state centered expense-empty-state">
+              <h3>No expenses yet</h3>
+              <p>Add your first expense to start tracking deductions, mileage, and receipt storage across devices.</p>
+              <button className="btn primary" onClick={startNew}>Add your first expense</button>
+            </div>
+          )}
+        </div>
+
+        <div className="table-wrap expense-table-wrap">
+          <table className="table">
+            <thead>
               <tr>
-                <td colSpan={7} className="empty-cell">
-                  <div className="empty-state centered">
-                    <h3>No expenses yet</h3>
-                    <p>Add your first expense to start tracking deductions, mileage, and receipt storage across devices.</p>
-                    <div className="btnbar">
+                <th>Date</th><th>Category</th><th>Amount</th><th>Miles</th><th>Details</th><th>Receipt</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(e => (
+                <tr key={e.id}>
+                  <td>{e.expenseDate}</td>
+                  <td>
+                    <div>{e.category}</div>
+                    <div className="small">{e.taxDeductible ? 'Deductible' : 'Not deductible'}</div>
+                  </td>
+                  <td>{formatMoney(e.amount)}</td>
+                  <td>{e.category === 'Mileage' ? (e.miles ?? 0).toFixed(1) : ''}</td>
+                  <td>
+                    <div>{expenseTitle(e)}</div>
+                    {linkedGameLabel(e.gameId) ? <div className="small">{linkedGameLabel(e.gameId)}</div> : null}
+                  </td>
+                  <td>{receiptControls(e.id)}</td>
+                  <td>
+                    <div className="btnbar expense-row-actions">
+                      <button className="btn compact" onClick={() => edit(e.id)}>Edit</button>
+                      <button className="btn compact danger" onClick={() => del(e.id)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="empty-cell">
+                    <div className="empty-state centered">
+                      <h3>No expenses yet</h3>
+                      <p>Add your first expense to start tracking deductions, mileage, and receipt storage across devices.</p>
                       <button className="btn primary" onClick={startNew}>Add your first expense</button>
                     </div>
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
-      <section className="card">
+      <section className="card expense-editor-card">
         <h2>{form.id ? 'Edit expense' : 'Add expense'}</h2>
+        <p className="sub">{form.id ? 'Update the record, receipt, or tax treatment.' : 'Capture a cost while the details are still fresh.'}</p>
 
         <div className="row">
           <div className="field">
@@ -312,18 +395,21 @@ export default function ExpensesPage() {
         {form.id && (
           <div className="field">
             <label>Receipt</label>
-            <div className="btnbar">
+            <div className="receipt-editor">
               {form.receiptFileName ? <span className="pill ok">{form.receiptFileName}</span> : <span className="pill">{noExpensesYet ? 'Receipts ready when you are' : 'No receipt uploaded yet'}</span>}
               {mode === 'supabase' && session ? (
-                <input
-                  type="file"
-                  accept=".pdf,image/jpeg,image/png,image/webp"
-                  onChange={evt => {
-                    const file = evt.target.files?.[0] ?? null
-                    void uploadReceipt(form.id, file)
-                    evt.currentTarget.value = ''
-                  }}
-                  />
+                <label className="btn receipt-upload-trigger">
+                  Upload receipt
+                  <input
+                    type="file"
+                    accept=".pdf,image/jpeg,image/png,image/webp"
+                    onChange={evt => {
+                      const file = evt.target.files?.[0] ?? null
+                      void uploadReceipt(form.id, file)
+                      evt.currentTarget.value = ''
+                    }}
+                    />
+                </label>
               ) : <span className="small">Sign in to upload receipts and keep them available across devices.</span>}
               {form.id && db.expenses.find(x => x.id === form.id)?.receiptStoragePath ? (
                 <>

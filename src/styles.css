@@ -1309,3 +1309,374 @@ body {
   }
 }
 
+.page-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.page-section-head h2,
+.page-section-head .sub {
+  margin-left: 0;
+}
+
+.page-section-head .sub {
+  margin-bottom: 0;
+}
+
+.expense-ledger-card {
+  min-width: 0;
+}
+
+.expense-kpi {
+  margin-bottom: 14px;
+}
+
+.expense-kpi .box {
+  min-width: 138px;
+}
+
+.expense-table-wrap .table {
+  min-width: 940px;
+}
+
+.receipt-actions,
+.receipt-editor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.receipt-name {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.receipt-upload-trigger {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.receipt-upload-trigger input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.receipt-upload-trigger.is-compact {
+  min-height: 28px;
+}
+
+.expense-row-actions {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+.expense-card-list {
+  display: none;
+}
+
+.expense-card {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  padding: 13px;
+  background: rgba(255,255,255,0.035);
+}
+
+.expense-card-head,
+.expense-card-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.expense-date {
+  color: #97a7bc;
+  font-size: 12px;
+}
+
+.expense-title {
+  margin-top: 3px;
+  color: #f8fafc;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.expense-amount {
+  color: #f8fafc;
+  font-size: 18px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.expense-card-meta {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin: 11px 0;
+}
+
+.expense-card-meta span {
+  padding: 4px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.035);
+  color: #aebcd0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.expense-card-actions {
+  justify-content: flex-start;
+  margin-top: 12px;
+}
+
+.expense-empty-state {
+  border: 1px dashed rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.025);
+}
+
+.expense-editor-card {
+  align-self: start;
+}
+
+.expense-editor-card .receipt-editor {
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.2);
+}
+
+@media (max-width: 720px) {
+  .page-section-head {
+    flex-direction: column;
+  }
+
+  .page-section-head .btn {
+    width: 100%;
+  }
+
+  .expenses-page .expense-table-wrap {
+    display: none;
+  }
+
+  .expenses-page .expense-card-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .expense-card-head {
+    align-items: flex-start;
+  }
+
+  .receipt-actions,
+  .receipt-editor {
+    align-items: flex-start;
+  }
+}
+
+.requirements-page .requirement-setup-grid {
+  margin-top: 0;
+}
+
+.requirement-kpi .box {
+  min-width: 138px;
+}
+
+.requirement-card-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.requirement-card {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(255,255,255,0.035);
+}
+
+.requirement-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.requirement-title {
+  color: #f8fafc;
+  font-size: 16px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.requirement-meta {
+  margin-top: 4px;
+  color: #97a7bc;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.requirement-progress-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.18fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.22);
+}
+
+.requirement-progress-row strong {
+  display: block;
+  margin-top: 2px;
+  color: #f8fafc;
+  font-size: 20px;
+}
+
+.requirement-progress-track {
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.requirement-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #10b981, #f59e0b);
+}
+
+.requirement-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.requirement-detail-grid > div {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.025);
+}
+
+.requirement-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.requirement-edit-grid input,
+.requirement-detail-grid select {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.34);
+  color: #f8fafc;
+}
+
+.requirement-notes,
+.requirement-no-activity {
+  margin: 12px 0 0;
+}
+
+.requirement-actions {
+  margin-top: 14px;
+}
+
+.requirement-activity-form {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid rgba(96, 165, 250, 0.24);
+  border-radius: 12px;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.requirement-activity-list {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.requirement-activity-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.5fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.11);
+}
+
+.requirement-activity-row:last-child {
+  border-bottom: none;
+}
+
+.requirement-activity-row strong {
+  color: #f8fafc;
+}
+
+.requirement-activity-row span {
+  margin-left: 8px;
+  color: #97a7bc;
+  font-size: 12px;
+}
+
+.requirement-activity-row p {
+  margin: 4px 0 0;
+  color: #97a7bc;
+  font-size: 12px;
+}
+
+.requirement-evidence-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.requirement-evidence-name {
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.requirement-empty-state {
+  border: 1px dashed rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.025);
+}
+
+@media (max-width: 720px) {
+  .requirement-card-head,
+  .requirement-progress-row,
+  .requirement-detail-grid,
+  .requirement-edit-grid,
+  .requirement-activity-row {
+    grid-template-columns: 1fr;
+  }
+
+  .requirement-card-head {
+    display: grid;
+  }
+
+  .requirement-evidence-actions {
+    justify-content: flex-start;
+  }
+}
+
