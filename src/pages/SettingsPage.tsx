@@ -40,7 +40,7 @@ export default function SettingsPage() {
     const next = {
       ...db,
       settings: {
-        homeAddress: home.trim() || db.settings.homeAddress,
+        homeAddress: home.trim(),
         otherWorkAddress: otherWork.trim(),
         defaultTimezone: defaultTimezone.trim() || 'America/New_York',
         weeklyGamesEmailEnabled,

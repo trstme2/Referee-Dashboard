@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import ical from 'node-ical'
 import { createHash } from 'node:crypto'
 import { createAuthedSupabase, getBearerToken, toJsonBody } from './auth-utils.js'
+import { fetchCalendarFeedText } from './feed-fetch.js'
 
 export type Feed = {
   id: string
@@ -314,9 +315,7 @@ export async function syncFeed(client: any, feed: Feed) {
 
   let raw = ''
   try {
-    const resp = await fetch(feed.feed_url)
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-    raw = await resp.text()
+    raw = await fetchCalendarFeedText(feed.feed_url)
   } catch (e: any) {
     return { createdEvents, updatedEvents, createdGames, updatedGames, errors: [`${feed.name}: fetch failed: ${String(e?.message || e)}`] }
   }

@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createAuthedSupabase, getBearerToken, maskUrl, toJsonBody } from './auth-utils.js'
+import { validateFeedUrl } from './feed-fetch.js'
 
 type FeedPlatform = 'RefQuest' | 'DragonFly' | string
 type FeedSport = 'Soccer' | 'Lacrosse' | null
@@ -23,14 +24,10 @@ function normalizeSport(x: unknown): FeedSport {
 }
 
 function mustUrl(s: unknown): string {
-  const raw = String(s || '').trim()
-  if (!raw) throw new Error('feedUrl is required')
   try {
-    const u = new URL(raw)
-    if (!/^https?:$/.test(u.protocol)) throw new Error('feedUrl must be http(s)')
-    return u.toString()
-  } catch {
-    throw new Error('feedUrl must be a valid URL')
+    return validateFeedUrl(s)
+  } catch (e: any) {
+    throw new Error(String(e?.message || 'feedUrl must be a valid https URL'))
   }
 }
 

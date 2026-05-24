@@ -1,32 +1,54 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { createAuthedSupabase, getBearerToken } from './auth-utils.js'
+
+const MAX_ADDRESS_LENGTH = 300
+const DISTANCE_TIMEOUT_MS = 5_000
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const origin = String(req.query.origin ?? '').trim()
-  const destination = String(req.query.destination ?? '').trim()
-  if (!origin || !destination) return res.status(400).send('origin and destination are required')
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
-  const key = process.env.GOOGLE_MAPS_API_KEY
-  if (!key) return res.status(500).send('Missing GOOGLE_MAPS_API_KEY')
+  try {
+    const token = getBearerToken(req)
+    if (!token) return res.status(401).json({ error: 'Missing bearer token' })
 
-  const url = new URL('https://maps.googleapis.com/maps/api/distancematrix/json')
-  url.searchParams.set('origins', origin)
-  url.searchParams.set('destinations', destination)
-  url.searchParams.set('key', key)
-  url.searchParams.set('units', 'imperial')
+    const client = createAuthedSupabase(token)
+    const { data: authData, error: authError } = await client.auth.getUser()
+    if (authError || !authData?.user) return res.status(401).json({ error: 'Invalid auth token' })
 
-  const r = await fetch(url.toString())
-  const j = await r.json()
+    const origin = String(req.query.origin ?? '').trim()
+    const destination = String(req.query.destination ?? '').trim()
+    if (!origin || !destination) return res.status(400).json({ error: 'origin and destination are required' })
+    if (origin.length > MAX_ADDRESS_LENGTH || destination.length > MAX_ADDRESS_LENGTH) {
+      return res.status(400).json({ error: 'origin and destination are too long' })
+    }
 
-  const el = j?.rows?.[0]?.elements?.[0]
-  if (!el || el.status !== 'OK' || !el.distance) {
-    return res.status(400).json({ error: 'Distance lookup failed', raw: j })
+    const key = process.env.GOOGLE_MAPS_API_KEY
+    if (!key) return res.status(500).json({ error: 'Distance service is not configured' })
+
+    const url = new URL('https://maps.googleapis.com/maps/api/distancematrix/json')
+    url.searchParams.set('origins', origin)
+    url.searchParams.set('destinations', destination)
+    url.searchParams.set('key', key)
+    url.searchParams.set('units', 'imperial')
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), DISTANCE_TIMEOUT_MS)
+    const r = await fetch(url.toString(), { signal: controller.signal }).finally(() => clearTimeout(timeout))
+    const j = await r.json()
+
+    const el = j?.rows?.[0]?.elements?.[0]
+    if (!r.ok || !el || el.status !== 'OK' || !el.distance) {
+      return res.status(400).json({ error: 'Distance lookup failed' })
+    }
+
+    const text: string = el.distance.text ?? ''
+    const m = text.match(/([0-9.]+)\s*mi/i)
+    if (m) return res.status(200).json({ miles: Number(m[1]) })
+
+    const meters = Number(el.distance.value ?? 0)
+    const miles = meters / 1609.344
+    return res.status(200).json({ miles })
+  } catch {
+    return res.status(502).json({ error: 'Distance lookup failed' })
   }
-
-  const text: string = el.distance.text ?? ''
-  const m = text.match(/([0-9.]+)\s*mi/i)
-  if (m) return res.status(200).json({ miles: Number(m[1]) })
-
-  const meters = Number(el.distance.value ?? 0)
-  const miles = meters / 1609.344
-  return res.status(200).json({ miles })
 }

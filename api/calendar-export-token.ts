@@ -11,6 +11,7 @@ function originFromReq(req: VercelRequest): string {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
+    res.setHeader('Cache-Control', 'no-store')
     const bearer = getBearerToken(req)
     if (!bearer) return res.status(401).json({ error: 'Missing bearer token' })
     const client = createAuthedSupabase(bearer)

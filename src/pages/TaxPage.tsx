@@ -5,7 +5,8 @@ import { formatMoney } from '../lib/utils'
 type IncomeBasis = 'cash' | 'accrual'
 
 function csvValue(v: unknown): string {
-  const s = String(v ?? '')
+  const raw = String(v ?? '')
+  const s = /^[=+\-@]/.test(raw) ? `'${raw}` : raw
   if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
   return s
 }

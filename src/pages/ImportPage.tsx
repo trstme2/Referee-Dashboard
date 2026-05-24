@@ -5,6 +5,11 @@ import { addCsvImportIn, addCsvImportRowIn, rollbackImportIn, upsertCalendarEven
 import { normalizeHeader, safeNumber, toISOFromDateTime } from '../lib/utils'
 import type { CompetitionLevel, DB, Role, Sport } from '../lib/types'
 
+const MAX_IMPORT_BYTES = 2 * 1024 * 1024
+const MAX_IMPORT_ROWS = 5000
+const MAX_RAW_IMPORT_KEYS = 40
+const MAX_RAW_IMPORT_VALUE_LENGTH = 500
+
 function fileToText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -12,6 +17,15 @@ function fileToText(file: File): Promise<string> {
     reader.onerror = () => reject(new Error('File read failed'))
     reader.readAsText(file)
   })
+}
+
+function compactRawJson(row: Record<string, any>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const key of Object.keys(row).slice(0, MAX_RAW_IMPORT_KEYS)) {
+    const value = String(row[key] ?? '')
+    out[key] = value.length > MAX_RAW_IMPORT_VALUE_LENGTH ? `${value.slice(0, MAX_RAW_IMPORT_VALUE_LENGTH)}...` : value
+  }
+  return out
 }
 
 function getAny(row: Record<string, any>, keys: string[]) {
@@ -206,9 +220,17 @@ export default function ImportPage() {
   async function handleFile(file: File) {
     setLog('')
     setPreview(null)
+    if (file.size > MAX_IMPORT_BYTES) {
+      setLog('This CSV is too large to import. Use a file under 2 MB.')
+      return
+    }
     const text = await fileToText(file)
     const parsed = Papa.parse(text, { header: true, skipEmptyLines: true })
     const rows = (parsed.data as any[]).filter(Boolean)
+    if (rows.length > MAX_IMPORT_ROWS) {
+      setLog(`This CSV has ${rows.length} rows. Import at most ${MAX_IMPORT_ROWS} rows at a time.`)
+      return
+    }
     const readyRows: Array<PreparedGameRow | PreparedBlockRow> = []
     const errorRows: Array<{ rowNumber: number; summary: string; error: string; rawJson: Record<string, any> }> = []
 
@@ -232,7 +254,7 @@ export default function ImportPage() {
           readyRows.push({
             kind: 'block',
             rowNumber: idx + 1,
-            rawJson: r,
+            rawJson: compactRawJson(r),
             summary: summarizeBlockRow(title, startIso),
             title,
             start: startIso,
@@ -304,7 +326,7 @@ export default function ImportPage() {
           readyRows.push({
             kind: 'game',
             rowNumber: idx + 1,
-            rawJson: r,
+            rawJson: compactRawJson(r),
             summary: summarizeGameRow(gameDate, locationAddress, league || undefined, startTime),
             sport: sport as Sport,
             competitionLevel: competitionLevel as CompetitionLevel,
@@ -324,7 +346,7 @@ export default function ImportPage() {
           rowNumber: idx + 1,
           summary: `Row ${idx + 1}`,
           error: String(e?.message ?? e),
-          rawJson: r,
+          rawJson: compactRawJson(r),
         })
       }
     }

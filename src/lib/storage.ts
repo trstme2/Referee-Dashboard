@@ -39,7 +39,7 @@ function seedDB(): DB {
   const now = nowISO()
   return {
     settings: {
-      homeAddress: '399 S. Columbia Ave, Bexley, OH 43209',
+      homeAddress: '',
       otherWorkAddress: '',
       defaultTimezone: 'America/New_York',
       weeklyGamesEmailEnabled: false,

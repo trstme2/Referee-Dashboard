@@ -32,6 +32,9 @@ jobs:
       - name: Test
         run: npm run test --if-present
 
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Lint
         run: npm run lint --if-present
 

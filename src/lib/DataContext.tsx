@@ -404,7 +404,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
 function rowToSettings(r: any): Settings {
   return {
-    homeAddress: r.home_address ?? '399 S. Columbia Ave, Bexley, OH 43209',
+    homeAddress: r.home_address ?? '',
     otherWorkAddress: r.other_work_address ?? '',
     defaultTimezone: r.default_timezone ?? 'America/New_York',
     weeklyGamesEmailEnabled: Boolean(r.weekly_games_email_enabled ?? false),

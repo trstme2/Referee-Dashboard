@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto'
 const FALLBACK_TIMEZONE = 'America/New_York'
 const DEFAULT_GAME_START = '17:00'
 const DEFAULT_GAME_DURATION_HOURS = 2
-const DEFAULT_HOME_ADDRESS = '399 S. Columbia Ave, Bexley, OH 43209'
+const DEFAULT_HOME_ADDRESS = ''
 
 type GameRow = {
   id: string

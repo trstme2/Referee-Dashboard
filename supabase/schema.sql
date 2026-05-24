@@ -4,6 +4,15 @@
 
 create extension if not exists pgcrypto;
 
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='user_settings') then
+    update public.user_settings
+    set home_address = ''
+    where home_address = '399 S. Columbia Ave, Bexley, OH 43209';
+  end if;
+end $$;
+
 -- =========================
 -- MIGRATIONS (best-effort)
 -- =========================
