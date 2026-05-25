@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
+import { getOnboardingProgress } from '../lib/onboarding'
 import { formatMoney, isWithinNextDays } from '../lib/utils'
 import type { RequirementStatus } from '../lib/types'
 
@@ -13,6 +15,7 @@ function requirementStatusBadge(status: RequirementStatus, overdue: boolean) {
 
 export default function HomePage() {
   const { db, mode, loading, session } = useData()
+  const onboarding = useMemo(() => getOnboardingProgress(db), [db])
 
   const kpis = useMemo(() => {
     const upcoming = db.games
@@ -78,6 +81,17 @@ export default function HomePage() {
 
   return (
     <div className="grid">
+      {!onboarding.isComplete && (
+        <section className="setup-banner">
+          <div>
+            <span className="landing-eyebrow">Setup in progress</span>
+            <h2>Finish your Whistle Keeper foundation.</h2>
+            <p className="small">{onboarding.complete} of {onboarding.total} setup areas are ready.</p>
+          </div>
+          <Link className="btn primary" to="/onboarding">Continue setup</Link>
+        </section>
+      )}
+
       <section className="card hero accent-frame">
         <h2>Overview</h2>
         <p className="sub">

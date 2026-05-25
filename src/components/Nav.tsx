@@ -7,6 +7,7 @@ export default function Nav() {
   return (
     <nav className="nav">
       <NavLink to="/" className={linkClass}>Home</NavLink>
+      <NavLink to="/onboarding" className={linkClass}>Setup</NavLink>
       <NavLink to="/games" className={linkClass}>Games</NavLink>
       <NavLink to="/calendar" className={linkClass}>Calendar</NavLink>
       <NavLink to="/sync" className={linkClass}>Sync</NavLink>

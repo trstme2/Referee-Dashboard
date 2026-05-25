@@ -11,14 +11,17 @@ import AuthPage from './pages/AuthPage'
 import SyncPage from './pages/SyncPage'
 import TaxPage from './pages/TaxPage'
 import LandingPage from './pages/LandingPage'
+import OnboardingPage from './pages/OnboardingPage'
 import { useData } from './lib/DataContext'
+import { shouldStartOnboarding } from './lib/onboarding'
 import logo from './assets/logo.png'
 
 export default function App() {
-  const { mode, session, error } = useData()
+  const { mode, session, error, db, loading } = useData()
   const requireAuth = mode === 'supabase'
   const location = useLocation()
   const showLanding = requireAuth && !session && location.pathname === '/'
+  const startOnboarding = !loading && Boolean(session) && shouldStartOnboarding(db)
 
   return (
     <div className={showLanding ? 'landing-container' : 'container'}>
@@ -47,7 +50,8 @@ export default function App() {
           <Route path="/auth" element={<AuthPage />} />
 
           {/* Guard routes when in supabase mode */}
-          <Route path="/" element={requireAuth && !session ? <LandingPage /> : <HomePage />} />
+          <Route path="/" element={requireAuth && !session ? <LandingPage /> : startOnboarding ? <Navigate to="/onboarding" replace /> : <HomePage />} />
+          <Route path="/onboarding" element={requireAuth && !session ? <Navigate to="/auth" /> : <OnboardingPage />} />
           <Route path="/games" element={requireAuth && !session ? <Navigate to="/auth" /> : <GamesPage />} />
           <Route path="/calendar" element={requireAuth && !session ? <Navigate to="/auth" /> : <CalendarPage />} />
           <Route path="/expenses" element={requireAuth && !session ? <Navigate to="/auth" /> : <ExpensesPage />} />

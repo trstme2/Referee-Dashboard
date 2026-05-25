@@ -25,6 +25,7 @@ begin
       other_work_address text null,
       default_timezone text null,
       weekly_games_email_enabled boolean not null default false,
+      onboarding_completed_at timestamptz null,
       calendar_export_token text null,
       assigning_platforms jsonb not null default '[]'::jsonb,
       leagues jsonb not null default '[]'::jsonb,
@@ -44,6 +45,9 @@ begin
     end if;
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='weekly_games_email_enabled') then
       alter table public.user_settings add column weekly_games_email_enabled boolean not null default false;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='onboarding_completed_at') then
+      alter table public.user_settings add column onboarding_completed_at timestamptz null;
     end if;
   end if;
 
@@ -172,6 +176,7 @@ create table if not exists public.user_settings (
   other_work_address text null,
   default_timezone text null,
   weekly_games_email_enabled boolean not null default false,
+  onboarding_completed_at timestamptz null,
   calendar_export_token text null,
   assigning_platforms jsonb not null default '[]'::jsonb,
   leagues jsonb not null default '[]'::jsonb,

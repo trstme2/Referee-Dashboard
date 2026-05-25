@@ -22,6 +22,7 @@ export interface Settings {
   otherWorkAddress?: string
   defaultTimezone?: string
   weeklyGamesEmailEnabled?: boolean
+  onboardingCompletedAt?: string
   assigningPlatforms: string[]
   leagues: string[]
 }

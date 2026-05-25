@@ -43,6 +43,7 @@ function seedDB(): DB {
       otherWorkAddress: '',
       defaultTimezone: 'America/New_York',
       weeklyGamesEmailEnabled: false,
+      onboardingCompletedAt: undefined,
       assigningPlatforms: ['DragonFly', 'RefQuest'],
       leagues: [],
     },
