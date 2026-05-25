@@ -15,6 +15,7 @@ import { yyyyMmDd } from '../lib/utils'
 import { createRequirementEvidenceSignedUrl, deleteRequirementEvidence, uploadRequirementEvidence } from '../lib/documents'
 
 const statusOptions: RequirementStatus[] = ['Not Started', 'In Progress', 'Complete', 'Waived', 'Overdue']
+const DAY_MS = 24 * 60 * 60 * 1000
 
 function parseOptionalYear(input: string): number | undefined {
   const s = input.trim()
@@ -92,7 +93,7 @@ export default function RequirementsPage() {
   const requirementStats = useMemo(() => {
     const active = instances.filter(({ i }) => i.status !== 'Complete' && i.status !== 'Waived')
     const complete = instances.filter(({ i }) => i.status === 'Complete')
-    const dueSoonDate = yyyyMmDd(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
+    const dueSoonDate = yyyyMmDd(new Date(new Date(today).getTime() + 30 * DAY_MS))
     const dueSoon = active.filter(({ i }) => i.dueDate && i.dueDate >= today && i.dueDate <= dueSoonDate)
     const overdue = active.filter(({ i }) => i.dueDate && i.dueDate < today)
     const evidence = db.requirementActivities.filter(a => a.evidenceFileName || a.evidenceStoragePath || a.evidenceLink)

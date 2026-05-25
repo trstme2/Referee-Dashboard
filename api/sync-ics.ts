@@ -313,14 +313,14 @@ export async function syncFeed(client: any, feed: Feed) {
   const errors: string[] = []
   const diagnostics: SyncDiagnostic[] = []
 
-  let raw = ''
+  let raw: string
   try {
     raw = await fetchCalendarFeedText(feed.feed_url)
   } catch (e: any) {
     return { createdEvents, updatedEvents, createdGames, updatedGames, errors: [`${feed.name}: fetch failed: ${String(e?.message || e)}`] }
   }
 
-  let parsed: Record<string, any> = {}
+  let parsed: Record<string, any>
   try {
     parsed = ical.parseICS(raw) as Record<string, any>
   } catch (e: any) {

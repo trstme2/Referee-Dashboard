@@ -27,7 +27,7 @@ function mustUrl(s: unknown): string {
   try {
     return validateFeedUrl(s)
   } catch (e: any) {
-    throw new Error(String(e?.message || 'feedUrl must be a valid https URL'))
+    throw new Error(String(e?.message || 'feedUrl must be a valid https URL'), { cause: e })
   }
 }
 
