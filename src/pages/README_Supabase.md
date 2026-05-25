@@ -3,7 +3,8 @@
 ## 1) Create Supabase project
 Create a project in Supabase, then grab:
 - Project URL
-- anon/public key
+- publishable key (`sb_publishable_...`)
+- server secret key (`sb_secret_...`)
 
 ## 2) Run the schema SQL
 Open Supabase → SQL Editor → paste `supabase/schema.sql` from this repo.
@@ -21,11 +22,12 @@ In Vercel Project Settings → Environment Variables:
 
 Frontend (Vite):
 - `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
 
 Serverless:
+- `SUPABASE_PUBLISHABLE_KEY` (same publishable key, used by server routes that also pass a user JWT)
+- `SUPABASE_SECRET_KEY` (server-only elevated key for scheduled jobs)
 - `GOOGLE_MAPS_API_KEY` (optional, only needed if you want distance-from-home)
-- `SUPABASE_SERVICE_ROLE_KEY` (needed for scheduled server jobs)
 - `CRON_SECRET` (used by Vercel Cron to authorize scheduled requests)
 - `RESEND_API_KEY` (needed for weekly schedule emails)
 - `WEEKLY_EMAIL_FROM` (optional, defaults to Resend's test sender)
@@ -41,6 +43,7 @@ Push to GitHub, import into Vercel, deploy.
 
 ## Notes
 - RLS policies enforce `auth.uid() = user_id` across all tables.
+- Legacy `VITE_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` still work during rotation, but new deployments should use the publishable and secret key variables above.
 - Requirement evidence uploads are stored in private Supabase Storage, under a user-scoped folder path.
 - Settings (home address, assigning platforms, league suggestions) are stored in `user_settings`.
 - Distance is calculated via `/api/distance` (serverless) so your API key is not exposed to the browser.

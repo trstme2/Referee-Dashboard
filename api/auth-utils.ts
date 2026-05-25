@@ -12,14 +12,14 @@ function getSupabaseUrl(): string {
 }
 
 function getSupabaseAnonKey(): string {
-  const key = env('SUPABASE_ANON_KEY') || env('VITE_SUPABASE_ANON_KEY') || env('VITE_SUPABASE_PUBLISHABLE_KEY')
-  if (!key) throw new Error('Missing SUPABASE_ANON_KEY (or VITE_SUPABASE_ANON_KEY / VITE_SUPABASE_PUBLISHABLE_KEY)')
+  const key = env('SUPABASE_PUBLISHABLE_KEY') || env('VITE_SUPABASE_PUBLISHABLE_KEY') || env('SUPABASE_ANON_KEY') || env('VITE_SUPABASE_ANON_KEY')
+  if (!key) throw new Error('Missing SUPABASE_PUBLISHABLE_KEY (or legacy SUPABASE_ANON_KEY)')
   return key
 }
 
 function getSupabaseServiceRoleKey(): string {
-  const key = env('SUPABASE_SERVICE_ROLE_KEY')
-  if (!key) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
+  const key = env('SUPABASE_SECRET_KEY') || env('SUPABASE_SERVICE_ROLE_KEY')
+  if (!key) throw new Error('Missing SUPABASE_SECRET_KEY (or legacy SUPABASE_SERVICE_ROLE_KEY)')
   return key
 }
 
