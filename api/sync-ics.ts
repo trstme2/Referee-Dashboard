@@ -7,7 +7,7 @@ import { fetchCalendarFeedText } from './feed-fetch.js'
 export type Feed = {
   id: string
   user_id: string
-  platform: 'RefQuest' | 'DragonFly'
+  platform: string
   name: string
   feed_url: string
   enabled: boolean
@@ -255,6 +255,40 @@ function sameExactSlot(g: any, n: any): boolean {
   )
 }
 
+async function applyBlockConfirmations(client: any, feed: Feed, blockDates: string[], now: string): Promise<number> {
+  const dates = Array.from(new Set(blockDates)).filter(Boolean)
+  if (!dates.length) return 0
+
+  const { data, error } = await client
+    .from('games')
+    .select('id,platform_confirmations,status')
+    .eq('user_id', feed.user_id)
+    .in('game_date', dates)
+    .neq('status', 'Canceled')
+  if (error) throw new Error(`games block lookup: ${error.message}`)
+
+  let updated = 0
+  for (const game of data ?? []) {
+    const current = game.platform_confirmations ?? {}
+    if (current[feed.platform]) continue
+    const { error: updateErr } = await client
+      .from('games')
+      .update({
+        platform_confirmations: {
+          ...current,
+          [feed.platform]: true,
+        },
+        updated_at: now,
+      })
+      .eq('user_id', feed.user_id)
+      .eq('id', game.id)
+    if (updateErr) throw new Error(`games block update: ${updateErr.message}`)
+    updated += 1
+  }
+
+  return updated
+}
+
 function findManualMatch(dayGames: any[], unusedGameIds: Set<string>, n: any): {
   match: any | null
   topScore?: number
@@ -376,6 +410,10 @@ export async function syncFeed(client: any, feed: Feed) {
     await client.from('calendar_feeds').update({ last_synced_at: now, updated_at: now }).eq('id', feed.id).eq('user_id', feed.user_id)
     return { createdEvents, updatedEvents, createdGames, updatedGames, errors }
   }
+
+  const blockDates = normalized
+    .filter((n) => n.eventType === 'Block')
+    .map((n) => n.gameDate)
 
   const eventDates = Array.from(new Set(normalized.map((n) => n.gameDate)))
   const { data: dayGames, error: dayGamesErr } = await client
@@ -589,6 +627,9 @@ export async function syncFeed(client: any, feed: Feed) {
       .eq('id', g.calendar_event_id)
     if (error) errors.push(`${feed.name}: link update failed for event ${g.calendar_event_id}: ${error.message}`)
   }
+
+  const gamesUpdatedFromBlocks = await applyBlockConfirmations(client, feed, blockDates, now)
+  updatedGames += gamesUpdatedFromBlocks
 
   const { error: stampErr } = await client
     .from('calendar_feeds')

@@ -40,7 +40,7 @@ function emptyForm(): FeedForm {
 }
 
 export default function SyncPage() {
-  const { mode, session, refresh, db } = useData()
+  const { mode, session, refresh, db, write } = useData()
   const [feeds, setFeeds] = useState<CalendarFeed[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -146,13 +146,15 @@ export default function SyncPage() {
     try {
       if (!form.name.trim()) throw new Error('Name is required')
       if (!form.id && !form.feedUrl.trim()) throw new Error('Feed URL is required')
+      const platform = form.platform.trim()
+      if (!platform) throw new Error('Platform is required')
 
       if (form.id) {
         await api('/api/calendar-feeds', {
           method: 'PUT',
           body: JSON.stringify({
             id: form.id,
-            platform: form.platform,
+            platform,
             name: form.name.trim(),
             feedUrl: form.feedUrl.trim() || undefined,
             enabled: form.enabled,
@@ -165,7 +167,7 @@ export default function SyncPage() {
         await api('/api/calendar-feeds', {
           method: 'POST',
           body: JSON.stringify({
-            platform: form.platform,
+            platform,
             name: form.name.trim(),
             feedUrl: form.feedUrl.trim(),
             enabled: form.enabled,
@@ -173,6 +175,15 @@ export default function SyncPage() {
             defaultLeague: form.defaultLeague.trim() || null,
             importStartDate: form.importStartDate || null,
           }),
+        })
+      }
+      if (!db.settings.assigningPlatforms.some(p => p.toLowerCase() === platform.toLowerCase())) {
+        await write({
+          ...db,
+          settings: {
+            ...db.settings,
+            assigningPlatforms: [...db.settings.assigningPlatforms, platform].sort((a, b) => a.localeCompare(b)),
+          },
         })
       }
       setForm(emptyForm())

@@ -74,6 +74,13 @@ function gameStatusTone(status: GameStatus) {
   return 'info'
 }
 
+function uniquePlatforms(platforms: string[], games: Array<{ platformConfirmations?: Record<string, boolean> }>): string[] {
+  return Array.from(new Set([
+    ...platforms.map(p => p.trim()).filter(Boolean),
+    ...games.flatMap(g => Object.keys(g.platformConfirmations ?? {})),
+  ])).sort((a, b) => a.localeCompare(b))
+}
+
 export default function GamesPage() {
   const { db, write, loading } = useData()
   const navigate = useNavigate()
@@ -117,6 +124,10 @@ export default function GamesPage() {
   const selectedMileageOrigin = normalizeMileageOrigin(form.mileageOrigin, hasOtherWorkAddress)
   const selectedWorkLocation = workLocationOptions.find(option => option.value === selectedMileageOrigin) ?? workLocationOptions[0]
   const timeParts = to12HourParts(form.startTime || undefined)
+  const assigningPlatforms = useMemo(
+    () => uniquePlatforms(db.settings.assigningPlatforms, db.games),
+    [db.settings.assigningPlatforms, db.games]
+  )
   const availableYears = useMemo(() => {
     return Array.from(new Set(
       db.games
@@ -392,7 +403,7 @@ export default function GamesPage() {
                       <td>{g.league ?? ''}</td>
                       <td>
                         <div className="platform-row">
-                          {db.settings.assigningPlatforms.slice(0, 2).map(p => (
+                          {assigningPlatforms.map(p => (
                             <span key={p} className={'platform-chip ' + (g.platformConfirmations?.[p] ? 'on' : 'off')}>
                               {p}
                             </span>
@@ -467,7 +478,7 @@ export default function GamesPage() {
                               <div className="expanded-block">
                                 <div className="expanded-label">Platforms</div>
                                 <div className="expanded-value">
-                                  {(db.settings.assigningPlatforms.filter(p => g.platformConfirmations?.[p]).join(', ')) || 'No platform confirmations yet'}
+                                  {(assigningPlatforms.filter(p => g.platformConfirmations?.[p]).join(', ')) || 'No platform confirmations yet'}
                                 </div>
                               </div>
                               <div className="expanded-block">
@@ -493,7 +504,7 @@ export default function GamesPage() {
                       <h3>{noGamesYet ? 'No games yet' : 'No games match those filters'}</h3>
                       <p>
                         {noGamesYet
-                          ? 'Sync RefQuest or DragonFly, import a CSV, or add your first assignment here so this page becomes your working schedule.'
+                          ? 'Sync an assigning platform, import a CSV, or add your first assignment here so this page becomes your working schedule.'
                           : 'Try clearing one of the filters or your search to bring more assignments back into view.'}
                       </p>
                       <div className="btnbar">
@@ -543,7 +554,7 @@ export default function GamesPage() {
                 <div className="game-card-foot">
                   <span className={`pill ${payBadge.tone}`}>{payBadge.label}</span>
                   <div className="platform-row">
-                    {db.settings.assigningPlatforms.slice(0, 2).map(p => (
+                    {assigningPlatforms.map(p => (
                       <span key={p} className={'platform-chip ' + (g.platformConfirmations?.[p] ? 'on' : 'off')}>
                         {p}
                       </span>
@@ -761,9 +772,9 @@ export default function GamesPage() {
 
         <div className="field">
           <label>Assigning platforms confirmation</label>
-          <div className="small" style={{marginBottom: 6}}>Make these green once entered in RefQuest/DragonFly.</div>
+          <div className="small" style={{marginBottom: 6}}>Make these green once the game date is blocked or entered on that platform. Sync can also mark a platform when its iCal feed contains a block for this date.</div>
           <div className="btnbar">
-            {db.settings.assigningPlatforms.map(p => (
+            {assigningPlatforms.map(p => (
               <label key={p} className={'platform-chip ' + (form.platformConfirmations?.[p] ? 'on' : 'off')} style={{cursor:'pointer'}}>
                 <input
                   type="checkbox"
