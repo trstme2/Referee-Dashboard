@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState } from 'react'
+import HelpTip from '../components/HelpTip'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
 import type { CompetitionLevel, GameStatus, Sport, Role, SoccerRole, LacrosseRole, MileageOrigin } from '../lib/types'
@@ -567,6 +568,17 @@ export default function GamesPage() {
                 <p className="sub">Saving a game also creates/updates a linked calendar entry (2-hour default).</p>
               </div>
               <button className="btn compact" onClick={() => setFormOpen(false)}>Close</button>
+            </div>
+
+            <div className="editor-guidance-row">
+              <HelpTip title="Why am I filling this in manually?">
+                <p>Most assignor calendar feeds only send part of the story. Pay, exact field address, roundtrip mileage, and some level details often need a quick cleanup here.</p>
+                <p>This is the place to turn a synced assignment into a record you can actually use for taxes, mileage, and end-of-season reporting.</p>
+              </HelpTip>
+              <HelpTip label="Will sync wipe this out?" title="How manual edits and sync work together">
+                <p>No. Once Whistle Keeper matches a synced assignment to this game, later syncs are designed to merge around your manual edits instead of wiping fee, location, and mileage fields.</p>
+                <p>If a sync ever creates a duplicate, use Sync cleanup to review it instead of re-entering everything.</p>
+              </HelpTip>
             </div>
 
         <div className="row">

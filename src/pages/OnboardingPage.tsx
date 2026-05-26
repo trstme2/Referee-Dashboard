@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import HelpTip from '../components/HelpTip'
 import { useData } from '../lib/DataContext'
 import { getOnboardingProgress } from '../lib/onboarding'
 import type { CalendarFeed, FeedPlatform, Sport } from '../lib/types'
@@ -219,6 +220,11 @@ export default function OnboardingPage() {
               <h2>Assignment Feeds</h2>
               <p className="small">Cloud users can add an iCal feed now, or start with manual entry/imports.</p>
             </div>
+            <HelpTip className="help-tip-inline" title="How to set up an iCal feed">
+              <p>Whistle Keeper ingests iCal feeds from your assignor. Most assigning platforms hide the calendar link inside profile, calendar, or export settings.</p>
+              <p>Common places to check: DragonFly calendar tools, RefQuest calendar export, Arbiter schedule export, and Assignr calendar sync settings.</p>
+              <p>Once you paste the feed URL here, sync pulls assignments into Whistle Keeper without changing anything in the assignor itself.</p>
+            </HelpTip>
           </div>
 
           {mode === 'supabase' ? (
@@ -247,6 +253,12 @@ export default function OnboardingPage() {
               <div className="field">
                 <label>iCal feed URL</label>
                 <input value={feedUrl} onChange={(e) => setFeedUrl(e.target.value)} placeholder="https://..." />
+              </div>
+              <div className="onboarding-guidance">
+                <HelpTip label="What comes through?" title="What to expect from calendar feeds">
+                  <p>Most calendar feeds do not include everything you care about. Pay, precise location, mileage, and some league details are often missing or inconsistent.</p>
+                  <p>Add the missing pieces in game Edit after the sync. When the next sync matches the same assignment, Whistle Keeper keeps your manual details and merges the new feed data around them.</p>
+                </HelpTip>
               </div>
               <div className="btnbar">
                 <button className="btn primary" onClick={addFeed} disabled={feedSaving || !feedUrl.trim()}>

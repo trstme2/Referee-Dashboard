@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import HelpTip from '../components/HelpTip'
 import { useData } from '../lib/DataContext'
 import type { CalendarFeed, FeedPlatform, Sport, SyncIcsResult } from '../lib/types'
 
@@ -435,6 +436,16 @@ export default function SyncPage() {
       <section className="card">
         <h2>{form.id ? 'Edit feed' : 'Add feed'}</h2>
         <p className="small">Feed URLs are stored securely and hidden after they are saved.</p>
+        <div className="sync-help-row">
+          <HelpTip title="How to get a feed from your assignor">
+            <p>Whistle Keeper reads iCal feeds from your assigning platform. Look for calendar export, schedule sync, or subscribe options in DragonFly, RefQuest, Arbiter, Assignr, and similar tools.</p>
+            <p>If your assignor gives you a calendar link, paste it here. Sync only reads the feed. It does not write anything back to the assignor.</p>
+          </HelpTip>
+          <HelpTip label="What gets merged?" title="Why some details still need a quick edit">
+            <p>Calendar feeds usually bring date, time, and a summary. Pay, exact venue, roundtrip mileage, and league labels are often incomplete.</p>
+            <p>Add those details in the game editor after sync. When the same assignment syncs again, Whistle Keeper tries to preserve your manual fee, location, and mileage edits.</p>
+          </HelpTip>
+        </div>
 
         <div className="field">
           <label>Platform</label>
@@ -462,6 +473,7 @@ export default function SyncPage() {
             onChange={e => setForm({ ...form, feedUrl: e.target.value })}
             placeholder="https://.../calendar.ics"
           />
+          <div className="small">If the feed does not include pay or location, that is normal. You can add those after sync in each game.</div>
         </div>
 
         <div className="row">
