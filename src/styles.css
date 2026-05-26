@@ -1799,6 +1799,56 @@ body {
   background: rgba(2, 6, 23, 0.2);
 }
 
+.expense-tax-guidance {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.34fr);
+  gap: 14px;
+  align-items: start;
+  margin: 0 0 14px;
+  padding: 13px;
+  border: 1px solid rgba(96, 165, 250, 0.24);
+  border-radius: 12px;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.expense-tax-guidance h3 {
+  margin: 0 0 6px;
+  color: #eef7ff;
+  font-size: 14px;
+}
+
+.expense-tax-guidance p {
+  margin: 0;
+  color: #b7c5d7;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.expense-tax-guidance p + p {
+  margin-top: 7px;
+}
+
+.expense-tax-links {
+  display: grid;
+  gap: 8px;
+}
+
+.expense-tax-links a {
+  display: block;
+  padding: 8px 10px;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 10px;
+  background: rgba(96, 165, 250, 0.08);
+  color: #bfdbfe;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.expense-tax-links a:hover {
+  border-color: rgba(96, 165, 250, 0.48);
+  background: rgba(96, 165, 250, 0.13);
+}
+
 @media (max-width: 720px) {
   .page-section-head {
     flex-direction: column;
@@ -1824,6 +1874,10 @@ body {
   .receipt-actions,
   .receipt-editor {
     align-items: flex-start;
+  }
+
+  .expense-tax-guidance {
+    grid-template-columns: 1fr;
   }
 }
 

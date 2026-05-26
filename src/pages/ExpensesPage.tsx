@@ -236,6 +236,23 @@ export default function ExpensesPage() {
           </div>
         </div>
 
+        <div className="expense-tax-guidance">
+          <div>
+            <h3>Deductible expense check</h3>
+            <p>
+              Use the deductible flag as a review marker, not a tax answer. IRS rules generally look for business expenses that are ordinary, necessary, documented, and separated from personal use.
+            </p>
+            <p>
+              Be careful with mixed-use or personal items: season tickets to a local soccer team, fan gear, family meals, and claiming all of home internet because you use a tiny portion for assigning are the kinds of entries worth checking before export.
+            </p>
+          </div>
+          <div className="expense-tax-links">
+            <a href="https://www.irs.gov/forms-pubs/guide-to-business-expense-resources" target="_blank" rel="noreferrer">IRS business expense resources</a>
+            <a href="https://www.irs.gov/pub463" target="_blank" rel="noreferrer">Travel, gift, and car expenses</a>
+            <a href="https://www.irs.gov/taxtopics/tc509" target="_blank" rel="noreferrer">Business use of home</a>
+          </div>
+        </div>
+
         <div className="expense-card-list">
           {rows.map(e => (
             <article key={e.id} className="expense-card">
@@ -365,6 +382,7 @@ export default function ExpensesPage() {
               <option value="Yes">Yes</option>
               <option value="No">No</option>
             </select>
+            <div className="small">Mark only items you are comfortable reviewing as business expenses. Mixed personal/business costs may need allocation or may not qualify.</div>
           </div>
         </div>
 
