@@ -24,6 +24,7 @@ begin
       home_address text not null,
       other_work_address text null,
       default_timezone text null,
+      tax_mileage_rate_cents numeric null default 72.5,
       weekly_games_email_enabled boolean not null default false,
       onboarding_completed_at timestamptz null,
       calendar_export_token text null,
@@ -39,6 +40,9 @@ begin
     end if;
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='default_timezone') then
       alter table public.user_settings add column default_timezone text null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='tax_mileage_rate_cents') then
+      alter table public.user_settings add column tax_mileage_rate_cents numeric null default 72.5;
     end if;
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='calendar_export_token') then
       alter table public.user_settings add column calendar_export_token text null;
@@ -175,6 +179,7 @@ create table if not exists public.user_settings (
   home_address text not null,
   other_work_address text null,
   default_timezone text null,
+  tax_mileage_rate_cents numeric null default 72.5,
   weekly_games_email_enabled boolean not null default false,
   onboarding_completed_at timestamptz null,
   calendar_export_token text null,

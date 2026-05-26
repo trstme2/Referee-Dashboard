@@ -15,6 +15,7 @@ export default function SettingsPage() {
   const [home, setHome] = useState(db.settings.homeAddress)
   const [otherWork, setOtherWork] = useState(db.settings.otherWorkAddress ?? '')
   const [defaultTimezone, setDefaultTimezone] = useState(db.settings.defaultTimezone ?? 'America/New_York')
+  const [taxMileageRateCents, setTaxMileageRateCents] = useState(String(db.settings.taxMileageRateCents ?? 72.5))
   const [weeklyGamesEmailEnabled, setWeeklyGamesEmailEnabled] = useState(Boolean(db.settings.weeklyGamesEmailEnabled))
   const [platforms, setPlatforms] = useState(toListString(db.settings.assigningPlatforms))
   const [leagues, setLeagues] = useState(toListString(db.settings.leagues))
@@ -37,12 +38,18 @@ export default function SettingsPage() {
   }
 
   async function saveSettings() {
+    const parsedTaxMileageRateCents = Number(taxMileageRateCents)
+    if (!Number.isFinite(parsedTaxMileageRateCents) || parsedTaxMileageRateCents < 0) {
+      alert('Enter a mileage rate of 0 or higher.')
+      return
+    }
     const next = {
       ...db,
       settings: {
         homeAddress: home.trim(),
         otherWorkAddress: otherWork.trim(),
         defaultTimezone: defaultTimezone.trim() || 'America/New_York',
+        taxMileageRateCents: parsedTaxMileageRateCents,
         weeklyGamesEmailEnabled,
         assigningPlatforms: parseList(platforms),
         leagues: parseList(leagues).sort(),
@@ -166,6 +173,12 @@ export default function SettingsPage() {
               <label>Default timezone</label>
               <input value={defaultTimezone} onChange={e => setDefaultTimezone(e.target.value)} placeholder="America/New_York" />
               <div className="small">Use an IANA timezone like <code>America/Chicago</code> or <code>America/Los_Angeles</code>.</div>
+            </div>
+
+            <div className="field">
+              <label>Standard mileage rate (cents per mile)</label>
+              <input type="number" min={0} step="0.1" value={taxMileageRateCents} onChange={e => setTaxMileageRateCents(e.target.value)} />
+              <div className="small">Used on the Tax page to estimate a mileage amount for exports. Confirm the right rate for the tax year you are preparing.</div>
             </div>
 
             <div className="field">

@@ -1,8 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useData } from '../lib/DataContext'
 import { formatMoney } from '../lib/utils'
+import HelpTip from '../components/HelpTip'
 
 type IncomeBasis = 'cash' | 'accrual'
+
+const IRS_STANDARD_MILEAGE_RATES: Record<string, number> = {
+  '2026': 72.5,
+  '2025': 70,
+  '2024': 67,
+  '2023': 65.5,
+}
+
+function suggestedMileageRateCents(year: string): number {
+  return IRS_STANDARD_MILEAGE_RATES[year] ?? 72.5
+}
 
 function csvValue(v: unknown): string {
   const raw = String(v ?? '')
@@ -28,10 +40,18 @@ function downloadCsv(filename: string, csv: string) {
 }
 
 export default function TaxPage() {
-  const { db } = useData()
+  const { db, write, loading } = useData()
   const [year, setYear] = useState(String(new Date().getFullYear()))
   const [basis, setBasis] = useState<IncomeBasis>('cash')
+  const [mileageRateCents, setMileageRateCents] = useState(String(db.settings.taxMileageRateCents ?? suggestedMileageRateCents(year)))
   const [entered1099ByPayor, setEntered1099ByPayor] = useState<Record<string, string>>({})
+
+  function changeYear(nextYear: string) {
+    setYear(nextYear)
+    if (db.settings.taxMileageRateCents == null) {
+      setMileageRateCents(String(suggestedMileageRateCents(nextYear)))
+    }
+  }
 
   const incomeRows = useMemo(() => {
     return db.games
@@ -68,15 +88,6 @@ export default function TaxPage() {
       .map(([payor, dashboardIncome]) => ({ payor, dashboardIncome }))
       .sort((a, b) => (a.payor < b.payor ? -1 : 1))
   }, [incomeRows])
-
-  useEffect(() => {
-    const next: Record<string, string> = { ...entered1099ByPayor }
-    for (const p of incomeByPayor) {
-      if (next[p.payor] == null) next[p.payor] = ''
-    }
-    setEntered1099ByPayor(next)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [incomeByPayor.map((x) => x.payor).join('|')])
 
   const mileageRows = useMemo(() => {
     const gameMileage = db.games
@@ -123,18 +134,36 @@ export default function TaxPage() {
       .sort((a, b) => (a.expenseDate < b.expenseDate ? -1 : 1))
   }, [db.expenses, year])
 
+  const deductibleExpenseRows = useMemo(() => {
+    return expenseRows.filter((e) => e.taxDeductible === 'Yes')
+  }, [expenseRows])
+
   const expensesByCategory = useMemo(() => {
     const m = new Map<string, number>()
-    for (const e of expenseRows) m.set(e.category, (m.get(e.category) ?? 0) + e.amount)
+    for (const e of deductibleExpenseRows) m.set(e.category, (m.get(e.category) ?? 0) + e.amount)
     return [...m.entries()].map(([category, amount]) => ({ category, amount })).sort((a, b) => (a.category < b.category ? -1 : 1))
-  }, [expenseRows])
+  }, [deductibleExpenseRows])
 
   const totals = useMemo(() => {
     const income = incomeRows.reduce((s, r) => s + r.amount, 0)
     const miles = mileageRows.reduce((s, r) => s + r.miles, 0)
     const expenses = expenseRows.reduce((s, r) => s + r.amount, 0)
-    return { income, miles, expenses }
-  }, [incomeRows, mileageRows, expenseRows])
+    const deductibleExpenses = deductibleExpenseRows.reduce((s, r) => s + r.amount, 0)
+    return { income, miles, expenses, deductibleExpenses }
+  }, [incomeRows, mileageRows, expenseRows, deductibleExpenseRows])
+
+  const parsedMileageRateCents = Number(mileageRateCents)
+  const mileageRateIsValid = Number.isFinite(parsedMileageRateCents) && parsedMileageRateCents >= 0
+  const mileageEstimate = mileageRateIsValid ? (totals.miles * parsedMileageRateCents) / 100 : 0
+
+  const mileageExportRows = useMemo(() => {
+    const rate = mileageRateIsValid ? parsedMileageRateCents : 0
+    return mileageRows.map((r) => ({
+      ...r,
+      rateCents: rate,
+      estimatedStandardMileageAmount: Number(((r.miles * rate) / 100).toFixed(2)),
+    }))
+  }, [mileageRows, mileageRateIsValid, parsedMileageRateCents])
 
   const reconRows = useMemo(() => {
     return incomeByPayor.map((r) => {
@@ -154,7 +183,7 @@ export default function TaxPage() {
   }
 
   function exportMileageCsv() {
-    const csv = toCsv(mileageRows, ['source', 'date', 'description', 'miles', 'refId'])
+    const csv = toCsv(mileageExportRows, ['source', 'date', 'description', 'miles', 'rateCents', 'estimatedStandardMileageAmount', 'refId'])
     downloadCsv(`tax-mileage-${year}.csv`, csv)
   }
 
@@ -168,6 +197,20 @@ export default function TaxPage() {
     downloadCsv(`tax-1099-reconciliation-${basis}-${year}.csv`, csv)
   }
 
+  async function saveMileageRate() {
+    if (!mileageRateIsValid) {
+      alert('Enter a mileage rate of 0 or higher.')
+      return
+    }
+    await write({
+      ...db,
+      settings: {
+        ...db.settings,
+        taxMileageRateCents: parsedMileageRateCents,
+      },
+    })
+  }
+
   const qualityChecks = useMemo(() => {
     const gamesMissingFee = db.games.filter((g) => g.gameDate.startsWith(year) && g.status !== 'Canceled' && !g.gameFee).length
     const paidMissingDate = db.games.filter((g) => g.gameDate.startsWith(year) && g.paidConfirmed && !g.paidDate).length
@@ -177,51 +220,102 @@ export default function TaxPage() {
   }, [db.games, db.expenses, year])
 
   return (
-    <div className="grid">
+    <div className="grid tax-page">
       <section className="card">
-        <h2>Tax Export</h2>
-        <p className="sub">Year-end exports for income, mileage, expenses, and 1099 reconciliation.</p>
+        <div className="page-section-head">
+          <div>
+            <h2>Tax Prep Workspace</h2>
+            <p className="sub">Organize income, mileage, expenses, and 1099 comparisons before you export records.</p>
+          </div>
+          <HelpTip title="Tax prep guardrails" className="help-tip-inline">
+            <p>Whistle Keeper organizes records you entered. It does not decide what is deductible, choose your tax method, or prepare a return.</p>
+            <p>Confirm the right treatment, mileage rate, and filing approach with IRS guidance or a qualified tax professional.</p>
+          </HelpTip>
+        </div>
 
         <div className="row">
           <div className="field">
             <label>Tax year</label>
-            <input type="number" min={2000} max={2100} step={1} value={year} onChange={(e) => setYear(e.target.value)} />
+            <input type="number" min={2000} max={2100} step={1} value={year} onChange={(e) => changeYear(e.target.value)} />
           </div>
           <div className="field">
             <label>Income basis</label>
             <select value={basis} onChange={(e) => setBasis(e.target.value as IncomeBasis)}>
               <option value="cash">Cash (paid date)</option>
-              <option value="accrual">Accrual-ish (game date)</option>
+              <option value="accrual">Game date view</option>
             </select>
+            <div className="small">Use the view that matches how you and your preparer review records.</div>
+          </div>
+          <div className="field">
+            <label>Standard mileage rate (cents per mile)</label>
+            <input
+              type="number"
+              min={0}
+              step="0.1"
+              value={mileageRateCents}
+              onChange={(e) => setMileageRateCents(e.target.value)}
+            />
+            <div className="small">
+              2026 IRS business rate: 72.5 cents per mile. <a href="https://www.irs.gov/newsroom/irs-sets-2026-business-standard-mileage-rate-at-725-cents-per-mile-up-25-cents" target="_blank" rel="noreferrer">View IRS source</a>.
+            </div>
           </div>
         </div>
 
         <div className="kpi">
           <div className="box">
-            <div className="label">Income ({basis})</div>
+            <div className="label">Income records ({basis})</div>
             <div className="value">{formatMoney(totals.income)}</div>
           </div>
           <div className="box">
-            <div className="label">Mileage</div>
+            <div className="label">Miles logged</div>
             <div className="value">{totals.miles.toFixed(1)} mi</div>
           </div>
           <div className="box">
-            <div className="label">Expenses</div>
+            <div className="label">Mileage amount estimate</div>
+            <div className="value">{formatMoney(mileageEstimate)}</div>
+          </div>
+          <div className="box">
+            <div className="label">Expenses marked deductible</div>
+            <div className="value">{formatMoney(totals.deductibleExpenses)}</div>
+          </div>
+          <div className="box">
+            <div className="label">All expenses tracked</div>
             <div className="value">{formatMoney(totals.expenses)}</div>
           </div>
         </div>
 
         <div className="btnbar" style={{ marginTop: 10 }}>
+          <button className="btn" onClick={saveMileageRate} disabled={loading || !mileageRateIsValid}>Save Mileage Rate</button>
           <button className="btn primary" onClick={exportIncomeCsv}>Export Income CSV</button>
           <button className="btn" onClick={exportMileageCsv}>Export Mileage CSV</button>
           <button className="btn" onClick={exportExpensesCsv}>Export Expenses CSV</button>
           <button className="btn" onClick={exportReconCsv}>Export 1099 Reconciliation CSV</button>
         </div>
+
+        <div className="footer-note">
+          Exports are record summaries for review. Keep receipts, assignment records, payment records, and any notes your preparer asks for.
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="page-section-head">
+          <div>
+            <h2>Before You Export</h2>
+            <p className="sub">These checks look for missing information that can make records harder to reconcile later.</p>
+          </div>
+        </div>
+        <p className="small">
+          <span className={`pill ${qualityChecks.gamesMissingFee === 0 ? 'ok' : 'warn'}`}>Games missing fee: {qualityChecks.gamesMissingFee}</span>{' '}
+          <span className={`pill ${qualityChecks.paidMissingDate === 0 ? 'ok' : 'warn'}`}>Paid games missing paid date: {qualityChecks.paidMissingDate}</span>{' '}
+          <span className={`pill ${qualityChecks.mileageMissing === 0 ? 'ok' : 'warn'}`}>Games missing mileage: {qualityChecks.mileageMissing}</span>{' '}
+          <span className={`pill ${qualityChecks.expenseMissingFields === 0 ? 'ok' : 'warn'}`}>Expense issues: {qualityChecks.expenseMissingFields}</span>
+        </p>
       </section>
 
       <section className="grid cols2">
         <div className="card">
           <h2>1099 Reconciliation</h2>
+          <p className="sub">Enter the 1099 amount you received from each payor to spot differences against your game records.</p>
           <table className="table">
             <thead>
               <tr>
@@ -254,12 +348,13 @@ export default function TaxPage() {
             </tbody>
           </table>
           <div className="footer-note">
-            Use a consistent payor name on games and income entries for cleaner 1099 matching.
+            Variance is a comparison tool only. A difference may mean timing, naming, missing payments, reimbursement handling, or another issue to review.
           </div>
         </div>
 
         <div className="card">
           <h2>Expense Categories</h2>
+          <p className="sub">Totals include expenses you marked deductible. Use the Expenses page to change that flag.</p>
           <table className="table">
             <thead>
               <tr>
@@ -274,18 +369,10 @@ export default function TaxPage() {
                 </tr>
               ))}
               {expensesByCategory.length === 0 && (
-                <tr><td colSpan={2} className="small">No expenses in selected year.</td></tr>
+                <tr><td colSpan={2} className="small">No deductible expenses marked for selected year.</td></tr>
               )}
             </tbody>
           </table>
-
-          <h2 style={{ marginTop: 12 }}>Data Quality Checks</h2>
-          <p className="small">
-            <span className={`pill ${qualityChecks.gamesMissingFee === 0 ? 'ok' : 'warn'}`}>Games missing fee: {qualityChecks.gamesMissingFee}</span>{' '}
-            <span className={`pill ${qualityChecks.paidMissingDate === 0 ? 'ok' : 'warn'}`}>Paid missing date: {qualityChecks.paidMissingDate}</span>{' '}
-            <span className={`pill ${qualityChecks.mileageMissing === 0 ? 'ok' : 'warn'}`}>Games missing mileage: {qualityChecks.mileageMissing}</span>{' '}
-            <span className={`pill ${qualityChecks.expenseMissingFields === 0 ? 'ok' : 'warn'}`}>Expense issues: {qualityChecks.expenseMissingFields}</span>
-          </p>
         </div>
       </section>
     </div>

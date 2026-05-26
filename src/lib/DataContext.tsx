@@ -44,10 +44,18 @@ async function upsertUserSettingsCompat(client: any, payload: any, options?: { i
   if (result.error && (
     isMissingColumnError(result.error, 'user_settings', 'other_work_address') ||
     isMissingColumnError(result.error, 'user_settings', 'default_timezone') ||
+    isMissingColumnError(result.error, 'user_settings', 'tax_mileage_rate_cents') ||
     isMissingColumnError(result.error, 'user_settings', 'weekly_games_email_enabled') ||
     isMissingColumnError(result.error, 'user_settings', 'onboarding_completed_at')
   )) {
-    const { other_work_address, default_timezone, weekly_games_email_enabled, onboarding_completed_at, ...legacyPayload } = payload
+    const {
+      other_work_address: _other_work_address,
+      default_timezone: _default_timezone,
+      tax_mileage_rate_cents: _tax_mileage_rate_cents,
+      weekly_games_email_enabled: _weekly_games_email_enabled,
+      onboarding_completed_at: _onboarding_completed_at,
+      ...legacyPayload
+    } = payload
     result = await client
       .from('user_settings')
       .upsert([legacyPayload], { onConflict: 'user_id', ...(options ?? {}) })
@@ -62,7 +70,7 @@ async function insertGamesCompat(client: any, rows: any[]) {
     isMissingColumnError(result.error, 'games', 'mileage_origin') ||
     isMissingColumnError(result.error, 'games', 'timezone')
   )) {
-    const legacyRows = rows.map(({ mileage_origin, timezone, ...rest }) => rest)
+    const legacyRows = rows.map(({ mileage_origin: _mileage_origin, timezone: _timezone, ...rest }) => rest)
     result = await client.from('games').insert(legacyRows)
   }
   return result
@@ -74,7 +82,7 @@ async function upsertGamesCompat(client: any, rows: any[]) {
     isMissingColumnError(result.error, 'games', 'mileage_origin') ||
     isMissingColumnError(result.error, 'games', 'timezone')
   )) {
-    const legacyRows = rows.map(({ mileage_origin, timezone, ...rest }) => rest)
+    const legacyRows = rows.map(({ mileage_origin: _mileage_origin, timezone: _timezone, ...rest }) => rest)
     result = await client.from('games').upsert(legacyRows, { onConflict: 'id' })
   }
   return result
@@ -408,6 +416,7 @@ function rowToSettings(r: any): Settings {
     homeAddress: r.home_address ?? '',
     otherWorkAddress: r.other_work_address ?? '',
     defaultTimezone: r.default_timezone ?? 'America/New_York',
+    taxMileageRateCents: Number(r.tax_mileage_rate_cents ?? 72.5),
     weeklyGamesEmailEnabled: Boolean(r.weekly_games_email_enabled ?? false),
     onboardingCompletedAt: r.onboarding_completed_at ?? undefined,
     assigningPlatforms: Array.isArray(r.assigning_platforms) ? r.assigning_platforms : (r.assigning_platforms ?? []),
@@ -565,6 +574,7 @@ function settingsToRow(s: Settings, userId: string) {
     home_address: s.homeAddress,
     other_work_address: s.otherWorkAddress || null,
     default_timezone: s.defaultTimezone || 'America/New_York',
+    tax_mileage_rate_cents: s.taxMileageRateCents ?? 72.5,
     weekly_games_email_enabled: Boolean(s.weeklyGamesEmailEnabled),
     onboarding_completed_at: s.onboardingCompletedAt || null,
     assigning_platforms: s.assigningPlatforms,

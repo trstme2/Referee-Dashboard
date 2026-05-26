@@ -21,6 +21,7 @@ export interface Settings {
   homeAddress: string
   otherWorkAddress?: string
   defaultTimezone?: string
+  taxMileageRateCents?: number
   weeklyGamesEmailEnabled?: boolean
   onboardingCompletedAt?: string
   assigningPlatforms: string[]

@@ -42,6 +42,7 @@ function seedDB(): DB {
       homeAddress: '',
       otherWorkAddress: '',
       defaultTimezone: 'America/New_York',
+      taxMileageRateCents: 72.5,
       weeklyGamesEmailEnabled: false,
       onboardingCompletedAt: undefined,
       assigningPlatforms: ['DragonFly', 'RefQuest'],
