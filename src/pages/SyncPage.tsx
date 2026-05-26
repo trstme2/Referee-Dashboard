@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import FeedSetupGuide from '../components/FeedSetupGuide'
 import HelpTip from '../components/HelpTip'
 import { useData } from '../lib/DataContext'
 import type { CalendarFeed, FeedPlatform, Sport, SyncIcsResult } from '../lib/types'
@@ -446,6 +447,7 @@ export default function SyncPage() {
             <p>Add those details in the game editor after sync. When the same assignment syncs again, Whistle Keeper tries to preserve your manual fee, location, and mileage edits.</p>
           </HelpTip>
         </div>
+        <FeedSetupGuide />
 
         <div className="field">
           <label>Platform</label>

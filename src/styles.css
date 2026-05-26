@@ -1538,6 +1538,75 @@ body {
   margin-bottom: 12px;
 }
 
+.sync-help-row .help-tip,
+.editor-guidance-row .help-tip {
+  display: grid;
+  flex: 1 1 220px;
+  min-width: min(220px, 100%);
+}
+
+.sync-help-row .help-tip-panel,
+.editor-guidance-row .help-tip-panel {
+  position: static;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.feed-setup-guide {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.feed-guide-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.feed-guide-head strong {
+  color: #eef7ff;
+  font-size: 13px;
+}
+
+.feed-guide-head span {
+  color: #97a7bc;
+  font-size: 12px;
+}
+
+.feed-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.feed-setup-guide.compact .feed-guide-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.feed-guide-item {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.feed-guide-item p {
+  margin: 0;
+  color: #b7c5d7;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.feed-guide-note {
+  margin: 0;
+}
+
 .game-card,
 .day,
 .day .item,
@@ -2251,6 +2320,15 @@ body {
     left: 0;
     right: auto;
     width: min(100%, calc(100vw - 32px));
+  }
+
+  .feed-guide-head {
+    display: grid;
+  }
+
+  .feed-guide-grid,
+  .feed-setup-guide.compact .feed-guide-grid {
+    grid-template-columns: 1fr;
   }
 }
 

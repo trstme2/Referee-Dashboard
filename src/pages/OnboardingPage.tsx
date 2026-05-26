@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import FeedSetupGuide from '../components/FeedSetupGuide'
 import HelpTip from '../components/HelpTip'
 import { useData } from '../lib/DataContext'
 import { getOnboardingProgress } from '../lib/onboarding'
@@ -229,6 +230,7 @@ export default function OnboardingPage() {
 
           {mode === 'supabase' ? (
             <>
+              <FeedSetupGuide compact />
               <div className="row">
                 <div className="field">
                   <label>Platform</label>
