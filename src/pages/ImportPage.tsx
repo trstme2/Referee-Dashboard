@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import Papa from 'papaparse'
 import { useData } from '../lib/DataContext'
 import { addCsvImportIn, addCsvImportRowIn, rollbackImportIn, upsertCalendarEventIn, upsertGameIn } from '../lib/mutate'
+import { trackedSportsFor } from '../lib/preferences'
 import { normalizeHeader, safeNumber, toISOFromDateTime } from '../lib/utils'
 import type { CompetitionLevel, DB, Role, Sport } from '../lib/types'
 
@@ -210,8 +211,9 @@ function detectImportConflicts(db: DB, importType: 'Games' | 'Blocks', readyRows
 
 export default function ImportPage() {
   const { db, write, loading } = useData()
+  const sportOptions = useMemo(() => trackedSportsFor(db.settings.trackedSports, db.games.map(g => g.sport)), [db.settings.trackedSports, db.games])
   const [importType, setImportType] = useState<'Games'|'Blocks'>('Games')
-  const [importSport, setImportSport] = useState<'Soccer'|'Lacrosse'>('Soccer')
+  const [importSport, setImportSport] = useState<Sport>(() => trackedSportsFor(db.settings.trackedSports)[0] ?? 'Soccer')
   const [log, setLog] = useState<string>('')
   const [preview, setPreview] = useState<ImportPreview | null>(null)
 
@@ -454,8 +456,7 @@ export default function ImportPage() {
             <div className="field">
               <label>Sport for this CSV</label>
               <select value={importSport} onChange={e => setImportSport(e.target.value as any)}>
-                <option value="Soccer">Soccer</option>
-                <option value="Lacrosse">Lacrosse</option>
+                {sportOptions.map((sport) => <option key={sport} value={sport}>{sport}</option>)}
               </select>
             </div>
           )}

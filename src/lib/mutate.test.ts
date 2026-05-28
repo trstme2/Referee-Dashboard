@@ -18,6 +18,8 @@ function baseDB(): DB {
     settings: {
       homeAddress: '123 Main St',
       otherWorkAddress: '456 Office Park Dr',
+      trackedSports: ['Soccer', 'Lacrosse'],
+      showGamePlatformChips: true,
       assigningPlatforms: ['RefQuest', 'DragonFly'],
       leagues: [],
     },

@@ -4,6 +4,7 @@ import FeedSetupGuide from '../components/FeedSetupGuide'
 import HelpTip from '../components/HelpTip'
 import { useData } from '../lib/DataContext'
 import { getOnboardingProgress } from '../lib/onboarding'
+import { trackedSportsFor } from '../lib/preferences'
 import type { CalendarFeed, FeedPlatform, Sport } from '../lib/types'
 
 const platformSuggestions = [
@@ -32,6 +33,7 @@ export default function OnboardingPage() {
   const [homeAddress, setHomeAddress] = useState(db.settings.homeAddress)
   const [timezone, setTimezone] = useState(db.settings.defaultTimezone || 'America/New_York')
   const [weeklyEmail, setWeeklyEmail] = useState(Boolean(db.settings.weeklyGamesEmailEnabled))
+  const [trackedSports, setTrackedSports] = useState(listString(db.settings.trackedSports))
   const [platforms, setPlatforms] = useState(listString(db.settings.assigningPlatforms))
   const [leagues, setLeagues] = useState(listString(db.settings.leagues))
   const [feeds, setFeeds] = useState<CalendarFeed[]>([])
@@ -44,6 +46,7 @@ export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null)
 
   const token = session?.access_token ?? null
+  const sportOptions = useMemo(() => trackedSportsFor(parseList(trackedSports)), [trackedSports])
 
   async function feedApi(path: string, init?: RequestInit) {
     if (!token) throw new Error('Sign in to manage assignment feeds.')
@@ -87,6 +90,7 @@ export default function OnboardingPage() {
         homeAddress: homeAddress.trim(),
         defaultTimezone: timezone.trim() || 'America/New_York',
         weeklyGamesEmailEnabled: weeklyEmail,
+        trackedSports: sportOptions,
         assigningPlatforms: parseList(platforms),
         leagues: parseList(leagues).sort(),
         onboardingCompletedAt: options?.complete ? now : db.settings.onboardingCompletedAt,
@@ -133,6 +137,7 @@ export default function OnboardingPage() {
   }
 
   const hasProfile = Boolean(homeAddress.trim()) && Boolean(timezone.trim())
+  const hasSports = sportOptions.length > 0
   const hasPlatforms = parseList(platforms).length > 0
 
   return (
@@ -195,6 +200,12 @@ export default function OnboardingPage() {
             </div>
           </div>
 
+          <div className="field">
+            <label>Sports you want to track</label>
+            <input value={trackedSports} onChange={(e) => setTrackedSports(e.target.value)} placeholder="Soccer, Lacrosse, Basketball, Football" />
+            <div className="small">These sports appear in game entry, CSV imports, feeds, and requirements. You can change this later in Settings.</div>
+          </div>
+
           <div className="row">
             <div className="field">
               <label>Assigning platforms</label>
@@ -207,7 +218,7 @@ export default function OnboardingPage() {
           </div>
 
           <div className="btnbar">
-            <button className="btn primary" onClick={() => saveDefaults()} disabled={loading || !hasPlatforms}>
+            <button className="btn primary" onClick={() => saveDefaults()} disabled={loading || !hasSports || !hasPlatforms}>
               Save defaults
             </button>
             {!hasProfile ? <span className="small">Add a mileage origin when you are ready to track tax mileage.</span> : null}
@@ -243,8 +254,7 @@ export default function OnboardingPage() {
                   <label>Sport</label>
                   <select value={feedSport} onChange={(e) => setFeedSport(e.target.value as '' | Sport)}>
                     <option value="">Auto-detect</option>
-                    <option value="Soccer">Soccer</option>
-                    <option value="Lacrosse">Lacrosse</option>
+                    {sportOptions.map((sport) => <option key={sport} value={sport}>{sport}</option>)}
                   </select>
                 </div>
               </div>
@@ -322,7 +332,7 @@ export default function OnboardingPage() {
           <p className="small">You can return to setup from the nav any time.</p>
         </div>
         <div className="btnbar">
-          <button className="btn primary" onClick={finishSetup} disabled={loading || !hasPlatforms}>
+          <button className="btn primary" onClick={finishSetup} disabled={loading || !hasSports || !hasPlatforms}>
             Mark setup complete
           </button>
           <button className="btn" onClick={async () => { await refresh(); navigate('/') }}>

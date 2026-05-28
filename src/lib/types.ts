@@ -1,4 +1,4 @@
-export type Sport = 'Soccer' | 'Lacrosse'
+export type Sport = 'Soccer' | 'Lacrosse' | (string & {})
 export type CompetitionLevel = 'High School' | 'College' | 'Club'
 export type FeedPlatform = 'RefQuest' | 'DragonFly' | (string & {})
 
@@ -14,7 +14,7 @@ export type RequirementStatus = 'Not Started' | 'In Progress' | 'Complete' | 'Wa
 
 export type SoccerRole = 'Center' | 'AR' | '4th' | 'Dual' | 'Mentor'
 export type LacrosseRole = 'Lead' | 'Field Judge' | 'Alternate' | 'Mentor'
-export type Role = SoccerRole | LacrosseRole
+export type Role = SoccerRole | LacrosseRole | (string & {})
 export type MileageOrigin = 'home' | 'other'
 
 export interface Settings {
@@ -24,6 +24,8 @@ export interface Settings {
   taxMileageRateCents?: number
   weeklyGamesEmailEnabled?: boolean
   onboardingCompletedAt?: string
+  trackedSports: string[]
+  showGamePlatformChips?: boolean
   assigningPlatforms: string[]
   leagues: string[]
 }

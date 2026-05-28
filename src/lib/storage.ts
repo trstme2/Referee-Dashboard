@@ -45,6 +45,8 @@ function seedDB(): DB {
       taxMileageRateCents: 72.5,
       weeklyGamesEmailEnabled: false,
       onboardingCompletedAt: undefined,
+      trackedSports: ['Soccer', 'Lacrosse'],
+      showGamePlatformChips: true,
       assigningPlatforms: ['DragonFly', 'RefQuest'],
       leagues: [],
     },

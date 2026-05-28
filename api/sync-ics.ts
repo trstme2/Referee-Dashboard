@@ -11,7 +11,7 @@ export type Feed = {
   name: string
   feed_url: string
   enabled: boolean
-  sport: 'Soccer' | 'Lacrosse' | null
+  sport: string | null
   default_league: string | null
   import_start_date: string | null
 }
@@ -82,9 +82,11 @@ function hhmmInZone(d: Date, timeZone: string): string {
   return `${String(p.hh).padStart(2, '0')}:${String(p.mm).padStart(2, '0')}`
 }
 
-function inferSport(feedSport: Feed['sport'], text: string): 'Soccer' | 'Lacrosse' {
-  if (feedSport === 'Soccer' || feedSport === 'Lacrosse') return feedSport
+function inferSport(feedSport: Feed['sport'], text: string): string {
+  if (feedSport?.trim()) return feedSport.trim()
   if (/\blacrosse\b|\blax\b/i.test(text)) return 'Lacrosse'
+  if (/\bbasketball\b|\bhoops\b|\bbb\b/i.test(text)) return 'Basketball'
+  if (/\bfootball\b|\bgridiron\b/i.test(text)) return 'Football'
   return 'Soccer'
 }
 
@@ -104,7 +106,7 @@ function inferLevelDetail(text: string): string | null {
   return null
 }
 
-function inferRole(platform: Feed['platform'], sport: 'Soccer' | 'Lacrosse', text: string): string | null {
+function inferRole(platform: Feed['platform'], sport: string, text: string): string | null {
   if (platform === 'RefQuest' && sport === 'Lacrosse') {
     if (/head umpire/i.test(text)) return 'Lead'
     if (/umpire\s*(1|2)\b/i.test(text)) return 'Ref'
@@ -119,7 +121,7 @@ function cleanupDragonFlyTeamName(value: string): string {
     .trim()
 }
 
-function parseDragonFlySummary(summary: string, sport: 'Soccer' | 'Lacrosse') {
+function parseDragonFlySummary(summary: string, sport: string) {
   const raw = String(summary || '').replace(/\s+/g, ' ').trim()
   if (!raw) return { role: null as string | null, awayTeam: null as string | null, homeTeam: null as string | null, levelDetail: null as string | null }
 

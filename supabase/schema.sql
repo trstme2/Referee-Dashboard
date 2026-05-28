@@ -4,15 +4,6 @@
 
 create extension if not exists pgcrypto;
 
-do $$
-begin
-  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='user_settings') then
-    update public.user_settings
-    set home_address = ''
-    where home_address = '399 S. Columbia Ave, Bexley, OH 43209';
-  end if;
-end $$;
-
 -- =========================
 -- MIGRATIONS (best-effort)
 -- =========================
@@ -28,6 +19,8 @@ begin
       weekly_games_email_enabled boolean not null default false,
       onboarding_completed_at timestamptz null,
       calendar_export_token text null,
+      tracked_sports jsonb not null default '["Soccer","Lacrosse"]'::jsonb,
+      show_game_platform_chips boolean not null default true,
       assigning_platforms jsonb not null default '[]'::jsonb,
       leagues jsonb not null default '[]'::jsonb,
       updated_at timestamptz not null default now()
@@ -52,6 +45,12 @@ begin
     end if;
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='onboarding_completed_at') then
       alter table public.user_settings add column onboarding_completed_at timestamptz null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='tracked_sports') then
+      alter table public.user_settings add column tracked_sports jsonb not null default '["Soccer","Lacrosse"]'::jsonb;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='show_game_platform_chips') then
+      alter table public.user_settings add column show_game_platform_chips boolean not null default true;
     end if;
   end if;
 
@@ -116,7 +115,7 @@ begin
       name text not null,
       feed_url text not null,
       enabled boolean not null default true,
-      sport text null check (sport in ('Soccer','Lacrosse') or sport is null),
+      sport text null,
       default_league text null,
       import_start_date date null,
       last_synced_at timestamptz null,
@@ -133,6 +132,14 @@ begin
         and conrelid = 'public.calendar_feeds'::regclass
     ) then
       alter table public.calendar_feeds drop constraint calendar_feeds_platform_check;
+    end if;
+    if exists (
+      select 1
+      from pg_constraint
+      where conname = 'calendar_feeds_sport_check'
+        and conrelid = 'public.calendar_feeds'::regclass
+    ) then
+      alter table public.calendar_feeds drop constraint calendar_feeds_sport_check;
     end if;
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='calendar_feeds' and column_name='import_start_date') then
       alter table public.calendar_feeds add column import_start_date date null;
@@ -183,6 +190,8 @@ create table if not exists public.user_settings (
   weekly_games_email_enabled boolean not null default false,
   onboarding_completed_at timestamptz null,
   calendar_export_token text null,
+  tracked_sports jsonb not null default '["Soccer","Lacrosse"]'::jsonb,
+  show_game_platform_chips boolean not null default true,
   assigning_platforms jsonb not null default '[]'::jsonb,
   leagues jsonb not null default '[]'::jsonb,
   updated_at timestamptz not null default now()
@@ -244,7 +253,7 @@ create table if not exists public.calendar_feeds (
   name text not null,
   feed_url text not null,
   enabled boolean not null default true,
-  sport text null check (sport in ('Soccer','Lacrosse') or sport is null),
+  sport text null,
   default_league text null,
   import_start_date date null,
   last_synced_at timestamptz null,

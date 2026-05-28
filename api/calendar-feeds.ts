@@ -3,7 +3,7 @@ import { createAuthedSupabase, getBearerToken, maskUrl, toJsonBody } from './aut
 import { validateFeedUrl } from './feed-fetch.js'
 
 type FeedPlatform = 'RefQuest' | 'DragonFly' | string
-type FeedSport = 'Soccer' | 'Lacrosse' | null
+type FeedSport = string | null
 
 function normalizeDateOnly(x: unknown): string | null {
   const s = String(x || '').trim()
@@ -19,8 +19,10 @@ function normalizePlatform(x: unknown): FeedPlatform {
 }
 
 function normalizeSport(x: unknown): FeedSport {
-  if (x === 'Soccer' || x === 'Lacrosse') return x
-  return null
+  const raw = String(x || '').trim()
+  if (!raw) return null
+  if (raw.length > 60) throw new Error('sport must be 60 characters or fewer')
+  return raw
 }
 
 function mustUrl(s: unknown): string {

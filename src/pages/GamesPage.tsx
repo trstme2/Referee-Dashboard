@@ -2,12 +2,12 @@ import { Fragment, useMemo, useState } from 'react'
 import HelpTip from '../components/HelpTip'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
-import type { CompetitionLevel, GameStatus, Sport, Role, SoccerRole, LacrosseRole, MileageOrigin } from '../lib/types'
+import { trackedSportsFor } from '../lib/preferences'
+import type { CompetitionLevel, GameStatus, Role, SoccerRole, LacrosseRole, MileageOrigin } from '../lib/types'
 import { upsertGameIn, deleteGameIn } from '../lib/mutate'
 import { getDrivingDistanceMiles } from '../lib/distance'
 import { formatMoney, isWithinNextDays } from '../lib/utils'
 
-const sports: Sport[] = ['Soccer', 'Lacrosse']
 const levels: CompetitionLevel[] = ['High School', 'College', 'Club']
 const statuses: GameStatus[] = ['Scheduled', 'Played', 'Paid / Complete', 'Canceled']
 
@@ -84,6 +84,7 @@ function uniquePlatforms(platforms: string[], games: Array<{ platformConfirmatio
 export default function GamesPage() {
   const { db, write, loading } = useData()
   const navigate = useNavigate()
+  const initialSport = trackedSportsFor(db.settings.trackedSports, db.games.map(g => g.sport))[0] ?? 'Soccer'
   const [filter, setFilter] = useState<'All' | GameStatus>('All')
   const [q, setQ] = useState<string>('')
   const [yearFilter, setYearFilter] = useState<string>('All years')
@@ -92,7 +93,7 @@ export default function GamesPage() {
 
   const [form, setForm] = useState({
     id: '',
-    sport: 'Soccer' as Sport,
+    sport: initialSport,
     competitionLevel: 'High School' as CompetitionLevel,
     league: '',
     levelDetail: '',
@@ -113,7 +114,11 @@ export default function GamesPage() {
     roundtripMiles: '' as string,
   })
 
-  const rolesForSport = form.sport === 'Soccer' ? soccerRoles : lacrosseRoles
+  const sports = useMemo(
+    () => trackedSportsFor(db.settings.trackedSports, db.games.map(g => g.sport)),
+    [db.settings.trackedSports, db.games]
+  )
+  const rolesForSport = form.sport === 'Soccer' ? soccerRoles : form.sport === 'Lacrosse' ? lacrosseRoles : []
   const hasOtherWorkAddress = Boolean(db.settings.otherWorkAddress?.trim())
   const workLocationOptions = [
     { value: 'home' as MileageOrigin, label: 'Home office', address: db.settings.homeAddress.trim() },
@@ -128,6 +133,8 @@ export default function GamesPage() {
     () => uniquePlatforms(db.settings.assigningPlatforms, db.games),
     [db.settings.assigningPlatforms, db.games]
   )
+  const showPlatformChips = db.settings.showGamePlatformChips !== false
+  const gameTableColSpan = showPlatformChips ? 13 : 12
   const availableYears = useMemo(() => {
     return Array.from(new Set(
       db.games
@@ -188,7 +195,7 @@ export default function GamesPage() {
   function resetForm() {
     setForm({
       id: '',
-      sport: 'Soccer',
+      sport: sports[0] ?? 'Soccer',
       competitionLevel: 'High School',
       league: '',
       levelDetail: '',
@@ -380,7 +387,7 @@ export default function GamesPage() {
           <table className="table">
             <thead>
               <tr>
-                <th></th><th>Date</th><th>Sport</th><th>Level</th><th>Level detail</th><th>League</th><th>Platforms</th><th>Roundtrip mi</th><th>Pay</th><th>Paid</th><th>Location</th><th>Status</th><th></th>
+                <th></th><th>Date</th><th>Sport</th><th>Level</th><th>Level detail</th><th>League</th>{showPlatformChips ? <th>Platforms</th> : null}<th>Roundtrip mi</th><th>Pay</th><th>Paid</th><th>Location</th><th>Status</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -401,15 +408,17 @@ export default function GamesPage() {
                       <td>{g.competitionLevel}</td>
                       <td>{(g as any).levelDetail ?? ''}</td>
                       <td>{g.league ?? ''}</td>
-                      <td>
-                        <div className="platform-row">
-                          {assigningPlatforms.map(p => (
-                            <span key={p} className={'platform-chip ' + (g.platformConfirmations?.[p] ? 'on' : 'off')}>
-                              {p}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
+                      {showPlatformChips ? (
+                        <td>
+                          <div className="platform-row">
+                            {assigningPlatforms.map(p => (
+                              <span key={p} className={'platform-chip ' + (g.platformConfirmations?.[p] ? 'on' : 'off')}>
+                                {p}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      ) : null}
                       <td>{(g as any).roundtripMiles != null ? Number((g as any).roundtripMiles).toFixed(0) : ''}</td>
                       <td>{(g as any).gameFee != null ? `$${Number((g as any).gameFee).toFixed(0)}` : ''}</td>
                       <td><span className={`pill ${payBadge.tone}`}>{payBadge.label}</span></td>
@@ -442,7 +451,7 @@ export default function GamesPage() {
                     </tr>
                     {isExpanded ? (
                       <tr className="expanded">
-                        <td colSpan={13}>
+                        <td colSpan={gameTableColSpan}>
                           <div className="expanded-panel">
                             <div className="expanded-grid">
                               <div className="expanded-block">
@@ -475,12 +484,14 @@ export default function GamesPage() {
                                   {g.mileageOrigin === 'other' ? 'from other work location' : 'from home office'}
                                 </div>
                               </div>
-                              <div className="expanded-block">
-                                <div className="expanded-label">Platforms</div>
-                                <div className="expanded-value">
-                                  {(assigningPlatforms.filter(p => g.platformConfirmations?.[p]).join(', ')) || 'No platform confirmations yet'}
+                              {showPlatformChips ? (
+                                <div className="expanded-block">
+                                  <div className="expanded-label">Platforms</div>
+                                  <div className="expanded-value">
+                                    {(assigningPlatforms.filter(p => g.platformConfirmations?.[p]).join(', ')) || 'No platform confirmations yet'}
+                                  </div>
                                 </div>
-                              </div>
+                              ) : null}
                               <div className="expanded-block">
                                 <div className="expanded-label">Notes</div>
                                 <div className="expanded-value">{g.notes?.trim() ? g.notes : 'No notes yet'}</div>
@@ -499,7 +510,7 @@ export default function GamesPage() {
               })}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="empty-cell">
+                  <td colSpan={gameTableColSpan} className="empty-cell">
                     <div className="empty-state centered">
                       <h3>{noGamesYet ? 'No games yet' : 'No games match those filters'}</h3>
                       <p>
@@ -553,13 +564,15 @@ export default function GamesPage() {
                 <div className="small">{g.locationAddress || 'No location entered'}</div>
                 <div className="game-card-foot">
                   <span className={`pill ${payBadge.tone}`}>{payBadge.label}</span>
-                  <div className="platform-row">
-                    {assigningPlatforms.map(p => (
-                      <span key={p} className={'platform-chip ' + (g.platformConfirmations?.[p] ? 'on' : 'off')}>
-                        {p}
-                      </span>
-                    ))}
-                  </div>
+                  {showPlatformChips ? (
+                    <div className="platform-row">
+                      {assigningPlatforms.map(p => (
+                        <span key={p} className={'platform-chip ' + (g.platformConfirmations?.[p] ? 'on' : 'off')}>
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                   <button className="btn compact" onClick={() => edit(g.id)}>Edit</button>
                 </div>
               </article>
@@ -703,10 +716,14 @@ export default function GamesPage() {
           </div>
           <div className="field">
             <label>Role</label>
-            <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value as any })}>
-              <option value="">(none)</option>
-              {rolesForSport.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
+            {rolesForSport.length ? (
+              <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value as any })}>
+                <option value="">(none)</option>
+                {rolesForSport.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            ) : (
+              <input value={form.role} onChange={e => setForm({ ...form, role: e.target.value as any })} placeholder="Referee, Line Judge, Umpire, Crew Chief..." />
+            )}
           </div>
         </div>
 

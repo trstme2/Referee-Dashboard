@@ -10,6 +10,7 @@ import {
   setRequirementStatusIn,
   updateRequirementActivityIn,
 } from '../lib/mutate'
+import { trackedSportsFor } from '../lib/preferences'
 import type { RequirementActivity, RequirementInstance, RequirementStatus } from '../lib/types'
 import { yyyyMmDd } from '../lib/utils'
 import { createRequirementEvidenceSignedUrl, deleteRequirementEvidence, uploadRequirementEvidence } from '../lib/documents'
@@ -68,6 +69,10 @@ export default function RequirementsPage() {
   const defs = db.requirementDefinitions
   const hasDefinitions = defs.length > 0
   const today = yyyyMmDd(new Date())
+  const sportOptions = useMemo(
+    () => trackedSportsFor(db.settings.trackedSports, defs.map(d => d.sport).filter((sport): sport is string => Boolean(sport && sport !== 'Any'))),
+    [db.settings.trackedSports, defs]
+  )
 
   const instances = useMemo(() => {
     return db.requirementInstances
@@ -398,8 +403,7 @@ export default function RequirementsPage() {
               <label>Sport</label>
               <select value={newDef.sport} onChange={e => setNewDef({ ...newDef, sport: e.target.value as any })}>
                 <option value="Any">Any</option>
-                <option value="Soccer">Soccer</option>
-                <option value="Lacrosse">Lacrosse</option>
+                {sportOptions.map((sport) => <option key={sport} value={sport}>{sport}</option>)}
               </select>
             </div>
             <div className="field">

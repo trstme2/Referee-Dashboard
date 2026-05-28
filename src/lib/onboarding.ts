@@ -1,6 +1,6 @@
 import type { DB } from './types'
 
-export type OnboardingStepId = 'profile' | 'platforms' | 'records' | 'requirements' | 'tax'
+export type OnboardingStepId = 'profile' | 'sports' | 'platforms' | 'records' | 'requirements' | 'tax'
 
 export type OnboardingStep = {
   id: OnboardingStepId
@@ -10,6 +10,7 @@ export type OnboardingStep = {
 
 export function getOnboardingSteps(db: DB): OnboardingStep[] {
   const hasProfile = Boolean(db.settings.homeAddress.trim()) && Boolean(db.settings.defaultTimezone?.trim())
+  const hasSports = (db.settings.trackedSports ?? []).length > 0
   const hasPlatforms = db.settings.assigningPlatforms.length > 0
   const hasAssignmentRecords = db.games.length > 0 || db.csvImports.length > 0
   const hasRequirements = db.requirementInstances.length > 0 || db.requirementDefinitions.length > 0
@@ -17,6 +18,7 @@ export function getOnboardingSteps(db: DB): OnboardingStep[] {
 
   return [
     { id: 'profile', label: 'Profile', complete: hasProfile },
+    { id: 'sports', label: 'Sports', complete: hasSports },
     { id: 'platforms', label: 'Platforms', complete: hasPlatforms },
     { id: 'records', label: 'Assignment records', complete: hasAssignmentRecords },
     { id: 'requirements', label: 'Requirements', complete: hasRequirements },

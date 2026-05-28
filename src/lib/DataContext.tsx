@@ -46,6 +46,8 @@ async function upsertUserSettingsCompat(client: any, payload: any, options?: { i
     isMissingColumnError(result.error, 'user_settings', 'default_timezone') ||
     isMissingColumnError(result.error, 'user_settings', 'tax_mileage_rate_cents') ||
     isMissingColumnError(result.error, 'user_settings', 'weekly_games_email_enabled') ||
+    isMissingColumnError(result.error, 'user_settings', 'tracked_sports') ||
+    isMissingColumnError(result.error, 'user_settings', 'show_game_platform_chips') ||
     isMissingColumnError(result.error, 'user_settings', 'onboarding_completed_at')
   )) {
     const {
@@ -53,6 +55,8 @@ async function upsertUserSettingsCompat(client: any, payload: any, options?: { i
       default_timezone: _default_timezone,
       tax_mileage_rate_cents: _tax_mileage_rate_cents,
       weekly_games_email_enabled: _weekly_games_email_enabled,
+      tracked_sports: _tracked_sports,
+      show_game_platform_chips: _show_game_platform_chips,
       onboarding_completed_at: _onboarding_completed_at,
       ...legacyPayload
     } = payload
@@ -419,6 +423,8 @@ function rowToSettings(r: any): Settings {
     taxMileageRateCents: Number(r.tax_mileage_rate_cents ?? 72.5),
     weeklyGamesEmailEnabled: Boolean(r.weekly_games_email_enabled ?? false),
     onboardingCompletedAt: r.onboarding_completed_at ?? undefined,
+    trackedSports: Array.isArray(r.tracked_sports) ? r.tracked_sports : (r.tracked_sports ?? ['Soccer', 'Lacrosse']),
+    showGamePlatformChips: r.show_game_platform_chips !== false,
     assigningPlatforms: Array.isArray(r.assigning_platforms) ? r.assigning_platforms : (r.assigning_platforms ?? []),
     leagues: Array.isArray(r.leagues) ? r.leagues : (r.leagues ?? []),
   }
@@ -577,6 +583,8 @@ function settingsToRow(s: Settings, userId: string) {
     tax_mileage_rate_cents: s.taxMileageRateCents ?? 72.5,
     weekly_games_email_enabled: Boolean(s.weeklyGamesEmailEnabled),
     onboarding_completed_at: s.onboardingCompletedAt || null,
+    tracked_sports: s.trackedSports?.length ? s.trackedSports : ['Soccer', 'Lacrosse'],
+    show_game_platform_chips: s.showGamePlatformChips !== false,
     assigning_platforms: s.assigningPlatforms,
     leagues: s.leagues,
     updated_at: nowISO(),

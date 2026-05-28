@@ -17,6 +17,8 @@ export default function SettingsPage() {
   const [defaultTimezone, setDefaultTimezone] = useState(db.settings.defaultTimezone ?? 'America/New_York')
   const [taxMileageRateCents, setTaxMileageRateCents] = useState(String(db.settings.taxMileageRateCents ?? 72.5))
   const [weeklyGamesEmailEnabled, setWeeklyGamesEmailEnabled] = useState(Boolean(db.settings.weeklyGamesEmailEnabled))
+  const [trackedSports, setTrackedSports] = useState(toListString(db.settings.trackedSports))
+  const [showGamePlatformChips, setShowGamePlatformChips] = useState(db.settings.showGamePlatformChips !== false)
   const [platforms, setPlatforms] = useState(toListString(db.settings.assigningPlatforms))
   const [leagues, setLeagues] = useState(toListString(db.settings.leagues))
   const [calendarSubscriptionUrl, setCalendarSubscriptionUrl] = useState('')
@@ -46,11 +48,14 @@ export default function SettingsPage() {
     const next = {
       ...db,
       settings: {
+        ...db.settings,
         homeAddress: home.trim(),
         otherWorkAddress: otherWork.trim(),
         defaultTimezone: defaultTimezone.trim() || 'America/New_York',
         taxMileageRateCents: parsedTaxMileageRateCents,
         weeklyGamesEmailEnabled,
+        trackedSports: parseList(trackedSports),
+        showGamePlatformChips,
         assigningPlatforms: parseList(platforms),
         leagues: parseList(leagues).sort(),
       },
@@ -190,6 +195,23 @@ export default function SettingsPage() {
                 /> Weekly Sunday game email
               </label>
               <div className="small">Send your Games Next 7 Days schedule to your signed-in email address each Sunday.</div>
+            </div>
+
+            <div className="field">
+              <label>Sports to track (comma-separated)</label>
+              <input value={trackedSports} onChange={e => setTrackedSports(e.target.value)} placeholder="Soccer, Lacrosse, Basketball, Football" />
+              <div className="small">Used for game entry, CSV imports, assignment feeds, and requirements.</div>
+            </div>
+
+            <div className="field">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={showGamePlatformChips}
+                  onChange={e => setShowGamePlatformChips(e.target.checked)}
+                /> Show assigning-platform chips on Games
+              </label>
+              <div className="small">Turn this off when the Games list feels too crowded. Platform confirmations are still saved and editable.</div>
             </div>
 
             <div className="field">

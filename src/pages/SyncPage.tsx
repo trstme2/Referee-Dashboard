@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import FeedSetupGuide from '../components/FeedSetupGuide'
 import HelpTip from '../components/HelpTip'
 import { useData } from '../lib/DataContext'
+import { trackedSportsFor } from '../lib/preferences'
 import type { CalendarFeed, FeedPlatform, Sport, SyncIcsResult } from '../lib/types'
 
 type FeedForm = {
@@ -53,6 +54,7 @@ export default function SyncPage() {
   const [err, setErr] = useState<string | null>(null)
 
   const token = session?.access_token ?? null
+  const sportOptions = useMemo(() => trackedSportsFor(db.settings.trackedSports, db.games.map(g => g.sport)), [db.settings.trackedSports, db.games])
 
   const feedCounts = useMemo(() => ({
     DragonFly: feeds.filter(f => f.platform === 'DragonFly').length,
@@ -494,8 +496,7 @@ export default function SyncPage() {
             <label>Sport (optional)</label>
             <select value={form.sport} onChange={e => setForm({ ...form, sport: (e.target.value as '' | Sport) })}>
               <option value="">Auto-detect</option>
-              <option value="Soccer">Soccer</option>
-              <option value="Lacrosse">Lacrosse</option>
+              {sportOptions.map((sport) => <option key={sport} value={sport}>{sport}</option>)}
             </select>
           </div>
           <div className="field">
