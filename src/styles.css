@@ -1682,7 +1682,7 @@ body {
 }
 
 .expense-table-wrap .table {
-  min-width: 940px;
+  min-width: 1120px;
 }
 
 .receipt-actions,
@@ -1782,6 +1782,27 @@ body {
   margin-top: 12px;
 }
 
+.expense-review-flags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+
+.expense-review-flags .pill {
+  white-space: normal;
+}
+
+.expense-category-caution {
+  margin-top: 6px;
+  padding: 8px 9px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 9px;
+  background: rgba(245, 158, 11, 0.08);
+  color: #fde68a;
+  line-height: 1.45;
+}
+
 .expense-empty-state {
   border: 1px dashed rgba(148, 163, 184, 0.28);
   border-radius: 12px;
@@ -1845,6 +1866,28 @@ body {
 }
 
 .expense-tax-links a:hover {
+  border-color: rgba(96, 165, 250, 0.48);
+  background: rgba(96, 165, 250, 0.13);
+}
+
+.tax-review-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.tax-review-links a {
+  padding: 7px 9px;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 9px;
+  background: rgba(96, 165, 250, 0.08);
+  color: #bfdbfe;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tax-review-links a:hover {
   border-color: rgba(96, 165, 250, 0.48);
   background: rgba(96, 165, 250, 0.13);
 }

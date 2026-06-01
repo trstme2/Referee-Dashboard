@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useData } from '../lib/DataContext'
 import { formatMoney } from '../lib/utils'
 import HelpTip from '../components/HelpTip'
+import { IRS_TAX_REVIEW_LINKS, taxReviewFlags } from '../lib/taxReview'
 
 type IncomeBasis = 'cash' | 'accrual'
 
@@ -127,15 +128,36 @@ export default function TaxPage() {
         amount: e.amount,
         vendor: e.vendor ?? '',
         description: e.description ?? '',
-        taxDeductible: e.taxDeductible ? 'Yes' : 'No',
+        markedForDeductibleReview: e.taxDeductible ? 'Yes' : 'No',
         gameId: e.gameId ?? '',
         notes: e.notes ?? '',
       }))
       .sort((a, b) => (a.expenseDate < b.expenseDate ? -1 : 1))
   }, [db.expenses, year])
 
+  const reviewFlags = useMemo(() => {
+    return taxReviewFlags(db.expenses, db.games, year)
+  }, [db.expenses, db.games, year])
+
+  const reviewChecklistRows = useMemo(() => {
+    return reviewFlags.map((flag) => {
+      const expense = db.expenses.find((item) => item.id === flag.expenseId)
+      return {
+        expenseDate: flag.expenseDate,
+        category: flag.expenseCategory,
+        amount: flag.expenseAmount,
+        markedForDeductibleReview: flag.markedForDeductibleReview ? 'Yes' : 'No',
+        expenseDescription: expense?.description ?? expense?.vendor ?? '',
+        reviewCode: flag.code,
+        reviewItem: flag.label,
+        reviewDetails: flag.detail,
+        expenseId: flag.expenseId,
+      }
+    })
+  }, [reviewFlags, db.expenses])
+
   const deductibleExpenseRows = useMemo(() => {
-    return expenseRows.filter((e) => e.taxDeductible === 'Yes')
+    return expenseRows.filter((e) => e.markedForDeductibleReview === 'Yes')
   }, [expenseRows])
 
   const expensesByCategory = useMemo(() => {
@@ -188,13 +210,18 @@ export default function TaxPage() {
   }
 
   function exportExpensesCsv() {
-    const csv = toCsv(expenseRows, ['expenseDate', 'category', 'amount', 'vendor', 'description', 'taxDeductible', 'gameId', 'notes', 'id'])
+    const csv = toCsv(expenseRows, ['expenseDate', 'category', 'amount', 'vendor', 'description', 'markedForDeductibleReview', 'gameId', 'notes', 'id'])
     downloadCsv(`tax-expenses-${year}.csv`, csv)
   }
 
   function exportReconCsv() {
     const csv = toCsv(reconRows, ['payor', 'dashboardIncome', 'entered1099', 'variance'])
     downloadCsv(`tax-1099-reconciliation-${basis}-${year}.csv`, csv)
+  }
+
+  function exportReviewChecklistCsv() {
+    const csv = toCsv(reviewChecklistRows, ['expenseDate', 'category', 'amount', 'markedForDeductibleReview', 'expenseDescription', 'reviewCode', 'reviewItem', 'reviewDetails', 'expenseId'])
+    downloadCsv(`tax-export-review-checklist-${year}.csv`, csv)
   }
 
   async function saveMileageRate() {
@@ -228,7 +255,7 @@ export default function TaxPage() {
             <p className="sub">Organize income, mileage, expenses, and 1099 comparisons before you export records.</p>
           </div>
           <HelpTip title="Tax prep guardrails" className="help-tip-inline">
-            <p>Whistle Keeper organizes records you entered. It does not decide what is deductible, choose your tax method, or prepare a return.</p>
+            <p>Whistle Keeper organizes records you entered. A deductible marker is only a review marker. The app does not decide what is deductible, choose your tax method, or prepare a return.</p>
             <p>Confirm the right treatment, mileage rate, and filing approach with IRS guidance or a qualified tax professional.</p>
           </HelpTip>
         </div>
@@ -275,7 +302,7 @@ export default function TaxPage() {
             <div className="value">{formatMoney(mileageEstimate)}</div>
           </div>
           <div className="box">
-            <div className="label">Expenses marked deductible</div>
+            <div className="label">Marked for deductible review</div>
             <div className="value">{formatMoney(totals.deductibleExpenses)}</div>
           </div>
           <div className="box">
@@ -290,6 +317,7 @@ export default function TaxPage() {
           <button className="btn" onClick={exportMileageCsv}>Export Mileage CSV</button>
           <button className="btn" onClick={exportExpensesCsv}>Export Expenses CSV</button>
           <button className="btn" onClick={exportReconCsv}>Export 1099 Reconciliation CSV</button>
+          <button className="btn" onClick={exportReviewChecklistCsv}>Export Review Checklist CSV</button>
         </div>
 
         <div className="footer-note">
@@ -310,6 +338,44 @@ export default function TaxPage() {
           <span className={`pill ${qualityChecks.mileageMissing === 0 ? 'ok' : 'warn'}`}>Games missing mileage: {qualityChecks.mileageMissing}</span>{' '}
           <span className={`pill ${qualityChecks.expenseMissingFields === 0 ? 'ok' : 'warn'}`}>Expense issues: {qualityChecks.expenseMissingFields}</span>
         </p>
+      </section>
+
+      <section className="card tax-review-queue">
+        <div className="page-section-head">
+          <div>
+            <h2>Export Review Queue</h2>
+            <p className="sub">Resolve or discuss these record-level prompts before relying on an export. They are review reminders, not tax determinations.</p>
+          </div>
+          <span className={`pill ${reviewFlags.length === 0 ? 'ok' : 'warn'}`}>{reviewFlags.length} review item{reviewFlags.length === 1 ? '' : 's'}</span>
+        </div>
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Date</th><th>Category</th><th>Amount</th><th>Review item</th><th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reviewFlags.map((flag) => (
+                <tr key={flag.id}>
+                  <td>{flag.expenseDate}</td>
+                  <td>{flag.expenseCategory}</td>
+                  <td>{formatMoney(flag.expenseAmount)}</td>
+                  <td><span className="pill warn">{flag.label}</span></td>
+                  <td className="small">{flag.detail}</td>
+                </tr>
+              ))}
+              {reviewFlags.length === 0 && (
+                <tr><td colSpan={5} className="small">No computed expense review items for the selected year.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="tax-review-links">
+          {IRS_TAX_REVIEW_LINKS.map(link => (
+            <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label}</a>
+          ))}
+        </div>
       </section>
 
       <section className="grid cols2">
@@ -354,7 +420,7 @@ export default function TaxPage() {
 
         <div className="card">
           <h2>Expense Categories</h2>
-          <p className="sub">Totals include expenses you marked deductible. Use the Expenses page to change that flag.</p>
+          <p className="sub">Totals include expenses you marked for deductible review. Use the Expenses page to change that marker.</p>
           <table className="table">
             <thead>
               <tr>

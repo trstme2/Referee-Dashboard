@@ -4,18 +4,16 @@ import { useData } from '../lib/DataContext'
 import { addDays, endOfMonth, startOfMonth, yyyyMmDd } from '../lib/utils'
 import { upsertCalendarEventIn, deleteCalendarEventIn } from '../lib/mutate'
 import type { CalendarEvent, EventType } from '../lib/types'
+import {
+  calendarDateKey,
+  calendarEventDayKeys,
+  calendarEventDisplayTitle,
+  calendarEventTimeRangeLabel,
+  calendarTimeInputValue,
+  visibleCalendarEvents,
+} from '../lib/calendarEvents'
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-function hhmmLocal(iso: string): string {
-  const d = new Date(iso)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-function timeLabel(event: CalendarEvent): string {
-  if (event.allDay) return 'All day'
-  return new Date(event.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-}
 
 function eventTone(type: EventType): string {
   if (type === 'Game') return 'game'
@@ -59,26 +57,28 @@ export default function CalendarPage() {
     return arr
   }, [gridStart])
 
+  const displayEvents = useMemo(() => visibleCalendarEvents(db.calendarEvents), [db.calendarEvents])
+
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>()
-    for (const event of db.calendarEvents) {
-      const day = yyyyMmDd(new Date(event.start))
-      map.set(day, [...(map.get(day) ?? []), event])
+    for (const event of displayEvents) {
+      for (const day of calendarEventDayKeys(event)) {
+        map.set(day, [...(map.get(day) ?? []), event])
+      }
     }
     for (const [, events] of map) events.sort((a, b) => (a.start < b.start ? -1 : 1))
     return map
-  }, [db.calendarEvents])
+  }, [displayEvents])
 
   const selectedEvents = eventsByDay.get(selectedDay) ?? []
 
   const monthEvents = useMemo(() => {
     const monthStartKey = yyyyMmDd(monthStart)
     const monthEndKey = yyyyMmDd(monthEnd)
-    return db.calendarEvents.filter(event => {
-      const key = yyyyMmDd(new Date(event.start))
-      return key >= monthStartKey && key <= monthEndKey
+    return displayEvents.filter(event => {
+      return calendarEventDayKeys(event).some(key => key >= monthStartKey && key <= monthEndKey)
     })
-  }, [db.calendarEvents, monthEnd, monthStart])
+  }, [displayEvents, monthEnd, monthStart])
 
   const monthStats = useMemo(() => {
     return {
@@ -91,11 +91,11 @@ export default function CalendarPage() {
 
   const upcomingEvents = useMemo(() => {
     const now = new Date()
-    return [...db.calendarEvents]
+    return [...displayEvents]
       .filter(event => new Date(event.end) >= now)
       .sort((a, b) => (a.start < b.start ? -1 : 1))
       .slice(0, 6)
-  }, [db.calendarEvents])
+  }, [displayEvents])
 
   function startNew(day = selectedDay) {
     setNotice(null)
@@ -147,21 +147,21 @@ export default function CalendarPage() {
     if (!event) return
     if (event.eventType === 'Game' || event.linkedGameId) {
       setNotice('Game events are managed on the Games page.')
-      setSelectedDay(yyyyMmDd(new Date(event.start)))
+      setSelectedDay(calendarDateKey(event.start, event.timezone))
       return
     }
     setNotice(null)
-    const startDate = yyyyMmDd(new Date(event.start))
-    const endDate = yyyyMmDd(new Date(event.end))
+    const startDate = calendarDateKey(event.start, event.timezone)
+    const endDate = calendarDateKey(event.end, event.timezone)
     setSelectedDay(startDate)
     setForm({
       id: event.id,
       eventType: event.eventType,
       title: event.title,
       startDate,
-      startTime: hhmmLocal(event.start),
+      startTime: calendarTimeInputValue(event.start, event.timezone),
       endDate,
-      endTime: hhmmLocal(event.end),
+      endTime: calendarTimeInputValue(event.end, event.timezone),
       allDay: event.allDay,
       notes: event.notes ?? '',
       platformConfirmations: event.platformConfirmations ?? {},
@@ -243,8 +243,8 @@ export default function CalendarPage() {
                     <div className="items">
                       {items.slice(0, 3).map(event => (
                         <div key={event.id} className={`item calendar-item is-${eventTone(event.eventType)}`} onClick={(e) => { e.stopPropagation(); void edit(event.id) }}>
-                          <div className="t">{event.title}</div>
-                          <div className="m">{event.eventType} | {timeLabel(event)}</div>
+                          <div className="t">{calendarEventDisplayTitle(event)}</div>
+                          <div className="m">{event.eventType} | {calendarEventTimeRangeLabel(event)}</div>
                         </div>
                       ))}
                       {items.length > 3 && <div className="small">+{items.length - 3} more</div>}
@@ -266,8 +266,8 @@ export default function CalendarPage() {
             <div className="calendar-agenda-list">
               {selectedEvents.map(event => (
                 <button key={event.id} className={`agenda-item is-${eventTone(event.eventType)}`} onClick={() => edit(event.id)} type="button">
-                  <span>{timeLabel(event)}</span>
-                  <strong>{event.title}</strong>
+                  <span>{calendarEventTimeRangeLabel(event)}</span>
+                  <strong>{calendarEventDisplayTitle(event)}</strong>
                   <em>{event.eventType}</em>
                 </button>
               ))}
@@ -373,8 +373,8 @@ export default function CalendarPage() {
           <div className="upcoming-list">
             {upcomingEvents.map(event => (
               <button key={event.id} className={`upcoming-item is-${eventTone(event.eventType)}`} onClick={() => edit(event.id)} type="button">
-                <span>{yyyyMmDd(new Date(event.start))} | {timeLabel(event)}</span>
-                <strong>{event.title}</strong>
+                <span>{calendarDateKey(event.start, event.timezone)} | {calendarEventTimeRangeLabel(event)}</span>
+                <strong>{calendarEventDisplayTitle(event)}</strong>
                 <em>{event.eventType}</em>
               </button>
             ))}

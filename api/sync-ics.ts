@@ -3,6 +3,7 @@ import ical from 'node-ical'
 import { createHash } from 'node:crypto'
 import { createAuthedSupabase, getBearerToken, toJsonBody } from './auth-utils.js'
 import { fetchCalendarFeedText } from './feed-fetch.js'
+import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks } from './sync-ics-utils.js'
 
 export type Feed = {
   id: string
@@ -369,7 +370,7 @@ export async function syncFeed(client: any, feed: Feed) {
     return { createdEvents, updatedEvents, createdGames, updatedGames, errors }
   }
 
-  const normalized = icsEvents.map((ev: any) => {
+  const normalizedRows = icsEvents.map((ev: any) => {
     const rawStart = new Date(ev.start)
     const rawEnd = ev.end ? new Date(ev.end) : new Date(rawStart.getTime() + 2 * 60 * 60 * 1000)
     const start = rawStart
@@ -385,12 +386,13 @@ export async function syncFeed(client: any, feed: Feed) {
     const location = trimOrNull(ev.location)
     const startTime = allDay ? null : hhmmInZone(start, userDefaultTimezone)
     const eventType = inferEventType(text, allDay, startTime, location)
+    const rawTitle = String(ev.summary || 'Assigned Game')
 
     return {
       uid: String(ev.uid),
       externalRef,
       legacyExternalRef,
-      title: String(ev.summary || 'Assigned Game'),
+      title: feed.platform === 'DragonFly' && eventType === 'Block' ? cleanupDragonFlyBlockTitle(rawTitle) : rawTitle,
       location,
       notes: trimOrNull(ev.description),
       start,
@@ -407,6 +409,7 @@ export async function syncFeed(client: any, feed: Feed) {
       startTime,
     }
   }).filter((n) => !feed.import_start_date || n.gameDate >= feed.import_start_date)
+  const normalized = feed.platform === 'DragonFly' ? dedupeFeedBlocks(normalizedRows) : normalizedRows
 
   if (!normalized.length) {
     await client.from('calendar_feeds').update({ last_synced_at: now, updated_at: now }).eq('id', feed.id).eq('user_id', feed.user_id)
@@ -415,7 +418,7 @@ export async function syncFeed(client: any, feed: Feed) {
 
   const blockDates = normalized
     .filter((n) => n.eventType === 'Block')
-    .map((n) => n.gameDate)
+    .flatMap((n) => dateKeysTouched(n.start, n.end, userDefaultTimezone))
 
   const eventDates = Array.from(new Set(normalized.map((n) => n.gameDate)))
   const { data: dayGames, error: dayGamesErr } = await client
@@ -455,7 +458,7 @@ export async function syncFeed(client: any, feed: Feed) {
   for (const refPrefix of refPrefixes) {
     const { data, error: evLookupErr } = await client
       .from('calendar_events')
-      .select('id,external_ref,linked_game_id,created_at,timezone,location_address,notes,platform_confirmations')
+      .select('id,event_type,title,start_ts,end_ts,all_day,external_ref,linked_game_id,created_at,timezone,location_address,notes,platform_confirmations')
       .eq('user_id', feed.user_id)
       .like('external_ref', `${refPrefix}%`)
     if (evLookupErr) throw new Error(`calendar_events lookup: ${evLookupErr.message}`)
@@ -508,11 +511,31 @@ export async function syncFeed(client: any, feed: Feed) {
     }
   })
 
+  const staleDuplicateBlockEventIds = feed.platform === 'DragonFly'
+    ? existingEvents
+      .filter((event) => event.event_type === 'Block')
+      .filter((event) => {
+        const keeper = calendarRows.find((row) => row.event_type === 'Block' && blockSlotKey(row) === blockSlotKey(event))
+        return keeper && String(keeper.id) !== String(event.id)
+      })
+      .map((event) => String(event.id))
+    : []
+
   const { data: upsertedEvents, error: upsertEventsErr } = await client
     .from('calendar_events')
     .upsert(calendarRows, { onConflict: 'id' })
     .select('id,external_ref,linked_game_id')
   if (upsertEventsErr) throw new Error(`calendar_events upsert: ${upsertEventsErr.message}`)
+
+  if (staleDuplicateBlockEventIds.length) {
+    const { error: deleteDuplicateBlocksErr } = await client
+      .from('calendar_events')
+      .delete()
+      .eq('user_id', feed.user_id)
+      .eq('event_type', 'Block')
+      .in('id', staleDuplicateBlockEventIds)
+    if (deleteDuplicateBlocksErr) throw new Error(`calendar_events duplicate block cleanup: ${deleteDuplicateBlocksErr.message}`)
+  }
 
   for (const row of calendarRows) {
     if (refsAlreadySeen.has(row.external_ref)) updatedEvents += 1

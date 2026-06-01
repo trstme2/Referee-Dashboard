@@ -4,6 +4,7 @@ import type { ExpenseCategory } from '../lib/types'
 import { upsertExpenseIn, deleteExpenseIn, updateExpenseIn } from '../lib/mutate'
 import { formatMoney, safeNumber } from '../lib/utils'
 import { createExpenseReceiptSignedUrl, deleteExpenseReceipt, uploadExpenseReceipt } from '../lib/documents'
+import { expenseCategoryCaution, IRS_TAX_REVIEW_LINKS, taxReviewFlags } from '../lib/taxReview'
 
 const expenseCategories: ExpenseCategory[] = [
   'Mileage','Gear','Uniform','Dues/Registration',
@@ -40,6 +41,14 @@ export default function ExpensesPage() {
   const rows = useMemo(() => {
     return [...db.expenses].sort((a,b) => (a.expenseDate < b.expenseDate ? 1 : -1))
   }, [db.expenses])
+  const reviewFlagsByExpense = useMemo(() => {
+    const flagsByExpense = new Map<string, ReturnType<typeof taxReviewFlags>>()
+    for (const flag of taxReviewFlags(db.expenses, db.games)) {
+      flagsByExpense.set(flag.expenseId, [...(flagsByExpense.get(flag.expenseId) ?? []), flag])
+    }
+    return flagsByExpense
+  }, [db.expenses, db.games])
+  const selectedCategoryCaution = expenseCategoryCaution(form.category)
   const noExpensesYet = db.expenses.length === 0
 
   function linkedGameLabel(gameId?: string) {
@@ -52,6 +61,18 @@ export default function ExpensesPage() {
 
   function expenseTitle(e: typeof rows[number]) {
     return e.description || e.vendor || e.category
+  }
+
+  function expenseReviewItems(expenseId: string) {
+    const flags = reviewFlagsByExpense.get(expenseId) ?? []
+    if (!flags.length) return null
+    return (
+      <div className="expense-review-flags">
+        {flags.map(flag => (
+          <span key={flag.id} className="pill warn" title={flag.detail}>{flag.label}</span>
+        ))}
+      </div>
+    )
   }
 
   function receiptControls(expenseId: string, compact = false) {
@@ -212,7 +233,7 @@ export default function ExpensesPage() {
         <div className="page-section-head">
           <div>
             <h2>Expense Ledger</h2>
-            <p className="sub">Track deductible costs, mileage, and receipts for the current season.</p>
+            <p className="sub">Track potential business costs, mileage, receipts, and review markers for the current season.</p>
           </div>
           <button className="btn primary" onClick={startNew}>Add expense</button>
         </div>
@@ -223,7 +244,7 @@ export default function ExpensesPage() {
             <div className="value">{formatMoney(totals.total)}</div>
           </div>
           <div className="box">
-            <div className="label">Deductible</div>
+            <div className="label">Marked for deductible review</div>
             <div className="value">{formatMoney(totals.deductible)}</div>
           </div>
           <div className="box">
@@ -238,18 +259,18 @@ export default function ExpensesPage() {
 
         <div className="expense-tax-guidance">
           <div>
-            <h3>Deductible expense check</h3>
+            <h3>Expense review marker</h3>
             <p>
-              Use the deductible flag as a review marker, not a tax answer. IRS rules generally look for business expenses that are ordinary, necessary, documented, and separated from personal use.
+              The deductible flag is your review marker, never a tax determination. IRS rules generally look for business expenses that are ordinary, necessary, documented, and separated from personal use.
             </p>
             <p>
               Be careful with mixed-use or personal items: season tickets to a local soccer team, fan gear, family meals, and claiming all of home internet because you use a tiny portion for assigning are the kinds of entries worth checking before export.
             </p>
           </div>
           <div className="expense-tax-links">
-            <a href="https://www.irs.gov/forms-pubs/guide-to-business-expense-resources" target="_blank" rel="noreferrer">IRS business expense resources</a>
-            <a href="https://www.irs.gov/pub463" target="_blank" rel="noreferrer">Travel, gift, and car expenses</a>
-            <a href="https://www.irs.gov/taxtopics/tc509" target="_blank" rel="noreferrer">Business use of home</a>
+            {IRS_TAX_REVIEW_LINKS.map(link => (
+              <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label}</a>
+            ))}
           </div>
         </div>
 
@@ -265,10 +286,11 @@ export default function ExpensesPage() {
               </div>
               <div className="expense-card-meta">
                 <span>{e.category}</span>
-                <span>{e.taxDeductible ? 'Deductible' : 'Not deductible'}</span>
+                <span>{e.taxDeductible ? 'Marked for deductible review' : 'Not marked for deductible review'}</span>
                 {e.category === 'Mileage' ? <span>{(e.miles ?? 0).toFixed(1)} mi</span> : null}
                 {linkedGameLabel(e.gameId) ? <span>{linkedGameLabel(e.gameId)}</span> : null}
               </div>
+              {expenseReviewItems(e.id)}
               {receiptControls(e.id, true)}
               <div className="expense-card-actions">
                 <button className="btn compact" onClick={() => edit(e.id)}>Edit</button>
@@ -289,7 +311,7 @@ export default function ExpensesPage() {
           <table className="table">
             <thead>
               <tr>
-                <th>Date</th><th>Category</th><th>Amount</th><th>Miles</th><th>Details</th><th>Receipt</th><th></th>
+                <th>Date</th><th>Category</th><th>Amount</th><th>Miles</th><th>Details</th><th>Review</th><th>Receipt</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -298,7 +320,7 @@ export default function ExpensesPage() {
                   <td>{e.expenseDate}</td>
                   <td>
                     <div>{e.category}</div>
-                    <div className="small">{e.taxDeductible ? 'Deductible' : 'Not deductible'}</div>
+                    <div className="small">{e.taxDeductible ? 'Marked for deductible review' : 'Not marked for deductible review'}</div>
                   </td>
                   <td>{formatMoney(e.amount)}</td>
                   <td>{e.category === 'Mileage' ? (e.miles ?? 0).toFixed(1) : ''}</td>
@@ -306,6 +328,7 @@ export default function ExpensesPage() {
                     <div>{expenseTitle(e)}</div>
                     {linkedGameLabel(e.gameId) ? <div className="small">{linkedGameLabel(e.gameId)}</div> : null}
                   </td>
+                  <td>{expenseReviewItems(e.id)}</td>
                   <td>{receiptControls(e.id)}</td>
                   <td>
                     <div className="btnbar expense-row-actions">
@@ -317,7 +340,7 @@ export default function ExpensesPage() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="empty-cell">
+                  <td colSpan={8} className="empty-cell">
                     <div className="empty-state centered">
                       <h3>No expenses yet</h3>
                       <p>Add your first expense to start tracking deductions, mileage, and receipt storage across devices.</p>
@@ -333,7 +356,7 @@ export default function ExpensesPage() {
 
       <section className="card expense-editor-card">
         <h2>{form.id ? 'Edit expense' : 'Add expense'}</h2>
-        <p className="sub">{form.id ? 'Update the record, receipt, or tax treatment.' : 'Capture a cost while the details are still fresh.'}</p>
+        <p className="sub">{form.id ? 'Update the record, receipt, or review marker.' : 'Capture a cost while the details are still fresh.'}</p>
 
         <div className="row">
           <div className="field">
@@ -356,6 +379,7 @@ export default function ExpensesPage() {
             <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value as ExpenseCategory })}>
               {expenseCategories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+            {selectedCategoryCaution ? <div className="small expense-category-caution">{selectedCategoryCaution}</div> : null}
           </div>
         </div>
 
@@ -377,12 +401,12 @@ export default function ExpensesPage() {
             <input value={form.vendor} onChange={e => setForm({ ...form, vendor: e.target.value })} placeholder="e.g., Shell, Amazon" />
           </div>
           <div className="field">
-            <label>Tax deductible</label>
+            <label>Mark for deductible review</label>
             <select value={form.taxDeductible} onChange={e => setForm({ ...form, taxDeductible: e.target.value })}>
               <option value="Yes">Yes</option>
               <option value="No">No</option>
             </select>
-            <div className="small">Mark only items you are comfortable reviewing as business expenses. Mixed personal/business costs may need allocation or may not qualify.</div>
+            <div className="small">This marker helps you organize records for review. It does not determine whether an expense is deductible. Mixed personal/business costs may need allocation or may not qualify.</div>
           </div>
         </div>
 
