@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { blockSlotKey, cleanupDragonFlyBlockTitle } from './sync-ics-utils.js'
 
 const FALLBACK_TIMEZONE = 'America/New_York'
 const DEFAULT_GAME_START = '17:00'
@@ -351,7 +352,9 @@ function toCalendarExportEvent(event: CalendarEventRow, userId: string, defaultT
   const timezone = resolveTimezone(event.timezone, defaultTimezone)
   return {
     uid: `event-${event.id}@${userId}.referee-dashboard`,
-    summary: event.title || event.event_type || 'Calendar Event',
+    summary: event.event_type === 'Block'
+      ? cleanupDragonFlyBlockTitle(event.title)
+      : event.title || event.event_type || 'Calendar Event',
     description: buildCalendarDescription(event),
     location: event.location_address || undefined,
     dtstamp: toUtcStamp(event.updated_at || event.created_at || new Date().toISOString()),
@@ -378,11 +381,22 @@ function serializeEvent(event: ExportEvent): string[] {
   return lines.map(foldLine)
 }
 
+export function dedupeCalendarExportRows(events: CalendarEventRow[]): CalendarEventRow[] {
+  const blockSlots = new Set<string>()
+  return events.filter(event => {
+    if (event.event_type !== 'Block') return true
+    const key = blockSlotKey(event)
+    if (blockSlots.has(key)) return false
+    blockSlots.add(key)
+    return true
+  })
+}
+
 export function buildIcsCalendar(params: { userId: string; defaultTimezone?: string | null; games: GameRow[]; calendarEvents: CalendarEventRow[] }) {
   const defaultTimezone = resolveTimezone(params.defaultTimezone, FALLBACK_TIMEZONE)
   const events = [
     ...params.games.filter(g => g.status !== 'Canceled').map(g => toGameExportEvent(g, params.userId, defaultTimezone)),
-    ...params.calendarEvents
+    ...dedupeCalendarExportRows(params.calendarEvents)
       .filter(e => e.status !== 'Canceled' && !e.linked_game_id)
       .map(e => toCalendarExportEvent(e, params.userId, defaultTimezone)),
   ].sort((a, b) => {
