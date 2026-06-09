@@ -5,7 +5,7 @@ const platformGuides = [
   },
   {
     name: 'RefQuest',
-    hint: 'Check schedule/calendar export areas and copy the subscription link instead of downloading a one-time file.',
+    hint: 'Check schedule, then click "export games" and then find the iCal tab. You need to create a calendar for each assigner using this platform.',
   },
   {
     name: 'Arbiter',
