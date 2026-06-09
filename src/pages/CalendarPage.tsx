@@ -15,11 +15,51 @@ import {
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
+type CalendarWeek = {
+  key: string
+  days: Date[]
+}
+
+type WeekEventBar = {
+  event: CalendarEvent
+  startColumn: number
+  endColumn: number
+}
+
 function eventTone(type: EventType): string {
   if (type === 'Game') return 'game'
   if (type === 'Block') return 'block'
   if (type === 'Travel') return 'travel'
   return 'admin'
+}
+
+function eventSourceLabel(event: CalendarEvent): string {
+  if (event.externalRef) return event.externalRef.split(':')[0] || 'Synced'
+  if (event.source === 'CSV Import') return 'CSV'
+  return 'Manual'
+}
+
+function eventTypeLabel(event: CalendarEvent): string {
+  if (event.eventType === 'Block') return 'Unavailable'
+  return event.eventType
+}
+
+function selectedDayHeading(day: string): string {
+  const [year, month, date] = day.split('-').map(Number)
+  return new Date(year, month - 1, date).toLocaleDateString([], {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  })
+}
+
+function splitWeeks(days: Date[]): CalendarWeek[] {
+  const weeks: CalendarWeek[] = []
+  for (let i = 0; i < days.length; i += 7) {
+    const weekDays = days.slice(i, i + 7)
+    weeks.push({ key: yyyyMmDd(weekDays[0]), days: weekDays })
+  }
+  return weeks
 }
 
 export default function CalendarPage() {
@@ -56,8 +96,10 @@ export default function CalendarPage() {
     for (let i = 0; i < 42; i += 1) arr.push(addDays(gridStart, i))
     return arr
   }, [gridStart])
+  const weeks = useMemo(() => splitWeeks(days), [days])
 
   const displayEvents = useMemo(() => visibleCalendarEvents(db.calendarEvents), [db.calendarEvents])
+  const hiddenDuplicateCount = Math.max(0, db.calendarEvents.length - displayEvents.length)
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>()
@@ -71,6 +113,31 @@ export default function CalendarPage() {
   }, [displayEvents])
 
   const selectedEvents = eventsByDay.get(selectedDay) ?? []
+  const selectedDayTitle = selectedDayHeading(selectedDay)
+
+  function weekBars(week: CalendarWeek): WeekEventBar[] {
+    const weekKeys = week.days.map(yyyyMmDd)
+    const weekStart = weekKeys[0]
+    const weekEnd = weekKeys[6]
+    return displayEvents
+      .map((event) => {
+        const keys = calendarEventDayKeys(event)
+        if (keys.length <= 1) return null
+        const touched = keys.filter(key => key >= weekStart && key <= weekEnd)
+        if (!touched.length) return null
+        const startColumn = Math.max(1, weekKeys.indexOf(touched[0]) + 1)
+        const endColumn = Math.max(startColumn, weekKeys.indexOf(touched[touched.length - 1]) + 1)
+        return { event, startColumn, endColumn }
+      })
+      .filter(Boolean)
+      .sort((a, b) => a!.event.start.localeCompare(b!.event.start))
+      .slice(0, 4) as WeekEventBar[]
+  }
+
+  function visibleDayItems(dayKey: string): CalendarEvent[] {
+    return (eventsByDay.get(dayKey) ?? [])
+      .filter(event => calendarEventDayKeys(event).length <= 1)
+  }
 
   const monthEvents = useMemo(() => {
     const monthStartKey = yyyyMmDd(monthStart)
@@ -213,6 +280,7 @@ export default function CalendarPage() {
             <span><strong>{monthStats.blocks}</strong> blocks</span>
             <span><strong>{monthStats.admin}</strong> admin</span>
             <span><strong>{monthStats.travel}</strong> travel</span>
+            {hiddenDuplicateCount ? <span><strong>{hiddenDuplicateCount}</strong> duplicates hidden</span> : null}
           </div>
         </div>
 
@@ -222,54 +290,88 @@ export default function CalendarPage() {
               {DOW.map(d => <div key={d}>{d}</div>)}
             </div>
 
-            <div className="calendar">
-              {days.map(d => {
-                const ymd = yyyyMmDd(d)
-                const inMonth = d >= monthStart && d <= monthEnd
-                const items = eventsByDay.get(ymd) ?? []
-                const isToday = ymd === yyyyMmDd(new Date())
-                const isSelected = ymd === selectedDay
-                return (
-                  <button
-                    key={ymd}
-                    className={`day calendar-day ${inMonth ? '' : 'is-muted'} ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected' : ''}`}
-                    onClick={() => setSelectedDay(ymd)}
-                    type="button"
-                  >
-                    <div className="d">
-                      <span>{d.getDate()}</span>
-                      {items.length ? <span className="calendar-count">{items.length}</span> : <span />}
-                    </div>
-                    <div className="items">
-                      {items.slice(0, 3).map(event => (
-                        <div key={event.id} className={`item calendar-item is-${eventTone(event.eventType)}`} onClick={(e) => { e.stopPropagation(); void edit(event.id) }}>
-                          <div className="t">{calendarEventDisplayTitle(event)}</div>
-                          <div className="m">{event.eventType} | {calendarEventTimeRangeLabel(event)}</div>
-                        </div>
-                      ))}
-                      {items.length > 3 && <div className="small">+{items.length - 3} more</div>}
-                    </div>
-                  </button>
-                )
-              })}
+            <div className="calendar-month-grid">
+              {weeks.map(week => (
+                <div key={week.key} className="calendar-week">
+                  <div className="calendar-week-days">
+                    {week.days.map(d => {
+                      const ymd = yyyyMmDd(d)
+                      const inMonth = d >= monthStart && d <= monthEnd
+                      const allItems = eventsByDay.get(ymd) ?? []
+                      const dayItems = visibleDayItems(ymd)
+                      const hiddenInBars = allItems.length - dayItems.length
+                      const visibleItems = dayItems.slice(0, 2)
+                      const overflowCount = Math.max(0, dayItems.length - visibleItems.length)
+                      const isToday = ymd === yyyyMmDd(new Date())
+                      const isSelected = ymd === selectedDay
+                      return (
+                        <button
+                          key={ymd}
+                          className={`calendar-day ${inMonth ? '' : 'is-muted'} ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected' : ''}`}
+                          onClick={() => setSelectedDay(ymd)}
+                          type="button"
+                        >
+                          <div className="calendar-day-top">
+                            <span>{d.getDate()}</span>
+                            {allItems.length ? <span className="calendar-count">{allItems.length}</span> : <span />}
+                          </div>
+                          <div className="calendar-day-items">
+                            {visibleItems.map(event => (
+                              <span key={event.id} className={`calendar-chip is-${eventTone(event.eventType)}`} onClick={(e) => { e.stopPropagation(); void edit(event.id) }}>
+                                <strong>{calendarEventDisplayTitle(event)}</strong>
+                                <em>{calendarEventTimeRangeLabel(event)}</em>
+                              </span>
+                            ))}
+                            {hiddenInBars ? <span className="calendar-more is-bars">{hiddenInBars} spanning</span> : null}
+                            {overflowCount ? <span className="calendar-more">+{overflowCount} more</span> : null}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="calendar-week-bars">
+                    {weekBars(week).map(({ event, startColumn, endColumn }) => (
+                      <button
+                        key={`${week.key}-${event.id}`}
+                        className={`calendar-span-bar is-${eventTone(event.eventType)}`}
+                        style={{ gridColumn: `${startColumn} / ${endColumn + 1}` }}
+                        onClick={() => edit(event.id)}
+                        type="button"
+                      >
+                        <strong>{calendarEventDisplayTitle(event)}</strong>
+                        <span>{calendarEventTimeRangeLabel(event)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
           <aside className="calendar-agenda">
             <div className="calendar-agenda-head">
               <div>
-                <h3>{selectedDay}</h3>
-                <p>{selectedEvents.length ? `${selectedEvents.length} event${selectedEvents.length === 1 ? '' : 's'}` : 'No events'}</p>
+                <span className="calendar-panel-eyebrow">Selected day</span>
+                <h3>{selectedDayTitle}</h3>
+                <p>{selectedDay} · {selectedEvents.length ? `${selectedEvents.length} event${selectedEvents.length === 1 ? '' : 's'}` : 'No events'}</p>
               </div>
               <button className="btn compact" onClick={() => startNew(selectedDay)}>Add</button>
             </div>
             <div className="calendar-agenda-list">
               {selectedEvents.map(event => (
-                <button key={event.id} className={`agenda-item is-${eventTone(event.eventType)}`} onClick={() => edit(event.id)} type="button">
-                  <span>{calendarEventTimeRangeLabel(event)}</span>
-                  <strong>{calendarEventDisplayTitle(event)}</strong>
-                  <em>{event.eventType}</em>
-                </button>
+                <article key={event.id} className={`agenda-item is-${eventTone(event.eventType)}`}>
+                  <div>
+                    <span>{calendarEventTimeRangeLabel(event)}</span>
+                    <strong>{calendarEventDisplayTitle(event)}</strong>
+                    <em>{eventTypeLabel(event)} · {eventSourceLabel(event)}</em>
+                  </div>
+                  <div className="calendar-agenda-actions">
+                    <button className="btn compact" onClick={() => edit(event.id)}>Details</button>
+                    {event.eventType !== 'Game' && !event.linkedGameId ? (
+                      <button className="btn compact danger" onClick={() => del(event.id)}>Delete</button>
+                    ) : null}
+                  </div>
+                </article>
               ))}
               {selectedEvents.length === 0 ? (
                 <div className="empty-state calendar-empty-day">

@@ -9,7 +9,7 @@ const platformGuides = [
   },
   {
     name: 'Arbiter',
-    hint: 'Look near your schedule, calendar, or profile settings for a calendar subscription or iCal feed link.',
+    hint: 'Check settings, then scroll to Calendar Sync, then send email.',
   },
   {
     name: 'Assignr',
