@@ -35,8 +35,27 @@ function eventTone(type: EventType): string {
 
 function eventSourceLabel(event: CalendarEvent): string {
   if (event.externalRef) return event.externalRef.split(':')[0] || 'Synced'
+  const confirmedPlatforms = Object.entries(event.platformConfirmations ?? {})
+    .filter(([, confirmed]) => confirmed)
+    .map(([platform]) => platform)
+  if (confirmedPlatforms.length === 1) return confirmedPlatforms[0]
+  if (confirmedPlatforms.length > 1) return 'Multiple'
   if (event.source === 'CSV Import') return 'CSV'
   return 'Manual'
+}
+
+function platformClassFromSource(sourceName: string): string {
+  const source = sourceName.toLowerCase()
+  if (source === 'dragonfly') return 'is-platform-dragonfly'
+  if (source === 'refquest') return 'is-platform-refquest'
+  if (source === 'manual') return 'is-platform-manual'
+  if (source === 'csv') return 'is-platform-csv'
+  if (source === 'multiple') return 'is-platform-multiple'
+  return 'is-platform-other'
+}
+
+function eventPlatformClass(event: CalendarEvent): string {
+  return platformClassFromSource(eventSourceLabel(event))
 }
 
 function eventTypeLabel(event: CalendarEvent): string {
@@ -154,6 +173,10 @@ export default function CalendarPage() {
       admin: monthEvents.filter(e => e.eventType === 'Admin').length,
       travel: monthEvents.filter(e => e.eventType === 'Travel').length,
     }
+  }, [monthEvents])
+
+  const platformLegend = useMemo(() => {
+    return Array.from(new Set(monthEvents.map(eventSourceLabel))).sort((a, b) => a.localeCompare(b))
   }, [monthEvents])
 
   const upcomingEvents = useMemo(() => {
@@ -275,12 +298,21 @@ export default function CalendarPage() {
           <div>
             <span className="landing-eyebrow">{monthLabel}</span>
           </div>
-          <div className="calendar-stat-strip">
-            <span><strong>{monthStats.games}</strong> games</span>
-            <span><strong>{monthStats.blocks}</strong> blocks</span>
-            <span><strong>{monthStats.admin}</strong> admin</span>
-            <span><strong>{monthStats.travel}</strong> travel</span>
-            {hiddenDuplicateCount ? <span><strong>{hiddenDuplicateCount}</strong> duplicates hidden</span> : null}
+          <div className="calendar-month-tools">
+            <div className="calendar-stat-strip">
+              <span><strong>{monthStats.games}</strong> games</span>
+              <span><strong>{monthStats.blocks}</strong> blocks</span>
+              <span><strong>{monthStats.admin}</strong> admin</span>
+              <span><strong>{monthStats.travel}</strong> travel</span>
+              {hiddenDuplicateCount ? <span><strong>{hiddenDuplicateCount}</strong> duplicates hidden</span> : null}
+            </div>
+            {platformLegend.length ? (
+              <div className="calendar-platform-legend" aria-label="Calendar source colors">
+                {platformLegend.map(source => (
+                  <span key={source} className={platformClassFromSource(source)}>{source}</span>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -299,7 +331,6 @@ export default function CalendarPage() {
                       const inMonth = d >= monthStart && d <= monthEnd
                       const allItems = eventsByDay.get(ymd) ?? []
                       const dayItems = visibleDayItems(ymd)
-                      const hiddenInBars = allItems.length - dayItems.length
                       const visibleItems = dayItems.slice(0, 2)
                       const overflowCount = Math.max(0, dayItems.length - visibleItems.length)
                       const isToday = ymd === yyyyMmDd(new Date())
@@ -317,12 +348,11 @@ export default function CalendarPage() {
                           </div>
                           <div className="calendar-day-items">
                             {visibleItems.map(event => (
-                              <span key={event.id} className={`calendar-chip is-${eventTone(event.eventType)}`} onClick={(e) => { e.stopPropagation(); void edit(event.id) }}>
+                              <span key={event.id} className={`calendar-chip is-${eventTone(event.eventType)} ${eventPlatformClass(event)}`} onClick={(e) => { e.stopPropagation(); void edit(event.id) }}>
                                 <strong>{calendarEventDisplayTitle(event)}</strong>
                                 <em>{calendarEventTimeRangeLabel(event)}</em>
                               </span>
                             ))}
-                            {hiddenInBars ? <span className="calendar-more is-bars">{hiddenInBars} spanning</span> : null}
                             {overflowCount ? <span className="calendar-more">+{overflowCount} more</span> : null}
                           </div>
                         </button>
@@ -333,7 +363,7 @@ export default function CalendarPage() {
                     {weekBars(week).map(({ event, startColumn, endColumn }) => (
                       <button
                         key={`${week.key}-${event.id}`}
-                        className={`calendar-span-bar is-${eventTone(event.eventType)}`}
+                        className={`calendar-span-bar is-${eventTone(event.eventType)} ${eventPlatformClass(event)}`}
                         style={{ gridColumn: `${startColumn} / ${endColumn + 1}` }}
                         onClick={() => edit(event.id)}
                         type="button"
@@ -359,7 +389,7 @@ export default function CalendarPage() {
             </div>
             <div className="calendar-agenda-list">
               {selectedEvents.map(event => (
-                <article key={event.id} className={`agenda-item is-${eventTone(event.eventType)}`}>
+                <article key={event.id} className={`agenda-item is-${eventTone(event.eventType)} ${eventPlatformClass(event)}`}>
                   <div>
                     <span>{calendarEventTimeRangeLabel(event)}</span>
                     <strong>{calendarEventDisplayTitle(event)}</strong>
@@ -474,7 +504,7 @@ export default function CalendarPage() {
           <h2>Upcoming</h2>
           <div className="upcoming-list">
             {upcomingEvents.map(event => (
-              <button key={event.id} className={`upcoming-item is-${eventTone(event.eventType)}`} onClick={() => edit(event.id)} type="button">
+              <button key={event.id} className={`upcoming-item is-${eventTone(event.eventType)} ${eventPlatformClass(event)}`} onClick={() => edit(event.id)} type="button">
                 <span>{calendarDateKey(event.start, event.timezone)} | {calendarEventTimeRangeLabel(event)}</span>
                 <strong>{calendarEventDisplayTitle(event)}</strong>
                 <em>{event.eventType}</em>
