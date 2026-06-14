@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
 import { addDays, endOfMonth, startOfMonth, yyyyMmDd } from '../lib/utils'
@@ -26,6 +26,26 @@ type WeekEventBar = {
   endColumn: number
 }
 
+type WeekBarLayout = {
+  bars: WeekEventBar[]
+  hiddenCount: number
+}
+
+const MAX_WEEK_BARS = 4
+const PLATFORM_ORDER = [
+  'DragonFly',
+  'RefQuest',
+  'Arbiter',
+  'Assignr',
+  'HorizonWebRef',
+  'Stack Officials',
+  'GameOfficials',
+  'ZebraWeb',
+  'Manual',
+  'CSV',
+  'Multiple',
+]
+
 function eventTone(type: EventType): string {
   if (type === 'Game') return 'game'
   if (type === 'Block') return 'block'
@@ -48,6 +68,12 @@ function platformClassFromSource(sourceName: string): string {
   const source = sourceName.toLowerCase()
   if (source === 'dragonfly') return 'is-platform-dragonfly'
   if (source === 'refquest') return 'is-platform-refquest'
+  if (source === 'arbiter') return 'is-platform-arbiter'
+  if (source === 'assignr') return 'is-platform-assignr'
+  if (source === 'horizonwebref') return 'is-platform-horizon'
+  if (source === 'stack officials') return 'is-platform-stack'
+  if (source === 'gameofficials') return 'is-platform-gameofficials'
+  if (source === 'zebraweb') return 'is-platform-zebraweb'
   if (source === 'manual') return 'is-platform-manual'
   if (source === 'csv') return 'is-platform-csv'
   if (source === 'multiple') return 'is-platform-multiple'
@@ -79,6 +105,17 @@ function splitWeeks(days: Date[]): CalendarWeek[] {
     weeks.push({ key: yyyyMmDd(weekDays[0]), days: weekDays })
   }
   return weeks
+}
+
+function sortPlatformLabels(a: string, b: string): number {
+  const ai = PLATFORM_ORDER.findIndex(item => item.toLowerCase() === a.toLowerCase())
+  const bi = PLATFORM_ORDER.findIndex(item => item.toLowerCase() === b.toLowerCase())
+  if (ai !== -1 || bi !== -1) {
+    if (ai === -1) return 1
+    if (bi === -1) return -1
+    return ai - bi
+  }
+  return a.localeCompare(b)
 }
 
 export default function CalendarPage() {
@@ -134,11 +171,11 @@ export default function CalendarPage() {
   const selectedEvents = eventsByDay.get(selectedDay) ?? []
   const selectedDayTitle = selectedDayHeading(selectedDay)
 
-  function weekBars(week: CalendarWeek): WeekEventBar[] {
+  function weekBarLayout(week: CalendarWeek): WeekBarLayout {
     const weekKeys = week.days.map(yyyyMmDd)
     const weekStart = weekKeys[0]
     const weekEnd = weekKeys[6]
-    return displayEvents
+    const bars = displayEvents
       .map((event) => {
         const keys = calendarEventDayKeys(event)
         if (keys.length <= 1) return null
@@ -148,9 +185,13 @@ export default function CalendarPage() {
         const endColumn = Math.max(startColumn, weekKeys.indexOf(touched[touched.length - 1]) + 1)
         return { event, startColumn, endColumn }
       })
-      .filter(Boolean)
+      .filter((bar): bar is WeekEventBar => Boolean(bar))
       .sort((a, b) => a!.event.start.localeCompare(b!.event.start))
-      .slice(0, 4) as WeekEventBar[]
+
+    return {
+      bars: bars.slice(0, MAX_WEEK_BARS),
+      hiddenCount: Math.max(0, bars.length - MAX_WEEK_BARS),
+    }
   }
 
   function visibleDayItems(dayKey: string): CalendarEvent[] {
@@ -176,7 +217,7 @@ export default function CalendarPage() {
   }, [monthEvents])
 
   const platformLegend = useMemo(() => {
-    return Array.from(new Set(monthEvents.map(eventSourceLabel))).sort((a, b) => a.localeCompare(b))
+    return Array.from(new Set(monthEvents.map(eventSourceLabel))).sort(sortPlatformLabels)
   }, [monthEvents])
 
   const upcomingEvents = useMemo(() => {
@@ -323,58 +364,75 @@ export default function CalendarPage() {
             </div>
 
             <div className="calendar-month-grid">
-              {weeks.map(week => (
-                <div key={week.key} className="calendar-week">
-                  <div className="calendar-week-days">
-                    {week.days.map(d => {
-                      const ymd = yyyyMmDd(d)
-                      const inMonth = d >= monthStart && d <= monthEnd
-                      const allItems = eventsByDay.get(ymd) ?? []
-                      const dayItems = visibleDayItems(ymd)
-                      const visibleItems = dayItems.slice(0, 2)
-                      const overflowCount = Math.max(0, dayItems.length - visibleItems.length)
-                      const isToday = ymd === yyyyMmDd(new Date())
-                      const isSelected = ymd === selectedDay
-                      return (
-                        <button
-                          key={ymd}
-                          className={`calendar-day ${inMonth ? '' : 'is-muted'} ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected' : ''}`}
-                          onClick={() => setSelectedDay(ymd)}
-                          type="button"
-                        >
-                          <div className="calendar-day-top">
-                            <span>{d.getDate()}</span>
-                            {allItems.length ? <span className="calendar-count">{allItems.length}</span> : <span />}
-                          </div>
-                          <div className="calendar-day-items">
-                            {visibleItems.map(event => (
-                              <span key={event.id} className={`calendar-chip is-${eventTone(event.eventType)} ${eventPlatformClass(event)}`} onClick={(e) => { e.stopPropagation(); void edit(event.id) }}>
-                                <strong>{calendarEventDisplayTitle(event)}</strong>
-                                <em>{calendarEventTimeRangeLabel(event)}</em>
-                              </span>
-                            ))}
-                            {overflowCount ? <span className="calendar-more">+{overflowCount} more</span> : null}
-                          </div>
-                        </button>
-                      )
-                    })}
+              {weeks.map(week => {
+                const layout = weekBarLayout(week)
+                const spanRows = layout.bars.length + (layout.hiddenCount ? 1 : 0)
+                const weekStyle = {
+                  '--calendar-span-rows': spanRows,
+                  '--calendar-span-area': `${spanRows * 33}px`,
+                } as CSSProperties
+                return (
+                  <div key={week.key} className="calendar-week" style={weekStyle}>
+                    <div className="calendar-week-days">
+                      {week.days.map(d => {
+                        const ymd = yyyyMmDd(d)
+                        const inMonth = d >= monthStart && d <= monthEnd
+                        const allItems = eventsByDay.get(ymd) ?? []
+                        const dayItems = visibleDayItems(ymd)
+                        const visibleItems = dayItems.slice(0, 2)
+                        const overflowCount = Math.max(0, dayItems.length - visibleItems.length)
+                        const isToday = ymd === yyyyMmDd(new Date())
+                        const isSelected = ymd === selectedDay
+                        return (
+                          <button
+                            key={ymd}
+                            className={`calendar-day ${inMonth ? '' : 'is-muted'} ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected' : ''}`}
+                            onClick={() => setSelectedDay(ymd)}
+                            type="button"
+                          >
+                            <div className="calendar-day-top">
+                              <span>{d.getDate()}</span>
+                              {allItems.length ? <span className="calendar-count">{allItems.length}</span> : <span />}
+                            </div>
+                            <div className="calendar-day-items">
+                              {visibleItems.map(event => (
+                                <span
+                                  key={event.id}
+                                  className={`calendar-chip is-${eventTone(event.eventType)} ${eventPlatformClass(event)}`}
+                                  onClick={(e) => { e.stopPropagation(); void edit(event.id) }}
+                                  title={`${eventSourceLabel(event)} | ${calendarEventTimeRangeLabel(event)} | ${calendarEventDisplayTitle(event)}`}
+                                >
+                                  <strong>{calendarEventDisplayTitle(event)}</strong>
+                                  <em>{eventSourceLabel(event)} | {calendarEventTimeRangeLabel(event)}</em>
+                                </span>
+                              ))}
+                              {overflowCount ? <span className="calendar-more">+{overflowCount} more</span> : null}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {layout.bars.length ? (
+                      <div className="calendar-week-bars">
+                        {layout.bars.map(({ event, startColumn, endColumn }) => (
+                          <button
+                            key={`${week.key}-${event.id}`}
+                            className={`calendar-span-bar is-${eventTone(event.eventType)} ${eventPlatformClass(event)}`}
+                            style={{ gridColumn: `${startColumn} / ${endColumn + 1}` }}
+                            onClick={() => edit(event.id)}
+                            type="button"
+                            title={`${eventSourceLabel(event)} | ${calendarEventTimeRangeLabel(event)} | ${calendarEventDisplayTitle(event)}`}
+                          >
+                            <strong>{calendarEventDisplayTitle(event)}</strong>
+                            <span>{eventSourceLabel(event)} | {calendarEventTimeRangeLabel(event)}</span>
+                          </button>
+                        ))}
+                        {layout.hiddenCount ? <span className="calendar-more-spans">+{layout.hiddenCount} more spanning</span> : null}
+                      </div>
+                    ) : null}
                   </div>
-                  <div className="calendar-week-bars">
-                    {weekBars(week).map(({ event, startColumn, endColumn }) => (
-                      <button
-                        key={`${week.key}-${event.id}`}
-                        className={`calendar-span-bar is-${eventTone(event.eventType)} ${eventPlatformClass(event)}`}
-                        style={{ gridColumn: `${startColumn} / ${endColumn + 1}` }}
-                        onClick={() => edit(event.id)}
-                        type="button"
-                      >
-                        <strong>{calendarEventDisplayTitle(event)}</strong>
-                        <span>{calendarEventTimeRangeLabel(event)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
@@ -383,7 +441,7 @@ export default function CalendarPage() {
               <div>
                 <span className="calendar-panel-eyebrow">Selected day</span>
                 <h3>{selectedDayTitle}</h3>
-                <p>{selectedDay} · {selectedEvents.length ? `${selectedEvents.length} event${selectedEvents.length === 1 ? '' : 's'}` : 'No events'}</p>
+                <p>{selectedDay} | {selectedEvents.length ? `${selectedEvents.length} event${selectedEvents.length === 1 ? '' : 's'}` : 'No events'}</p>
               </div>
               <button className="btn compact" onClick={() => startNew(selectedDay)}>Add</button>
             </div>
@@ -393,7 +451,7 @@ export default function CalendarPage() {
                   <div>
                     <span>{calendarEventTimeRangeLabel(event)}</span>
                     <strong>{calendarEventDisplayTitle(event)}</strong>
-                    <em>{eventTypeLabel(event)} · {eventSourceLabel(event)}</em>
+                    <em>{eventTypeLabel(event)} | {eventSourceLabel(event)}</em>
                   </div>
                   <div className="calendar-agenda-actions">
                     <button className="btn compact" onClick={() => edit(event.id)}>Details</button>
@@ -505,7 +563,7 @@ export default function CalendarPage() {
           <div className="upcoming-list">
             {upcomingEvents.map(event => (
               <button key={event.id} className={`upcoming-item is-${eventTone(event.eventType)} ${eventPlatformClass(event)}`} onClick={() => edit(event.id)} type="button">
-                <span>{calendarDateKey(event.start, event.timezone)} | {calendarEventTimeRangeLabel(event)}</span>
+                <span>{calendarDateKey(event.start, event.timezone)} | {eventSourceLabel(event)} | {calendarEventTimeRangeLabel(event)}</span>
                 <strong>{calendarEventDisplayTitle(event)}</strong>
                 <em>{event.eventType}</em>
               </button>
