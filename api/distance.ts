@@ -1,13 +1,18 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createAuthedSupabase, getBearerToken } from './auth-utils.js'
+import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders } from './auth-utils.js'
 
 const MAX_ADDRESS_LENGTH = 300
 const DISTANCE_TIMEOUT_MS = 5_000
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setApiSecurityHeaders(res)
+
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
+    const rate = checkRateLimit(req, 'distance', { limit: 60, windowMs: 60 * 1000 })
+    if (!rate.allowed) return sendRateLimited(res, rate.retryAfterSeconds)
+
     const token = getBearerToken(req)
     if (!token) return res.status(401).json({ error: 'Missing bearer token' })
 

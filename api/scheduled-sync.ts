@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createServiceSupabase } from './auth-utils.js'
+import { createServiceSupabase, cronAuthorized, setApiSecurityHeaders } from './auth-utils.js'
 import { syncFeed, type Feed } from './sync-ics.js'
 
 type FeedSummary = {
@@ -14,17 +14,13 @@ type FeedSummary = {
   errors: string[]
 }
 
-function authorize(req: VercelRequest): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return false
-  return String(req.headers.authorization || '') === `Bearer ${secret}`
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setApiSecurityHeaders(res)
+
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  if (!authorize(req)) return res.status(401).json({ error: 'Unauthorized' })
+  if (!cronAuthorized(req)) return res.status(401).json({ error: 'Unauthorized' })
 
   try {
     const client = createServiceSupabase()

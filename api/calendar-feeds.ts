@@ -1,9 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createAuthedSupabase, getBearerToken, maskUrl, toJsonBody } from './auth-utils.js'
+import { checkRateLimit, createAuthedSupabase, getBearerToken, maskUrl, sendRateLimited, setApiSecurityHeaders, toJsonBody } from './auth-utils.js'
 import { validateFeedUrl } from './feed-fetch.js'
 
 type FeedPlatform = 'RefQuest' | 'DragonFly' | string
 type FeedSport = string | null
+const MAX_FEEDS_PER_USER = 20
+const MAX_FEED_NAME_LENGTH = 120
+const MAX_DEFAULT_LEAGUE_LENGTH = 120
 
 function normalizeDateOnly(x: unknown): string | null {
   const s = String(x || '').trim()
@@ -38,15 +41,36 @@ async function enforcePlatformLimit(client: any, userId: string, platform: FeedP
     .from('calendar_feeds')
     .select('id, platform')
     .eq('user_id', userId)
-    .eq('platform', platform)
   if (error) throw new Error(`calendar_feeds: ${error.message}`)
-  const count = (data ?? []).filter((x: any) => x.id !== excludeId).length
+  const rows = (data ?? []).filter((x: any) => x.id !== excludeId)
+  const count = rows.filter((x: any) => x.platform === platform).length
+  const totalCount = rows.length
+  if (totalCount >= MAX_FEEDS_PER_USER) throw new Error(`You can save at most ${MAX_FEEDS_PER_USER} calendar feeds`)
   if (platform === 'DragonFly' && count >= 1) throw new Error('DragonFly supports only 1 feed URL')
   if (platform === 'RefQuest' && count >= 8) throw new Error('RefQuest supports at most 8 feed URLs')
 }
 
+function normalizeName(x: unknown): string {
+  const raw = String(x || '').trim()
+  if (!raw) throw new Error('name is required')
+  if (raw.length > MAX_FEED_NAME_LENGTH) throw new Error(`name must be ${MAX_FEED_NAME_LENGTH} characters or fewer`)
+  return raw
+}
+
+function normalizeDefaultLeague(x: unknown): string | null {
+  const raw = String(x || '').trim()
+  if (!raw) return null
+  if (raw.length > MAX_DEFAULT_LEAGUE_LENGTH) throw new Error(`defaultLeague must be ${MAX_DEFAULT_LEAGUE_LENGTH} characters or fewer`)
+  return raw
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setApiSecurityHeaders(res)
+
   try {
+    const rate = checkRateLimit(req, 'calendar-feeds', { limit: 120, windowMs: 60 * 1000 })
+    if (!rate.allowed) return sendRateLimited(res, rate.retryAfterSeconds)
+
     const token = getBearerToken(req)
     if (!token) return res.status(401).json({ error: 'Missing bearer token' })
     const client = createAuthedSupabase(token)
@@ -83,12 +107,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const platform = normalizePlatform(body.platform)
       await enforcePlatformLimit(client, userId, platform)
 
-      const name = String(body.name || '').trim()
-      if (!name) return res.status(400).json({ error: 'name is required' })
+      const name = normalizeName(body.name)
       const feedUrl = mustUrl(body.feedUrl)
       const enabled = body.enabled == null ? true : Boolean(body.enabled)
       const sport = normalizeSport(body.sport)
-      const defaultLeague = String(body.defaultLeague || '').trim() || null
+      const defaultLeague = normalizeDefaultLeague(body.defaultLeague)
       const importStartDate = normalizeDateOnly(body.importStartDate)
 
       const { data, error } = await client
@@ -143,14 +166,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const updates: any = { updated_at: new Date().toISOString(), platform: normalizedPlatform }
       if (body.name != null) {
-        const name = String(body.name).trim()
-        if (!name) return res.status(400).json({ error: 'name cannot be blank' })
-        updates.name = name
+        updates.name = normalizeName(body.name)
       }
       if (body.feedUrl != null) updates.feed_url = mustUrl(body.feedUrl)
       if (body.enabled != null) updates.enabled = Boolean(body.enabled)
       if (body.sport !== undefined) updates.sport = normalizeSport(body.sport)
-      if (body.defaultLeague !== undefined) updates.default_league = String(body.defaultLeague || '').trim() || null
+      if (body.defaultLeague !== undefined) updates.default_league = normalizeDefaultLeague(body.defaultLeague)
       if (body.importStartDate !== undefined) updates.import_start_date = normalizeDateOnly(body.importStartDate)
 
       const { data, error } = await client

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createAuthedSupabase, getBearerToken, toJsonBody } from './auth-utils.js'
+import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from './auth-utils.js'
 
 function normText(s: string | null | undefined): string {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
@@ -265,8 +265,13 @@ function buildPlan(games: any[], events: any[]): CleanupPlan {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setApiSecurityHeaders(res)
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   try {
+    const rate = checkRateLimit(req, 'cleanup-sync', { limit: 30, windowMs: 60 * 1000 })
+    if (!rate.allowed) return sendRateLimited(res, rate.retryAfterSeconds)
+
     const token = getBearerToken(req)
     if (!token) return res.status(401).json({ error: 'Missing bearer token' })
     const client = createAuthedSupabase(token)

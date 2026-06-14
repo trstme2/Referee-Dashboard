@@ -1,10 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createAuthedSupabase, getBearerToken } from '../auth-utils.js'
+import { checkRateLimit, createAuthedSupabase, getBearerToken, setApiSecurityHeaders } from '../auth-utils.js'
 import { buildIcsCalendar, loadCalendarExportDataForUser } from '../calendar-export-utils.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setApiSecurityHeaders(res, 'private, no-store')
+
   try {
     if (req.method !== 'GET') return res.status(405).send('Method not allowed')
+    const rate = checkRateLimit(req, 'calendar-download-authenticated', { limit: 60, windowMs: 60 * 1000 })
+    if (!rate.allowed) {
+      res.setHeader('Retry-After', String(rate.retryAfterSeconds))
+      return res.status(429).send('Too many requests. Please try again shortly.')
+    }
 
     const token = getBearerToken(req)
     if (!token) return res.status(401).send('Missing bearer token')
@@ -18,7 +25,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8')
     res.setHeader('Content-Disposition', 'attachment; filename="whistle-keeper-calendar.ics"')
-    res.setHeader('Cache-Control', 'private, no-store')
     return res.status(200).send(ics)
   } catch (e: any) {
     return res.status(500).send(String(e?.message || e || 'Unknown error'))

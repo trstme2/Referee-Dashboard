@@ -7,18 +7,18 @@ Create a project in Supabase, then grab:
 - server secret key (`sb_secret_...`)
 
 ## 2) Run the schema SQL
-Open Supabase → SQL Editor → paste `supabase/schema.sql` from this repo.
+Open Supabase -> SQL Editor -> paste `supabase/schema.sql` from this repo.
 This now also creates the private `requirement-evidence` Storage bucket plus policies for per-user document access.
 
 ## 3) Enable Auth + URLs
-Supabase → Authentication → URL Configuration:
+Supabase -> Authentication -> URL Configuration:
 - Site URL: your Vercel production URL (e.g. https://your-app.vercel.app)
 - Redirect URLs: add the same domain, plus Preview domains if you use them.
 
 Magic link sign-in uses `emailRedirectTo = window.location.origin`.
 
 ## 4) Vercel env vars
-In Vercel Project Settings → Environment Variables:
+In Vercel Project Settings -> Environment Variables:
 
 Frontend (Vite):
 - `VITE_SUPABASE_URL`
@@ -45,5 +45,8 @@ Push to GitHub, import into Vercel, deploy.
 - RLS policies enforce `auth.uid() = user_id` across all tables.
 - Legacy `VITE_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` still work during rotation, but new deployments should use the publishable and secret key variables above.
 - Requirement evidence uploads are stored in private Supabase Storage, under a user-scoped folder path.
+- Expense receipt uploads are stored in private Supabase Storage, under a user-scoped folder path.
+- Calendar feed URLs and calendar subscription URLs are sensitive secrets. The app masks saved feed URLs in API responses, uses private/no-store response headers for calendar exports, and lets users regenerate subscription tokens from Settings. Treat copied subscription URLs like passwords because calendar clients need unauthenticated access to poll them.
+- Serverless endpoints include best-effort in-process rate limits. For high-volume production usage, pair these with a platform or edge rate limit because serverless instances do not share memory.
 - Settings (home address, assigning platforms, league suggestions) are stored in `user_settings`.
 - Distance is calculated via `/api/distance` (serverless) so your API key is not exposed to the browser.

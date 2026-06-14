@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import ical from 'node-ical'
 import { createHash } from 'node:crypto'
-import { createAuthedSupabase, getBearerToken, toJsonBody } from './auth-utils.js'
+import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from './auth-utils.js'
 import { fetchCalendarFeedText } from './feed-fetch.js'
 import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks } from './sync-ics-utils.js'
 
@@ -680,8 +680,13 @@ export async function syncFeed(client: any, feed: Feed) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setApiSecurityHeaders(res)
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   try {
+    const rate = checkRateLimit(req, 'sync-ics', { limit: 20, windowMs: 10 * 60 * 1000 })
+    if (!rate.allowed) return sendRateLimited(res, rate.retryAfterSeconds)
+
     const token = getBearerToken(req)
     if (!token) return res.status(401).json({ error: 'Missing bearer token' })
     const client = createAuthedSupabase(token)

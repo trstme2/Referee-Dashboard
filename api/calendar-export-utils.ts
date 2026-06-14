@@ -5,6 +5,8 @@ const FALLBACK_TIMEZONE = 'America/New_York'
 const DEFAULT_GAME_START = '17:00'
 const DEFAULT_GAME_DURATION_HOURS = 2
 const DEFAULT_HOME_ADDRESS = ''
+const CALENDAR_EXPORT_TOKEN_BYTES = 32
+const CALENDAR_EXPORT_TOKEN_PATTERN = /^[a-f0-9]{64}$/i
 
 type GameRow = {
   id: string
@@ -194,7 +196,7 @@ function sameLocalMinute(a: Date, b: Date, timeZone: string): boolean {
   return aa.year === bb.year && aa.month === bb.month && aa.day === bb.day && aa.hour === bb.hour && aa.minute === bb.minute
 }
 
-function findTransition(timeZone: string, start: Date, end: Date, offsetFrom: string, offsetTo: string): Date {
+function findTransition(timeZone: string, start: Date, end: Date, offsetFrom: string, _offsetTo: string): Date {
   let lo = start
   let hi = end
   while (hi.getTime() - lo.getTime() > 60_000) {
@@ -422,6 +424,14 @@ export function buildIcsCalendar(params: { userId: string; defaultTimezone?: str
   return `${lines.join('\r\n')}\r\n`
 }
 
+export function createCalendarExportToken(): string {
+  return randomBytes(CALENDAR_EXPORT_TOKEN_BYTES).toString('hex')
+}
+
+export function isCalendarExportToken(value: unknown): boolean {
+  return CALENDAR_EXPORT_TOKEN_PATTERN.test(String(value || '').trim())
+}
+
 export async function ensureCalendarExportToken(client: any, userId: string) {
   const { data: existing, error: readError } = await client
     .from('user_settings')
@@ -430,9 +440,9 @@ export async function ensureCalendarExportToken(client: any, userId: string) {
     .maybeSingle()
   if (readError) throw new Error(`user_settings: ${readError.message}`)
 
-  if (existing?.calendar_export_token) return String(existing.calendar_export_token)
+  if (isCalendarExportToken(existing?.calendar_export_token)) return String(existing.calendar_export_token)
 
-  const token = randomBytes(32).toString('hex')
+  const token = createCalendarExportToken()
   if (existing?.user_id) {
     const { error: updateError } = await client
       .from('user_settings')
@@ -458,7 +468,7 @@ export async function ensureCalendarExportToken(client: any, userId: string) {
 }
 
 export async function regenerateCalendarExportToken(client: any, userId: string) {
-  const token = randomBytes(32).toString('hex')
+  const token = createCalendarExportToken()
   const { data: existing, error: readError } = await client
     .from('user_settings')
     .select('user_id')

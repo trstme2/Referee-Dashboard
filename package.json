@@ -39,5 +39,15 @@
     "typescript-eslint": "^8.60.1",
     "vite": "^8.0.16",
     "vitest": "^4.1.8"
+  },
+  "overrides": {
+    "@vercel/static-config": {
+      "ajv": "^8.18.0"
+    },
+    "esbuild": "^0.28.1",
+    "minimatch": "^10.2.5",
+    "path-to-regexp": "^6.3.0",
+    "smol-toml": "^1.6.1",
+    "undici": "^6.24.0"
   }
 }

@@ -1,5 +1,23 @@
 import type { VercelRequest } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import { timingSafeEqual } from 'node:crypto'
+
+type HeaderResponse = {
+  setHeader(name: string, value: string): void
+}
+
+type RateLimitOptions = {
+  limit: number
+  windowMs: number
+}
+
+type RateLimitResult = {
+  allowed: boolean
+  retryAfterSeconds: number
+}
+
+const rateBuckets = new Map<string, { resetAt: number; count: number }>()
+const MAX_RATE_BUCKETS = 10_000
 
 function env(name: string): string | undefined {
   return process.env[name]
@@ -27,6 +45,59 @@ export function getBearerToken(req: VercelRequest): string | null {
   const h = String(req.headers.authorization || '')
   if (!h.toLowerCase().startsWith('bearer ')) return null
   return h.slice(7).trim() || null
+}
+
+export function setApiSecurityHeaders(res: HeaderResponse, cacheControl = 'no-store') {
+  res.setHeader('Cache-Control', cacheControl)
+  res.setHeader('Referrer-Policy', 'no-referrer')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+}
+
+function clientIp(req: VercelRequest): string {
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+  return forwarded || String(req.socket?.remoteAddress || 'unknown')
+}
+
+export function checkRateLimit(req: VercelRequest, bucket: string, options: RateLimitOptions): RateLimitResult {
+  const now = Date.now()
+  const key = `${bucket}:${clientIp(req)}`
+  if (rateBuckets.size > MAX_RATE_BUCKETS) {
+    for (const [bucketKey, value] of rateBuckets) {
+      if (value.resetAt <= now) rateBuckets.delete(bucketKey)
+    }
+  }
+
+  const existing = rateBuckets.get(key)
+
+  if (!existing || existing.resetAt <= now) {
+    rateBuckets.set(key, { resetAt: now + options.windowMs, count: 1 })
+    return { allowed: true, retryAfterSeconds: 0 }
+  }
+
+  existing.count += 1
+  if (existing.count <= options.limit) return { allowed: true, retryAfterSeconds: 0 }
+
+  return {
+    allowed: false,
+    retryAfterSeconds: Math.max(1, Math.ceil((existing.resetAt - now) / 1000)),
+  }
+}
+
+export function sendRateLimited(res: HeaderResponse & { status(code: number): { json(body: unknown): unknown } }, retryAfterSeconds: number) {
+  res.setHeader('Retry-After', String(retryAfterSeconds))
+  return res.status(429).json({ error: 'Too many requests. Please try again shortly.' })
+}
+
+export function cronAuthorized(req: VercelRequest): boolean {
+  const secret = env('CRON_SECRET')
+  const supplied = getBearerToken(req)
+  if (!secret || !supplied) return false
+
+  const expected = Buffer.from(secret)
+  const actual = Buffer.from(supplied)
+  return expected.length === actual.length && timingSafeEqual(expected, actual)
 }
 
 export function createAuthedSupabase(token: string) {

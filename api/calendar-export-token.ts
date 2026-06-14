@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createAuthedSupabase, getBearerToken, toJsonBody } from './auth-utils.js'
+import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from './auth-utils.js'
 import { ensureCalendarExportToken, regenerateCalendarExportToken } from './calendar-export-utils.js'
 
 function originFromReq(req: VercelRequest): string {
@@ -10,8 +10,12 @@ function originFromReq(req: VercelRequest): string {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setApiSecurityHeaders(res)
+
   try {
-    res.setHeader('Cache-Control', 'no-store')
+    const preAuthLimit = checkRateLimit(req, 'calendar-export-token', { limit: 90, windowMs: 60 * 1000 })
+    if (!preAuthLimit.allowed) return sendRateLimited(res, preAuthLimit.retryAfterSeconds)
+
     const bearer = getBearerToken(req)
     if (!bearer) return res.status(401).json({ error: 'Missing bearer token' })
     const client = createAuthedSupabase(bearer)
@@ -31,6 +35,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST') {
+      const regenerateLimit = checkRateLimit(req, 'calendar-export-token-regenerate', { limit: 10, windowMs: 10 * 60 * 1000 })
+      if (!regenerateLimit.allowed) return sendRateLimited(res, regenerateLimit.retryAfterSeconds)
+
       const body = toJsonBody(req)
       const action = String(body.action || '').trim()
       if (action !== 'regenerate') return res.status(400).json({ error: 'Unsupported action' })

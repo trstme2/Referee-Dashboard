@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildIcsCalendar, dedupeCalendarExportRows } from './calendar-export-utils.js'
+import { buildIcsCalendar, createCalendarExportToken, dedupeCalendarExportRows, isCalendarExportToken } from './calendar-export-utils.js'
 
 function block(id: string) {
   return {
@@ -41,5 +41,20 @@ describe('calendar export duplicate protection', () => {
     expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(1)
     expect(ics).toContain('SUMMARY:Availability Block: Unavailable')
     expect(ics).not.toContain('8/4/2026 07:00 pm')
+  })
+})
+
+describe('calendar export token hardening', () => {
+  it('generates 64-character hex subscription tokens', () => {
+    const token = createCalendarExportToken()
+
+    expect(token).toHaveLength(64)
+    expect(isCalendarExportToken(token)).toBe(true)
+  })
+
+  it('rejects malformed subscription tokens before lookup', () => {
+    expect(isCalendarExportToken('short')).toBe(false)
+    expect(isCalendarExportToken('../not-a-token')).toBe(false)
+    expect(isCalendarExportToken(`${'a'.repeat(63)}z`)).toBe(false)
   })
 })

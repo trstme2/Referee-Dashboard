@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createServiceSupabase } from './auth-utils.js'
+import { createServiceSupabase, cronAuthorized, setApiSecurityHeaders } from './auth-utils.js'
 
 type GameRow = {
   id: string
@@ -134,12 +134,6 @@ function gamesHtml(games: GameRow[], timeZone: string, appUrl?: string): string 
 </html>`
 }
 
-function authorize(req: VercelRequest): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return false
-  return String(req.headers.authorization || '') === `Bearer ${secret}`
-}
-
 function appUrl(): string | undefined {
   const raw = process.env.APP_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL
   if (!raw) return undefined
@@ -216,10 +210,12 @@ async function loadGames(client: any, userId: string, startYmd: string, endYmd: 
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  setApiSecurityHeaders(res)
+
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  if (!authorize(req)) return res.status(401).json({ error: 'Unauthorized' })
+  if (!cronAuthorized(req)) return res.status(401).json({ error: 'Unauthorized' })
 
   const client = createServiceSupabase()
   const dashboardUrl = appUrl()
