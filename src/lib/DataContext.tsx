@@ -11,6 +11,7 @@ type WriteOptions = { forceFullReplace?: boolean }
 type DataContextValue = {
   mode: DataMode
   session: Session | null
+  authReady: boolean
   db: DB
   loading: boolean
   error: string | null
@@ -344,6 +345,7 @@ async function syncIncremental(userId: string, prev: DB, next: DB): Promise<void
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [db, setDb] = useState<DB>(() => loadDB())
   const [session, setSession] = useState<Session | null>(null)
+  const [authReady, setAuthReady] = useState(!supabaseConfigured)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -356,9 +358,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [db.settings])
 
   useEffect(() => {
-    if (!supabase) return
-    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
+    if (!supabase) {
+      return
+    }
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session ?? null)
+      setAuthReady(true)
+    }).catch(() => {
+      setSession(null)
+      setAuthReady(true)
+    })
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s)
+      setAuthReady(true)
+    })
     return () => { sub.subscription.unsubscribe() }
   }, [])
 
@@ -422,8 +435,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ mode, session, db, loading, error, refresh, write, signOut }),
-    [mode, session, db, loading, error, refresh, write, signOut]
+    () => ({ mode, session, authReady, db, loading, error, refresh, write, signOut }),
+    [mode, session, authReady, db, loading, error, refresh, write, signOut]
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import type { ReactNode } from 'react'
 import Nav from './components/Nav'
 import HomePage from './pages/HomePage'
 import GamesPage from './pages/GamesPage'
@@ -19,11 +20,26 @@ import { shouldStartOnboarding } from './lib/onboarding'
 import logo from './assets/logo.png'
 
 export default function App() {
-  const { mode, session, error, db, loading } = useData()
+  const { mode, session, authReady, error, db, loading } = useData()
   const requireAuth = mode === 'supabase'
   const location = useLocation()
-  const showLanding = requireAuth && !session && location.pathname === '/'
-  const startOnboarding = !loading && Boolean(session) && shouldStartOnboarding(db)
+  const authMissing = requireAuth && authReady && !session
+  const authRestoring = requireAuth && !authReady
+  const showLanding = authMissing && location.pathname === '/'
+  const startOnboarding = !loading && authReady && Boolean(session) && shouldStartOnboarding(db)
+  const protectedElement = (element: ReactNode) => {
+    if (authRestoring) {
+      return (
+        <div className="grid">
+          <section className="card">
+            <h2>Checking sign-in</h2>
+            <p className="small">Restoring your secure session...</p>
+          </section>
+        </div>
+      )
+    }
+    return authMissing ? <Navigate to="/auth" replace /> : element
+  }
 
   return (
     <div className={showLanding ? 'landing-container' : 'container'}>
@@ -52,18 +68,18 @@ export default function App() {
           <Route path="/auth" element={<AuthPage />} />
 
           {/* Guard routes when in supabase mode */}
-          <Route path="/" element={requireAuth && !session ? <LandingPage /> : startOnboarding ? <Navigate to="/onboarding" replace /> : <HomePage />} />
-          <Route path="/onboarding" element={requireAuth && !session ? <Navigate to="/auth" /> : <OnboardingPage />} />
-          <Route path="/games" element={requireAuth && !session ? <Navigate to="/auth" /> : <GamesPage />} />
-          <Route path="/calendar" element={requireAuth && !session ? <Navigate to="/auth" /> : <CalendarPage />} />
-          <Route path="/expenses" element={requireAuth && !session ? <Navigate to="/auth" /> : <ExpensesPage />} />
-          <Route path="/tax" element={requireAuth && !session ? <Navigate to="/auth" /> : <TaxPage />} />
-          <Route path="/requirements" element={requireAuth && !session ? <Navigate to="/auth" /> : <RequirementsPage />} />
-          <Route path="/import" element={requireAuth && !session ? <Navigate to="/auth" /> : <ImportPage />} />
-          <Route path="/sync" element={requireAuth && !session ? <Navigate to="/auth" /> : <SyncPage />} />
-          <Route path="/settings" element={requireAuth && !session ? <Navigate to="/auth" /> : <SettingsPage />} />
-          <Route path="/privacy" element={requireAuth && !session ? <Navigate to="/auth" /> : <DataPrivacyPage />} />
-          <Route path="/admin" element={requireAuth && !session ? <Navigate to="/auth" /> : <AdminPage />} />
+          <Route path="/" element={authMissing ? <LandingPage /> : startOnboarding ? <Navigate to="/onboarding" replace /> : <HomePage />} />
+          <Route path="/onboarding" element={protectedElement(<OnboardingPage />)} />
+          <Route path="/games" element={protectedElement(<GamesPage />)} />
+          <Route path="/calendar" element={protectedElement(<CalendarPage />)} />
+          <Route path="/expenses" element={protectedElement(<ExpensesPage />)} />
+          <Route path="/tax" element={protectedElement(<TaxPage />)} />
+          <Route path="/requirements" element={protectedElement(<RequirementsPage />)} />
+          <Route path="/import" element={protectedElement(<ImportPage />)} />
+          <Route path="/sync" element={protectedElement(<SyncPage />)} />
+          <Route path="/settings" element={protectedElement(<SettingsPage />)} />
+          <Route path="/privacy" element={protectedElement(<DataPrivacyPage />)} />
+          <Route path="/admin" element={protectedElement(<AdminPage />)} />
 
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
