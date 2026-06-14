@@ -36,33 +36,36 @@ function isMissingColumnError(error: any, table: string, column: string): boolea
     message.includes(`column "${column}" of relation "${table}" does not exist`)
 }
 
-async function upsertUserSettingsCompat(client: any, payload: any, options?: { ignoreDuplicates?: boolean }) {
-  let result = await client
-    .from('user_settings')
-    .upsert([payload], { onConflict: 'user_id', ...(options ?? {}) })
+const userSettingsCompatColumns = [
+  'other_work_address',
+  'default_timezone',
+  'tax_mileage_rate_cents',
+  'weekly_games_email_enabled',
+  'tracked_sports',
+  'show_game_platform_chips',
+  'onboarding_completed_at',
+] as const
 
-  if (result.error && (
-    isMissingColumnError(result.error, 'user_settings', 'other_work_address') ||
-    isMissingColumnError(result.error, 'user_settings', 'default_timezone') ||
-    isMissingColumnError(result.error, 'user_settings', 'tax_mileage_rate_cents') ||
-    isMissingColumnError(result.error, 'user_settings', 'weekly_games_email_enabled') ||
-    isMissingColumnError(result.error, 'user_settings', 'tracked_sports') ||
-    isMissingColumnError(result.error, 'user_settings', 'show_game_platform_chips') ||
-    isMissingColumnError(result.error, 'user_settings', 'onboarding_completed_at')
-  )) {
-    const {
-      other_work_address: _other_work_address,
-      default_timezone: _default_timezone,
-      tax_mileage_rate_cents: _tax_mileage_rate_cents,
-      weekly_games_email_enabled: _weekly_games_email_enabled,
-      tracked_sports: _tracked_sports,
-      show_game_platform_chips: _show_game_platform_chips,
-      onboarding_completed_at: _onboarding_completed_at,
-      ...legacyPayload
-    } = payload
+function missingCompatColumn(error: any, table: string, columns: readonly string[]): string | null {
+  return columns.find((column) => isMissingColumnError(error, table, column)) ?? null
+}
+
+async function upsertUserSettingsCompat(client: any, payload: any, options?: { ignoreDuplicates?: boolean }) {
+  let nextPayload = { ...payload }
+  let result: any = null
+
+  for (let attempt = 0; attempt <= userSettingsCompatColumns.length; attempt += 1) {
     result = await client
       .from('user_settings')
-      .upsert([legacyPayload], { onConflict: 'user_id', ...(options ?? {}) })
+      .upsert([nextPayload], { onConflict: 'user_id', ...(options ?? {}) })
+
+    if (!result.error) return result
+
+    const missingColumn = missingCompatColumn(result.error, 'user_settings', userSettingsCompatColumns)
+    if (!missingColumn || !(missingColumn in nextPayload)) return result
+
+    const { [missingColumn]: _missing, ...rest } = nextPayload
+    nextPayload = rest
   }
 
   return result
