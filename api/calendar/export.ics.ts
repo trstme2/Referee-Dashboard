@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { checkRateLimit, createServiceSupabase, setApiSecurityHeaders } from '../auth-utils.js'
-import { buildIcsCalendar, calendarExportTokenLookupValues, isCalendarExportToken, loadCalendarExportDataForUser } from '../calendar-export-utils.js'
+import { checkRateLimit, createServiceSupabase, setApiSecurityHeaders } from '../../src/server/auth-utils.js'
+import { buildIcsCalendar, calendarExportTokenLookupValues, isCalendarExportToken, loadCalendarExportDataForUser } from '../../src/server/calendar-export-utils.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setApiSecurityHeaders(res, 'private, no-store')

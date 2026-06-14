@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { checkRateLimit, createAuthedSupabase, getBearerToken, maskUrl, sendRateLimited, setApiSecurityHeaders, toJsonBody } from './auth-utils.js'
-import { validateFeedUrl } from './feed-fetch.js'
-import { protectFeedUrl, revealFeedUrl } from './personal-data-security.js'
+import { checkRateLimit, createAuthedSupabase, getBearerToken, maskUrl, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
+import { validateFeedUrl } from '../src/server/feed-fetch.js'
+import { protectFeedUrl, revealFeedUrl } from '../src/server/personal-data-security.js'
 
 type FeedPlatform = 'RefQuest' | 'DragonFly' | string
 type FeedSport = string | null

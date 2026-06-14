@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createServiceSupabase, cronAuthorized, setApiSecurityHeaders } from './auth-utils.js'
+import { createServiceSupabase, cronAuthorized, setApiSecurityHeaders } from '../src/server/auth-utils.js'
 
 type GameRow = {
   id: string

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from './auth-utils.js'
-import { ensureCalendarExportToken, regenerateCalendarExportToken } from './calendar-export-utils.js'
+import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
+import { ensureCalendarExportToken, regenerateCalendarExportToken } from '../src/server/calendar-export-utils.js'
 
 function originFromReq(req: VercelRequest): string {
   const proto = String(req.headers['x-forwarded-proto'] || 'https')

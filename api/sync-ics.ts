@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import ical from 'node-ical'
 import { createHash } from 'node:crypto'
-import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from './auth-utils.js'
-import { fetchCalendarFeedText } from './feed-fetch.js'
-import { revealFeedUrl } from './personal-data-security.js'
-import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks } from './sync-ics-utils.js'
+import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
+import { fetchCalendarFeedText } from '../src/server/feed-fetch.js'
+import { revealFeedUrl } from '../src/server/personal-data-security.js'
+import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks } from '../src/server/sync-ics-utils.js'
 
 export type Feed = {
   id: string

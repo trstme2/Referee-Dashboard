@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders } from './auth-utils.js'
+import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders } from '../src/server/auth-utils.js'
 
 const MAX_ADDRESS_LENGTH = 300
 const DISTANCE_TIMEOUT_MS = 5_000
