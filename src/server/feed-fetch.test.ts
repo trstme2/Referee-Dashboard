@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fetchCalendarFeedText, validateFeedUrl } from './feed-fetch.js'
+import { fetchCalendarFeedText, fetchCalendarFeedTextWithRetry, validateFeedUrl } from './feed-fetch.js'
 
 describe('calendar feed fetch hardening', () => {
   it('requires https feed URLs by default', () => {
@@ -30,5 +30,28 @@ describe('calendar feed fetch hardening', () => {
     }))
 
     await expect(fetchCalendarFeedText('https://8.8.8.8/calendar.ics', fetchImpl as any)).rejects.toThrow(/content type/i)
+  })
+
+  it('retries transient feed fetch failures', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('try again', { status: 503 }))
+      .mockResolvedValueOnce(new Response('BEGIN:VCALENDAR\nEND:VCALENDAR', {
+        status: 200,
+        headers: { 'content-type': 'text/calendar' },
+      }))
+
+    const result = await fetchCalendarFeedTextWithRetry('https://8.8.8.8/calendar.ics', fetchImpl as any)
+
+    expect(result.attempts).toBe(2)
+    expect(result.text).toContain('BEGIN:VCALENDAR')
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry unsafe feed hosts', async () => {
+    const fetchImpl = vi.fn()
+
+    await expect(fetchCalendarFeedTextWithRetry('https://127.0.0.1/calendar.ics', fetchImpl as any)).rejects.toMatchObject({ attempts: 1 })
+    expect(fetchImpl).not.toHaveBeenCalled()
   })
 })

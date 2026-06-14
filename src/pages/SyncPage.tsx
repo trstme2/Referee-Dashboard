@@ -52,6 +52,7 @@ export default function SyncPage() {
   const [selectedCleanupKeys, setSelectedCleanupKeys] = useState<string[]>([])
   const [cleaning, setCleaning] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [healthNow, setHealthNow] = useState(Date.now)
 
   const token = session?.access_token ?? null
   const sportOptions = useMemo(() => trackedSportsFor(db.settings.trackedSports, db.games.map(g => g.sport)), [db.settings.trackedSports, db.games])
@@ -61,6 +62,7 @@ export default function SyncPage() {
     RefQuest: feeds.filter(f => f.platform === 'RefQuest').length,
     Other: feeds.filter(f => f.platform !== 'DragonFly' && f.platform !== 'RefQuest').length,
   }), [feeds])
+  const feedResultById = useMemo(() => new Map((result?.feedResults ?? []).map((feedResult) => [feedResult.feedId, feedResult])), [result])
 
   const cleanupReview = useMemo(() => {
     if (!cleanupResult?.samples?.length) return []
@@ -95,6 +97,26 @@ export default function SyncPage() {
 
   const selectedCleanupCount = selectedCleanupKeys.length
 
+  function formatDuration(ms?: number) {
+    if (ms == null) return ''
+    if (ms < 1000) return `${ms} ms`
+    return `${(ms / 1000).toFixed(1)} sec`
+  }
+
+  function feedHealth(feed: CalendarFeed) {
+    const latest = feedResultById.get(feed.id)
+    if (latest) {
+      if (latest.status === 'success') return { label: `Synced just now (${latest.attempts} attempt${latest.attempts === 1 ? '' : 's'})`, cls: 'ok' }
+      if (latest.status === 'partial') return { label: 'Synced with warnings', cls: 'warn' }
+      return { label: `Failed just now (${latest.attempts || 1} attempt${latest.attempts === 1 ? '' : 's'})`, cls: 'bad' }
+    }
+    if (!feed.enabled) return { label: 'Paused', cls: '' }
+    if (!feed.lastSyncedAt) return { label: 'Needs first sync', cls: 'warn' }
+    const ageMs = healthNow - new Date(feed.lastSyncedAt).getTime()
+    if (ageMs > 48 * 60 * 60 * 1000) return { label: 'Stale', cls: 'warn' }
+    return { label: 'Healthy', cls: 'ok' }
+  }
+
   async function api(path: string, init?: RequestInit) {
     if (!token) throw new Error('Not authenticated')
     const res = await fetch(path, {
@@ -117,6 +139,7 @@ export default function SyncPage() {
     try {
       const json = await api('/api/calendar-feeds')
       setFeeds((json.feeds ?? []) as CalendarFeed[])
+      setHealthNow(Date.now())
     } catch (e: any) {
       setErr(String(e?.message ?? e))
     } finally {
@@ -302,34 +325,38 @@ export default function SyncPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Name</th><th>Platform</th><th>Feed URL</th><th>Enabled</th><th>Last synced</th><th></th>
+              <th>Name</th><th>Platform</th><th>Feed URL</th><th>Enabled</th><th>Sync health</th><th>Last synced</th><th></th>
             </tr>
           </thead>
           <tbody>
-            {feeds.map(f => (
-              <tr key={f.id}>
-                <td>
-                  <div>{f.name}</div>
-                  <div className="small">
-                    {f.sport || 'Any sport'}
-                    {f.defaultLeague ? ` | ${f.defaultLeague}` : ''}
-                    {f.importStartDate ? ` | from ${f.importStartDate}` : ''}
-                  </div>
-                </td>
-                <td>{f.platform}</td>
-                <td className="small">{f.maskedFeedUrl || '(hidden)'}</td>
-                <td>{f.enabled ? <span className="pill ok">Yes</span> : <span className="pill">No</span>}</td>
-                <td className="small">{f.lastSyncedAt ? new Date(f.lastSyncedAt).toLocaleString() : 'Never'}</td>
-                <td>
-                  <div className="btnbar">
-                    <button className="btn" onClick={() => editFeed(f)}>Edit</button>
-                    <button className="btn" onClick={() => syncNow(f.id)} disabled={syncing}>Sync Now</button>
-                    <button className="btn danger" onClick={() => deleteFeed(f.id)}>Delete</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {feeds.length === 0 && <tr><td colSpan={6} className="small">No feeds configured.</td></tr>}
+            {feeds.map(f => {
+              const health = feedHealth(f)
+              return (
+                <tr key={f.id}>
+                  <td>
+                    <div>{f.name}</div>
+                    <div className="small">
+                      {f.sport || 'Any sport'}
+                      {f.defaultLeague ? ` | ${f.defaultLeague}` : ''}
+                      {f.importStartDate ? ` | from ${f.importStartDate}` : ''}
+                    </div>
+                  </td>
+                  <td>{f.platform}</td>
+                  <td className="small">{f.maskedFeedUrl || '(hidden)'}</td>
+                  <td>{f.enabled ? <span className="pill ok">Yes</span> : <span className="pill">No</span>}</td>
+                  <td className="small"><span className={`pill ${health.cls}`}>{health.label}</span></td>
+                  <td className="small">{f.lastSyncedAt ? new Date(f.lastSyncedAt).toLocaleString() : 'Never'}</td>
+                  <td>
+                    <div className="btnbar">
+                      <button className="btn" onClick={() => editFeed(f)}>Edit</button>
+                      <button className="btn" onClick={() => syncNow(f.id)} disabled={syncing}>Sync Now</button>
+                      <button className="btn danger" onClick={() => deleteFeed(f.id)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+            {feeds.length === 0 && <tr><td colSpan={7} className="small">No feeds configured.</td></tr>}
           </tbody>
         </table>
 
@@ -337,8 +364,23 @@ export default function SyncPage() {
           <div className="card" style={{ marginTop: 10 }}>
             <h2>Last Sync Result</h2>
             <p className="small">
-              Events: +{result.createdEvents} created, {result.updatedEvents} updated | Games: +{result.createdGames} created, {result.updatedGames} updated
+              {result.feedsSynced != null ? `${result.feedsSynced} feed${result.feedsSynced === 1 ? '' : 's'} checked` : 'Sync complete'}
+              {result.durationMs != null ? ` in ${formatDuration(result.durationMs)}` : ''}. Events: +{result.createdEvents} created, {result.updatedEvents} updated | Games: +{result.createdGames} created, {result.updatedGames} updated
             </p>
+            {result.feedResults?.length ? (
+              <div style={{ marginTop: 8 }}>
+                {result.feedResults.map((feedResult) => (
+                  <p key={feedResult.feedId} className="small">
+                    <span className={`pill ${feedResult.status === 'success' ? 'ok' : feedResult.status === 'partial' ? 'warn' : 'bad'}`}>
+                      {feedResult.status}
+                    </span>{' '}
+                    {feedResult.feedName}: {feedResult.createdGames} games created, {feedResult.updatedGames} games updated, {feedResult.createdEvents} events created, {feedResult.updatedEvents} events updated
+                    {feedResult.durationMs != null ? ` in ${formatDuration(feedResult.durationMs)}` : ''}
+                    {feedResult.attempts ? ` (${feedResult.attempts} attempt${feedResult.attempts === 1 ? '' : 's'})` : ''}
+                  </p>
+                ))}
+              </div>
+            ) : null}
             {result.diagnostics ? (
               <div style={{ marginTop: 8 }}>
                 <p className="small">

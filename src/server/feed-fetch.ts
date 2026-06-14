@@ -4,6 +4,18 @@ import net from 'node:net'
 const MAX_FEED_BYTES = 2 * 1024 * 1024
 const FEED_TIMEOUT_MS = 8_000
 const MAX_REDIRECTS = 3
+const DEFAULT_RETRY_ATTEMPTS = 2
+const RETRY_DELAY_MS = 300
+
+export class CalendarFeedFetchError extends Error {
+  attempts: number
+
+  constructor(message: string, attempts: number, cause?: unknown) {
+    super(message, { cause })
+    this.name = 'CalendarFeedFetchError'
+    this.attempts = attempts
+  }
+}
 
 function isInRange(value: number, start: number, end: number): boolean {
   return value >= start && value <= end
@@ -130,4 +142,38 @@ export async function fetchCalendarFeedText(rawUrl: string, fetchImpl: typeof fe
   }
 
   throw new Error('too many feed redirects')
+}
+
+function retryableFeedError(error: unknown): boolean {
+  const message = String((error as any)?.message || error || '')
+  return (
+    /aborted|timeout|network|fetch failed/i.test(message) ||
+    /HTTP (408|429|5\d\d)/i.test(message)
+  )
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export async function fetchCalendarFeedTextWithRetry(rawUrl: string, fetchImpl: typeof fetch = fetch, maxAttempts = DEFAULT_RETRY_ATTEMPTS): Promise<{ text: string; attempts: number }> {
+  const attempts = Math.max(1, maxAttempts)
+  let lastError: unknown = null
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return {
+        text: await fetchCalendarFeedText(rawUrl, fetchImpl),
+        attempts: attempt,
+      }
+    } catch (error) {
+      lastError = error
+      if (attempt >= attempts || !retryableFeedError(error)) {
+        throw new CalendarFeedFetchError(String((error as any)?.message || error || 'Feed fetch failed'), attempt, error)
+      }
+      await delay(RETRY_DELAY_MS)
+    }
+  }
+
+  throw new CalendarFeedFetchError('Feed fetch failed', attempts, lastError)
 }

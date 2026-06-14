@@ -181,11 +181,30 @@ export interface CalendarFeed {
 }
 
 export interface SyncIcsResult {
+  startedAt?: string
+  finishedAt?: string
+  durationMs?: number
+  feedsSynced?: number
   createdEvents: number
   updatedEvents: number
   createdGames: number
   updatedGames: number
   errors: string[]
+  feedResults?: Array<{
+    feedId: string
+    feedName: string
+    platform: string
+    status: 'success' | 'partial' | 'failed'
+    attempts: number
+    startedAt: string
+    finishedAt: string
+    durationMs: number
+    createdEvents: number
+    updatedEvents: number
+    createdGames: number
+    updatedGames: number
+    errors: string[]
+  }>
   diagnostics?: {
     existingRefMatches: number
     manualMatches: number

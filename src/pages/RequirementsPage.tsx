@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useData } from '../lib/DataContext'
 import {
   addRequirementActivityIn,
@@ -52,6 +52,7 @@ export default function RequirementsPage() {
   const [activityDraft, setActivityDraft] = useState({
     activityDate: yyyyMmDd(new Date()),
     quantity: '1',
+    result: '',
     notes: '',
   })
 
@@ -102,8 +103,80 @@ export default function RequirementsPage() {
     const dueSoon = active.filter(({ i }) => i.dueDate && i.dueDate >= today && i.dueDate <= dueSoonDate)
     const overdue = active.filter(({ i }) => i.dueDate && i.dueDate < today)
     const evidence = db.requirementActivities.filter(a => a.evidenceFileName || a.evidenceStoragePath || a.evidenceLink)
-    return { active: active.length, complete: complete.length, dueSoon: dueSoon.length, overdue: overdue.length, evidence: evidence.length }
+    const inProgress = active.filter(({ i }) => i.status === 'In Progress').length
+    const noDueDate = active.filter(({ i }) => !i.dueDate).length
+    return { active: active.length, complete: complete.length, dueSoon: dueSoon.length, overdue: overdue.length, evidence: evidence.length, inProgress, noDueDate }
   }, [db.requirementActivities, instances, today])
+
+  const visibleStatus = useCallback((instance: RequirementInstance): RequirementStatus => {
+    if (instance.status !== 'Complete' && instance.status !== 'Waived' && instance.dueDate && instance.dueDate < today) {
+      return 'Overdue'
+    }
+    return instance.status
+  }, [today])
+
+  const requirementInsights = useMemo(() => {
+    return instances.flatMap(({ i, def }) => {
+      if (!def) return []
+      const acts = activityByInstance.get(i.id) ?? []
+      const needed = def.requiredCount ?? 0
+      const done = acts.reduce((s, a) => s + (a.quantity ?? 1), 0)
+      const evidenceCount = acts.filter(a => a.evidenceFileName || a.evidenceStoragePath || a.evidenceLink).length
+      const visible = visibleStatus(i)
+      const items: Array<{ id: string; tone: string; title: string; detail: string; instanceId: string }> = []
+
+      if (visible === 'Overdue') {
+        items.push({
+          id: `${i.id}:overdue`,
+          tone: 'bad',
+          title: `${def.name} is overdue`,
+          detail: i.dueDate ? `Due ${i.dueDate}. Update the status, add activity, or adjust the due date if your records changed.` : 'This requirement is overdue.',
+          instanceId: i.id,
+        })
+      } else if (i.dueDate) {
+        const days = Math.ceil((new Date(i.dueDate).getTime() - new Date(today).getTime()) / DAY_MS)
+        if (days >= 0 && days <= 30 && i.status !== 'Complete' && i.status !== 'Waived') {
+          items.push({
+            id: `${i.id}:due-soon`,
+            tone: 'warn',
+            title: `${def.name} is due soon`,
+            detail: `${days === 0 ? 'Due today' : `Due in ${days} day${days === 1 ? '' : 's'}`}.`,
+            instanceId: i.id,
+          })
+        }
+      } else if (i.status !== 'Complete' && i.status !== 'Waived') {
+        items.push({
+          id: `${i.id}:no-due`,
+          tone: 'info',
+          title: `${def.name} needs a due date`,
+          detail: 'Adding a due date lets Whistle Keeper surface it before it becomes a scramble.',
+          instanceId: i.id,
+        })
+      }
+
+      if (needed > 0 && done >= needed && i.status !== 'Complete' && i.status !== 'Waived') {
+        items.push({
+          id: `${i.id}:ready-complete`,
+          tone: 'ok',
+          title: `${def.name} appears ready to complete`,
+          detail: `${done}/${needed} activities are logged. Confirm the requirement and mark it complete if appropriate.`,
+          instanceId: i.id,
+        })
+      }
+
+      if (def.evidenceType !== 'None' && acts.length > 0 && evidenceCount === 0 && i.status !== 'Complete' && i.status !== 'Waived') {
+        items.push({
+          id: `${i.id}:missing-evidence`,
+          tone: 'warn',
+          title: `${def.name} has no evidence attached`,
+          detail: `Expected evidence type: ${def.evidenceType}. Upload a file or keep a note if external proof lives elsewhere.`,
+          instanceId: i.id,
+        })
+      }
+
+      return items
+    }).slice(0, 6)
+  }, [activityByInstance, instances, today, visibleStatus])
 
   async function createDefinition() {
     const name = newDef.name.trim()
@@ -180,7 +253,7 @@ export default function RequirementsPage() {
 
   function startActivity(instanceId: string) {
     setActivityFor(instanceId)
-    setActivityDraft({ activityDate: yyyyMmDd(new Date()), quantity: '1', notes: '' })
+    setActivityDraft({ activityDate: yyyyMmDd(new Date()), quantity: '1', result: '', notes: '' })
   }
 
   async function saveActivity(instanceId: string) {
@@ -189,11 +262,12 @@ export default function RequirementsPage() {
     const next = addRequirementActivityIn(db, instanceId, {
       activityDate: activityDraft.activityDate,
       quantity: Number.isFinite(qty) ? qty : 1,
+      result: activityDraft.result.trim() || undefined,
       notes: activityDraft.notes.trim() || undefined,
     })
     await write(next)
     setActivityFor(null)
-    setActivityDraft({ activityDate: yyyyMmDd(new Date()), quantity: '1', notes: '' })
+    setActivityDraft({ activityDate: yyyyMmDd(new Date()), quantity: '1', result: '', notes: '' })
   }
 
   async function delActivity(id: string) {
@@ -275,16 +349,34 @@ export default function RequirementsPage() {
     document.getElementById('requirement-definition-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  function visibleStatus(instance: RequirementInstance): RequirementStatus {
-    if (instance.status !== 'Complete' && instance.status !== 'Waived' && instance.dueDate && instance.dueDate < today) {
-      return 'Overdue'
-    }
-    return instance.status
-  }
-
   function progressValue(done: number, needed: number) {
     if (!needed) return 0
     return Math.min(100, Math.round((done / needed) * 100))
+  }
+
+  function dueText(instance: RequirementInstance) {
+    if (!instance.dueDate) return 'No due date'
+    const days = Math.ceil((new Date(instance.dueDate).getTime() - new Date(today).getTime()) / DAY_MS)
+    if (days < 0) return `${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} overdue`
+    if (days === 0) return 'Due today'
+    if (days <= 30) return `Due in ${days} day${days === 1 ? '' : 's'}`
+    return `Due ${instance.dueDate}`
+  }
+
+  function cleanMeta(parts: Array<string | undefined>) {
+    return parts.filter((part) => part && part !== 'Any').join(' | ') || 'Custom requirement'
+  }
+
+  function evidenceExpectation(def: NonNullable<(typeof instances)[number]['def']>) {
+    if (def.evidenceType === 'None') return 'No evidence expected'
+    return `${def.evidenceType} evidence expected`
+  }
+
+  function activityResultLabel(def: NonNullable<(typeof instances)[number]['def']>) {
+    if (def.evidenceType === 'PassFail') return 'Result'
+    if (def.evidenceType === 'Score') return 'Score'
+    if (def.evidenceType === 'Text') return 'Text result'
+    return 'Result / reference'
   }
 
   function evidenceControls(activity: RequirementActivity) {
@@ -340,11 +432,47 @@ export default function RequirementsPage() {
             <div className="value">{requirementStats.dueSoon}</div>
           </div>
           <div className="box">
+            <div className="label">In progress</div>
+            <div className="value">{requirementStats.inProgress}</div>
+          </div>
+          <div className="box">
             <div className="label">Evidence files</div>
             <div className="value">{requirementStats.evidence}</div>
           </div>
         </div>
-        {requirementStats.overdue > 0 ? <p className="small"><span className="pill bad">{requirementStats.overdue} overdue</span></p> : null}
+        <p className="small requirement-overview-note">
+          <span className={`pill ${requirementStats.overdue ? 'bad' : 'ok'}`}>{requirementStats.overdue} overdue</span>{' '}
+          <span className={`pill ${requirementStats.noDueDate ? 'warn' : 'ok'}`}>{requirementStats.noDueDate} missing due date</span>
+        </p>
+      </section>
+
+      <section className="card requirement-attention-card">
+        <div className="page-section-head">
+          <div>
+            <h2>Needs Attention</h2>
+            <p className="sub">A quick queue of items that could block certification, season readiness, or clean recordkeeping.</p>
+          </div>
+          <span className={`pill ${requirementInsights.length ? 'warn' : 'ok'}`}>{requirementInsights.length} item{requirementInsights.length === 1 ? '' : 's'}</span>
+        </div>
+        {requirementInsights.length ? (
+          <div className="requirement-insight-list">
+            {requirementInsights.map((item) => (
+              <div key={item.id} className="requirement-insight-row">
+                <span className={`pill ${item.tone}`}>{item.tone === 'bad' ? 'Urgent' : item.tone === 'warn' ? 'Review' : item.tone === 'ok' ? 'Ready' : 'Plan'}</span>
+                <div>
+                  <strong>{item.title}</strong>
+                  <p>{item.detail}</p>
+                </div>
+                <button className="btn compact" onClick={() => startActivity(item.instanceId)}>Add activity</button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state centered requirement-empty-state">
+            <h3>Nothing urgent right now</h3>
+            <p>Your tracked requirements have no overdue, due-soon, missing due date, or evidence follow-up prompts.</p>
+          </div>
+        )}
       </section>
 
       <section className="grid cols2 requirement-setup-grid">
@@ -459,7 +587,10 @@ export default function RequirementsPage() {
             const progress = needed ? `${done}/${needed}` : `${done}`
             const pct = progressValue(done, needed)
             const isEditing = editingId === i.id
-            const badge = requirementStatusBadge(visibleStatus(i))
+            const visible = visibleStatus(i)
+            const badge = requirementStatusBadge(visible)
+            const evidenceCount = acts.filter(a => a.evidenceFileName || a.evidenceStoragePath || a.evidenceLink).length
+            const dueTone = visible === 'Overdue' ? 'bad' : i.dueDate && dueText(i).startsWith('Due in') ? 'warn' : i.dueDate ? 'ok' : 'info'
 
             return (
               <article key={i.id} className="requirement-card">
@@ -467,16 +598,20 @@ export default function RequirementsPage() {
                   <div>
                     <div className="requirement-title">{def!.name}</div>
                     <div className="requirement-meta">
-                      {[def!.governingBody, def!.frequency, def!.sport, def!.competitionLevel].filter(Boolean).join(' | ')}
+                      {cleanMeta([def!.governingBody, def!.frequency, def!.sport, def!.competitionLevel])}
                     </div>
                   </div>
-                  <span className={`pill ${badge.tone}`}>{badge.label}</span>
+                  <div className="requirement-card-badges">
+                    <span className={`pill ${dueTone}`}>{dueText(i)}</span>
+                    <span className={`pill ${badge.tone}`}>{badge.label}</span>
+                  </div>
                 </div>
 
                 <div className="requirement-progress-row">
                   <div>
                     <div className="small">Progress</div>
                     <strong>{progress}</strong>
+                    {needed > 0 && done >= needed && i.status !== 'Complete' ? <div className="small">Ready for review</div> : null}
                   </div>
                   <div className="requirement-progress-track" aria-label={`Progress ${progress}`}>
                     <span style={{ width: `${pct}%` }} />
@@ -497,13 +632,16 @@ export default function RequirementsPage() {
                     )}
                   </div>
                   <div>
-                    <div className="expanded-label">Status</div>
+                    <div className="expanded-label">{isEditing ? 'Status' : 'Evidence'}</div>
                     {isEditing ? (
                       <select value={editDraft.status} onChange={e => setEditDraft({ ...editDraft, status: e.target.value as RequirementStatus })}>
                         {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
                       </select>
                     ) : (
-                      <div className="expanded-value">{i.status}</div>
+                      <div className="expanded-value">
+                        {evidenceExpectation(def!)}
+                        <div className="small">{evidenceCount} file/link{evidenceCount === 1 ? '' : 's'} attached</div>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -528,10 +666,16 @@ export default function RequirementsPage() {
                         <input type="date" value={activityDraft.activityDate} onChange={e => setActivityDraft({ ...activityDraft, activityDate: e.target.value })} />
                       </div>
                       <div className="field">
-                        <label>Quantity</label>
+                        <label>Quantity / count</label>
                         <input type="number" min={1} value={activityDraft.quantity} onChange={e => setActivityDraft({ ...activityDraft, quantity: e.target.value })} />
                       </div>
                     </div>
+                    {def!.evidenceType !== 'Attendance' && def!.evidenceType !== 'None' ? (
+                      <div className="field">
+                        <label>{activityResultLabel(def!)}</label>
+                        <input value={activityDraft.result} onChange={e => setActivityDraft({ ...activityDraft, result: e.target.value })} placeholder="Pass, score, certificate ID, or reference" />
+                      </div>
+                    ) : null}
                     <div className="field">
                       <label>Notes</label>
                       <input value={activityDraft.notes} onChange={e => setActivityDraft({ ...activityDraft, notes: e.target.value })} placeholder="Clinic, assessment, match count, score, or reminder" />
@@ -551,6 +695,7 @@ export default function RequirementsPage() {
                         <div>
                           <strong>{a.activityDate}</strong>
                           <span>x{a.quantity}</span>
+                          {a.result ? <p><b>Result:</b> {a.result}</p> : null}
                           {a.notes ? <p>{a.notes}</p> : null}
                         </div>
                         {evidenceControls(a)}

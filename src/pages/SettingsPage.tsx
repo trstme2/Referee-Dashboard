@@ -27,6 +27,13 @@ export default function SettingsPage() {
   const [calendarFeedLoading, setCalendarFeedLoading] = useState(false)
   const [calendarFeedSaving, setCalendarFeedSaving] = useState(false)
   const [calendarFeedError, setCalendarFeedError] = useState<string | null>(null)
+  const [weeklyEmailSaving, setWeeklyEmailSaving] = useState(false)
+  const [weeklyEmailMessage, setWeeklyEmailMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setWeeklyGamesEmailEnabled(Boolean(db.settings.weeklyGamesEmailEnabled))
+  }, [db.settings.weeklyGamesEmailEnabled])
 
   async function wipeLocal() {
     if (!confirm('Wipe local cache?')) return
@@ -62,6 +69,27 @@ export default function SettingsPage() {
       },
     }
     await write(next)
+  }
+
+  async function updateWeeklyGamesEmailEnabled(enabled: boolean) {
+    setWeeklyGamesEmailEnabled(enabled)
+    setWeeklyEmailMessage(null)
+    setWeeklyEmailSaving(true)
+    try {
+      await write({
+        ...db,
+        settings: {
+          ...db.settings,
+          weeklyGamesEmailEnabled: enabled,
+        },
+      })
+      setWeeklyEmailMessage(enabled ? 'Weekly Sunday email is on.' : 'Weekly Sunday email is off.')
+    } catch (e: any) {
+      setWeeklyGamesEmailEnabled(Boolean(db.settings.weeklyGamesEmailEnabled))
+      setWeeklyEmailMessage(`Could not save weekly email setting: ${String(e?.message ?? e)}`)
+    } finally {
+      setWeeklyEmailSaving(false)
+    }
   }
 
   async function calendarApi(path: string, init?: RequestInit) {
@@ -194,10 +222,13 @@ export default function SettingsPage() {
                 <input
                   type="checkbox"
                   checked={weeklyGamesEmailEnabled}
-                  onChange={e => setWeeklyGamesEmailEnabled(e.target.checked)}
+                  onChange={e => { void updateWeeklyGamesEmailEnabled(e.target.checked) }}
+                  disabled={loading || weeklyEmailSaving}
                 /> Weekly Sunday game email
               </label>
               <div className="small">Send your Games Next 7 Days schedule to your signed-in email address each Sunday.</div>
+              {weeklyEmailSaving ? <div className="small">Saving weekly email preference...</div> : null}
+              {weeklyEmailMessage ? <div className="small">{weeklyEmailMessage}</div> : null}
             </div>
 
             <div className="field">

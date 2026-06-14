@@ -7,6 +7,11 @@ type FeedSummary = {
   userId: string
   name: string
   platform: string
+  status: 'success' | 'partial' | 'failed'
+  attempts: number
+  durationMs: number
+  startedAt: string
+  finishedAt: string
   createdEvents: number
   updatedEvents: number
   createdGames: number
@@ -23,6 +28,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'Unauthorized' })
 
   try {
+    const startedAtMs = Date.now()
+    const startedAt = new Date(startedAtMs).toISOString()
     const client = createServiceSupabase()
     const { data: feeds, error } = await client
       .from('calendar_feeds')
@@ -38,10 +45,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const result = await syncFeed(client, feed)
         summaries.push({
-          feedId: feed.id,
           userId: feed.user_id,
-          name: feed.name,
-          platform: feed.platform,
+          name: result.feedName,
           ...result,
         })
       } catch (e: any) {
@@ -50,6 +55,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           userId: feed.user_id,
           name: feed.name,
           platform: feed.platform,
+          status: 'failed',
+          attempts: 0,
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          durationMs: 0,
           createdEvents: 0,
           updatedEvents: 0,
           createdGames: 0,
@@ -60,8 +70,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const errors = summaries.flatMap((s) => s.errors)
+    const finishedAtMs = Date.now()
     return res.status(errors.length ? 207 : 200).json({
+      startedAt,
+      finishedAt: new Date(finishedAtMs).toISOString(),
+      durationMs: finishedAtMs - startedAtMs,
       feeds: summaries.length,
+      succeededFeeds: summaries.filter((s) => s.status === 'success').length,
+      partialFeeds: summaries.filter((s) => s.status === 'partial').length,
+      failedFeeds: summaries.filter((s) => s.status === 'failed').length,
       createdEvents: summaries.reduce((sum, s) => sum + s.createdEvents, 0),
       updatedEvents: summaries.reduce((sum, s) => sum + s.updatedEvents, 0),
       createdGames: summaries.reduce((sum, s) => sum + s.createdGames, 0),

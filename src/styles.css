@@ -1932,6 +1932,40 @@ body {
   min-width: 138px;
 }
 
+.requirement-overview-note {
+  margin: 12px 0 0;
+}
+
+.requirement-attention-card {
+  border-color: rgba(245, 158, 11, 0.22);
+}
+
+.requirement-insight-list {
+  display: grid;
+  gap: 10px;
+}
+
+.requirement-insight-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.22);
+}
+
+.requirement-insight-row strong {
+  color: #f8fafc;
+}
+
+.requirement-insight-row p {
+  margin: 4px 0 0;
+  color: #97a7bc;
+  font-size: 13px;
+}
+
 .requirement-card-list {
   display: grid;
   gap: 12px;
@@ -1950,6 +1984,13 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.requirement-card-badges {
+  display: flex;
+  gap: 7px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .requirement-title {
@@ -2102,12 +2143,35 @@ body {
   background: rgba(255,255,255,0.025);
 }
 
+.tax-confidence-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tax-confidence-grid > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.22);
+}
+
+.tax-confidence-grid p {
+  margin: 6px 0 0;
+  color: #aebcd0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 @media (max-width: 720px) {
   .requirement-card-head,
   .requirement-progress-row,
   .requirement-detail-grid,
   .requirement-edit-grid,
-  .requirement-activity-row {
+  .requirement-activity-row,
+  .requirement-insight-row,
+  .tax-confidence-grid {
     grid-template-columns: 1fr;
   }
 

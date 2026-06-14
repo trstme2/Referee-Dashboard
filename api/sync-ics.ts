@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import ical from 'node-ical'
 import { createHash } from 'node:crypto'
 import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
-import { fetchCalendarFeedText } from '../src/server/feed-fetch.js'
+import { fetchCalendarFeedTextWithRetry } from '../src/server/feed-fetch.js'
 import { revealFeedUrl } from '../src/server/personal-data-security.js'
 import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks } from '../src/server/sync-ics-utils.js'
 
@@ -17,6 +17,8 @@ export type Feed = {
   default_league: string | null
   import_start_date: string | null
 }
+
+type SyncFeedStatus = 'success' | 'partial' | 'failed'
 
 type SyncDiagnostic = {
   feedName: string
@@ -343,33 +345,67 @@ function findManualMatch(dayGames: any[], unusedGameIds: Set<string>, n: any): {
 }
 
 export async function syncFeed(client: any, feed: Feed) {
+  const startedAtMs = Date.now()
+  const startedAt = new Date(startedAtMs).toISOString()
   const userDefaultTimezone = await loadUserDefaultTimezone(client, feed.user_id)
   const now = new Date().toISOString()
   let createdEvents = 0
   let updatedEvents = 0
   let createdGames = 0
   let updatedGames = 0
+  let attempts = 0
   const errors: string[] = []
   const diagnostics: SyncDiagnostic[] = []
 
+  function finish(status: SyncFeedStatus) {
+    const finishedAtMs = Date.now()
+    return {
+      feedId: feed.id,
+      feedName: feed.name,
+      platform: feed.platform,
+      status,
+      attempts,
+      startedAt,
+      finishedAt: new Date(finishedAtMs).toISOString(),
+      durationMs: finishedAtMs - startedAtMs,
+      createdEvents,
+      updatedEvents,
+      createdGames,
+      updatedGames,
+      errors,
+      diagnostics: {
+        existingRefMatches: diagnostics.filter((d) => d.action === 'matched-existing').length,
+        manualMatches: diagnostics.filter((d) => d.action === 'matched-manual').length,
+        createdFromFeed: diagnostics.filter((d) => d.action === 'created-new').length,
+        ambiguousCandidates: diagnostics.filter((d) => d.action === 'ambiguous').length,
+        samples: diagnostics.slice(0, 20),
+      },
+    }
+  }
+
   let raw: string
   try {
-    raw = await fetchCalendarFeedText(revealFeedUrl(feed.feed_url))
+    const result = await fetchCalendarFeedTextWithRetry(revealFeedUrl(feed.feed_url))
+    raw = result.text
+    attempts = result.attempts
   } catch (e: any) {
-    return { createdEvents, updatedEvents, createdGames, updatedGames, errors: [`${feed.name}: fetch failed: ${String(e?.message || e)}`] }
+    attempts = Number(e?.attempts || attempts || 1)
+    errors.push(`${feed.name}: fetch failed after ${attempts} attempt${attempts === 1 ? '' : 's'}: ${String(e?.message || e)}`)
+    return finish('failed')
   }
 
   let parsed: Record<string, any>
   try {
     parsed = ical.parseICS(raw) as Record<string, any>
   } catch (e: any) {
-    return { createdEvents, updatedEvents, createdGames, updatedGames, errors: [`${feed.name}: parse failed: ${String(e?.message || e)}`] }
+    errors.push(`${feed.name}: parse failed: ${String(e?.message || e)}`)
+    return finish('failed')
   }
 
   const icsEvents = Object.values(parsed).filter((x: any) => x?.type === 'VEVENT' && x?.uid && x?.start)
   if (!icsEvents.length) {
     await client.from('calendar_feeds').update({ last_synced_at: now, updated_at: now }).eq('id', feed.id).eq('user_id', feed.user_id)
-    return { createdEvents, updatedEvents, createdGames, updatedGames, errors }
+    return finish('success')
   }
 
   const normalizedRows = icsEvents.map((ev: any) => {
@@ -415,7 +451,7 @@ export async function syncFeed(client: any, feed: Feed) {
 
   if (!normalized.length) {
     await client.from('calendar_feeds').update({ last_synced_at: now, updated_at: now }).eq('id', feed.id).eq('user_id', feed.user_id)
-    return { createdEvents, updatedEvents, createdGames, updatedGames, errors }
+    return finish('success')
   }
 
   const blockDates = normalized
@@ -665,20 +701,7 @@ export async function syncFeed(client: any, feed: Feed) {
     .eq('user_id', feed.user_id)
   if (stampErr) errors.push(`${feed.name}: last_synced_at update failed: ${stampErr.message}`)
 
-  return {
-    createdEvents,
-    updatedEvents,
-    createdGames,
-    updatedGames,
-    errors,
-    diagnostics: {
-      existingRefMatches: diagnostics.filter((d) => d.action === 'matched-existing').length,
-      manualMatches: diagnostics.filter((d) => d.action === 'matched-manual').length,
-      createdFromFeed: diagnostics.filter((d) => d.action === 'created-new').length,
-      ambiguousCandidates: diagnostics.filter((d) => d.action === 'ambiguous').length,
-      samples: diagnostics.slice(0, 20),
-    },
-  }
+  return finish(errors.length ? 'partial' : 'success')
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -707,19 +730,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (feedsErr) return res.status(400).json({ error: feedsErr.message })
     if (!feeds?.length) {
       return res.status(200).json({
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        durationMs: 0,
+        feedsSynced: 0,
         createdEvents: 0,
         updatedEvents: 0,
         createdGames: 0,
         updatedGames: 0,
         errors: [],
+        feedResults: [],
       })
     }
 
+    const startedAtMs = Date.now()
+    const startedAt = new Date(startedAtMs).toISOString()
     let createdEvents = 0
     let updatedEvents = 0
     let createdGames = 0
     let updatedGames = 0
     const errors: string[] = []
+    const feedResults: Array<Awaited<ReturnType<typeof syncFeed>>> = []
     const diagnostics = {
       existingRefMatches: 0,
       manualMatches: 0,
@@ -731,6 +762,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (const feed of feeds as Feed[]) {
       try {
         const result = await syncFeed(client, feed)
+        feedResults.push(result)
         createdEvents += result.createdEvents
         updatedEvents += result.updatedEvents
         createdGames += result.createdGames
@@ -742,16 +774,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         diagnostics.ambiguousCandidates += result.diagnostics?.ambiguousCandidates ?? 0
         diagnostics.samples.push(...(result.diagnostics?.samples ?? []))
       } catch (e: any) {
-        errors.push(`${feed.name}: ${String(e?.message || e)}`)
+        const message = `${feed.name}: ${String(e?.message || e)}`
+        errors.push(message)
+        feedResults.push({
+          feedId: feed.id,
+          feedName: feed.name,
+          platform: feed.platform,
+          status: 'failed',
+          attempts: 0,
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          durationMs: 0,
+          createdEvents: 0,
+          updatedEvents: 0,
+          createdGames: 0,
+          updatedGames: 0,
+          errors: [message],
+          diagnostics: {
+            existingRefMatches: 0,
+            manualMatches: 0,
+            createdFromFeed: 0,
+            ambiguousCandidates: 0,
+            samples: [],
+          },
+        })
       }
     }
 
-    return res.status(200).json({
+    const finishedAtMs = Date.now()
+    return res.status(errors.length ? 207 : 200).json({
+      startedAt,
+      finishedAt: new Date(finishedAtMs).toISOString(),
+      durationMs: finishedAtMs - startedAtMs,
+      feedsSynced: feedResults.length,
       createdEvents,
       updatedEvents,
       createdGames,
       updatedGames,
       errors,
+      feedResults,
       diagnostics: {
         ...diagnostics,
         samples: diagnostics.samples.slice(0, 20),

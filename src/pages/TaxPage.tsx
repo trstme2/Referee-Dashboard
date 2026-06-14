@@ -245,6 +245,13 @@ export default function TaxPage() {
     const expenseMissingFields = db.expenses.filter((e) => e.expenseDate.startsWith(year) && (!e.category || !Number.isFinite(e.amount))).length
     return { gamesMissingFee, paidMissingDate, mileageMissing, expenseMissingFields }
   }, [db.games, db.expenses, year])
+  const exportReadiness = useMemo(() => {
+    const blockers = qualityChecks.paidMissingDate + qualityChecks.expenseMissingFields
+    const reviewItems = reviewFlags.length + qualityChecks.gamesMissingFee + qualityChecks.mileageMissing
+    if (blockers > 0) return { tone: 'bad', label: 'Needs cleanup before export', detail: `${blockers} blocker${blockers === 1 ? '' : 's'} and ${reviewItems} review item${reviewItems === 1 ? '' : 's'} found.` }
+    if (reviewItems > 0) return { tone: 'warn', label: 'Ready with review notes', detail: `${reviewItems} review item${reviewItems === 1 ? '' : 's'} should be checked or discussed with your preparer.` }
+    return { tone: 'ok', label: 'Clean export set', detail: 'No missing paid dates, expense field issues, mileage gaps, fee gaps, or tax review prompts found for this year.' }
+  }, [qualityChecks, reviewFlags.length])
 
   return (
     <div className="grid tax-page">
@@ -322,6 +329,30 @@ export default function TaxPage() {
 
         <div className="footer-note">
           Exports are record summaries for review. Keep receipts, assignment records, payment records, and any notes your preparer asks for.
+        </div>
+      </section>
+
+      <section className="card tax-confidence-card">
+        <div className="page-section-head">
+          <div>
+            <h2>Export Confidence</h2>
+            <p className="sub">A practical readiness check before you hand records to tax software or a preparer.</p>
+          </div>
+          <span className={`pill ${exportReadiness.tone}`}>{exportReadiness.label}</span>
+        </div>
+        <div className="tax-confidence-grid">
+          <div>
+            <div className="expanded-label">Readiness summary</div>
+            <p>{exportReadiness.detail}</p>
+          </div>
+          <div>
+            <div className="expanded-label">Recommended handoff</div>
+            <p>Export income, mileage, expenses, 1099 reconciliation, and the review checklist together. The checklist is your cover sheet for unresolved questions.</p>
+          </div>
+          <div>
+            <div className="expanded-label">Tax boundary</div>
+            <p>Whistle Keeper organizes records and highlights review prompts. It does not decide deductibility, tax method, or filing treatment.</p>
+          </div>
         </div>
       </section>
 
