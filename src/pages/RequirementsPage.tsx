@@ -11,12 +11,34 @@ import {
   updateRequirementActivityIn,
 } from '../lib/mutate'
 import { trackedSportsFor } from '../lib/preferences'
-import type { RequirementActivity, RequirementInstance, RequirementStatus } from '../lib/types'
+import type { RequirementActivity, RequirementDefinition, RequirementInstance, RequirementStatus } from '../lib/types'
 import { yyyyMmDd } from '../lib/utils'
 import { createRequirementEvidenceSignedUrl, deleteRequirementEvidence, uploadRequirementEvidence } from '../lib/documents'
 
 const statusOptions: RequirementStatus[] = ['Not Started', 'In Progress', 'Complete', 'Waived', 'Overdue']
 const DAY_MS = 24 * 60 * 60 * 1000
+
+type RequirementTemplate = Pick<RequirementDefinition, 'name' | 'frequency' | 'requiredCount' | 'evidenceType' | 'notes'> & {
+  id: string
+  governingBody?: string
+}
+
+const requirementTemplates: RequirementTemplate[] = [
+  { id: 'registration', name: 'Registration', frequency: 'Season', requiredCount: 1, evidenceType: 'Document', notes: 'Track annual or seasonal registration confirmation.' },
+  { id: 'dues', name: 'Dues / Payment', frequency: 'Season', requiredCount: 1, evidenceType: 'Document', notes: 'Track association, chapter, league, or platform dues.' },
+  { id: 'background-check', name: 'Background Check', frequency: 'Annual', requiredCount: 1, evidenceType: 'Document', notes: 'Record completion and attach proof or reference if available.' },
+  { id: 'concussion', name: 'Concussion Certificate', frequency: 'Annual', requiredCount: 1, evidenceType: 'Document', notes: 'Record certificate completion. A later credential model can reuse this across sports.' },
+  { id: 'safesport', name: 'SafeSport', frequency: 'Annual', requiredCount: 1, evidenceType: 'Document', notes: 'Record SafeSport completion, certificate, or renewal reference.' },
+  { id: 'rules-video', name: 'Rules Video', frequency: 'Season', requiredCount: 1, evidenceType: 'PassFail', notes: 'Track required rules video completion.' },
+  { id: 'rules-test', name: 'Rules Test', frequency: 'Season', requiredCount: 1, evidenceType: 'Score', notes: 'Track test score, pass/fail result, or confirmation number.' },
+  { id: 'recertification', name: 'Recertification Course', frequency: 'Annual', requiredCount: 1, evidenceType: 'Document', notes: 'Track annual or seasonal recertification coursework.' },
+  { id: 'fitness', name: 'Fitness Test', frequency: 'Season', requiredCount: 1, evidenceType: 'PassFail', notes: 'Track fitness test date, result, and proof if needed.' },
+  { id: 'assessment', name: 'On-field Assessment', frequency: 'Season', requiredCount: 1, evidenceType: 'Text', notes: 'Track assessment date, evaluator, result, and follow-up notes.' },
+  { id: 'meetings', name: 'Local Meetings', frequency: 'Season', requiredCount: 4, evidenceType: 'Attendance', notes: 'Track each meeting as an activity instead of creating separate requirements.' },
+  { id: 'clinic', name: 'Clinic', frequency: 'Season', requiredCount: 1, evidenceType: 'Attendance', notes: 'Track required clinic attendance.' },
+  { id: 'membership', name: 'Membership', frequency: 'Annual', requiredCount: 1, evidenceType: 'Document', notes: 'Track membership renewal and proof.' },
+  { id: 'custom', name: 'Custom requirement', frequency: 'Season', requiredCount: 1, evidenceType: 'Text', notes: '' },
+]
 
 function parseOptionalYear(input: string): number | undefined {
   const s = input.trim()
@@ -33,6 +55,21 @@ function requirementStatusBadge(status: RequirementStatus) {
   if (status === 'In Progress') return { label: 'In Progress', tone: 'warn' }
   if (status === 'Waived') return { label: 'Waived', tone: 'muted' }
   return { label: 'Not Started', tone: 'info' }
+}
+
+function addOneYear(date: string): string | undefined {
+  if (!date) return undefined
+  const d = new Date(`${date}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return undefined
+  d.setFullYear(d.getFullYear() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+function replaceYearText(value: string | undefined, fromYear: number | undefined, toYear: number) {
+  const fallback = `Season ${toYear}`
+  if (!value?.trim()) return fallback
+  if (fromYear) return value.replace(String(fromYear), String(toYear))
+  return `${value} ${toYear}`
 }
 
 export default function RequirementsPage() {
@@ -55,6 +92,7 @@ export default function RequirementsPage() {
     result: '',
     notes: '',
   })
+  const [duplicateTargets, setDuplicateTargets] = useState<Record<string, { seasonName: string; year: string }>>({})
 
   const [newDef, setNewDef] = useState({
     name: '',
@@ -114,6 +152,105 @@ export default function RequirementsPage() {
     }
     return instance.status
   }, [today])
+
+  const readinessGroups = useMemo(() => {
+    const dueSoonDate = yyyyMmDd(new Date(new Date(today).getTime() + 30 * DAY_MS))
+    const groups = new Map<string, {
+      key: string
+      title: string
+      subtitle: string
+      seasonName?: string
+      year?: number
+      sport: string
+      competitionLevel: string
+      governingBody: string
+      items: Array<{ i: RequirementInstance; def: RequirementDefinition }>
+      total: number
+      complete: number
+      waived: number
+      overdue: number
+      dueSoon: number
+      remaining: number
+      noDueDate: number
+      status: { label: string; tone: string }
+    }>()
+
+    for (const { i, def } of instances) {
+      if (!def) continue
+      const sport = def.sport && def.sport !== 'Any' ? def.sport : 'Any sport'
+      const competitionLevel = def.competitionLevel && def.competitionLevel !== 'Any' ? def.competitionLevel : 'Any level'
+      const governingBody = def.governingBody || 'Independent'
+      const season = i.seasonName || 'Unassigned season'
+      const yearLabel = i.year ? String(i.year) : 'No year'
+      const key = [sport, competitionLevel, governingBody, season, yearLabel].join('::')
+      const existing = groups.get(key)
+      if (existing) {
+        existing.items.push({ i, def })
+      } else {
+        groups.set(key, {
+          key,
+          title: `${sport} ${i.year ?? ''}`.trim(),
+          subtitle: [competitionLevel, governingBody, season].filter(Boolean).join(' | '),
+          seasonName: i.seasonName,
+          year: i.year,
+          sport,
+          competitionLevel,
+          governingBody,
+          items: [{ i, def }],
+          total: 0,
+          complete: 0,
+          waived: 0,
+          overdue: 0,
+          dueSoon: 0,
+          remaining: 0,
+          noDueDate: 0,
+          status: { label: 'Not configured', tone: 'info' },
+        })
+      }
+    }
+
+    return Array.from(groups.values())
+      .map((group) => {
+        let complete = 0
+        let waived = 0
+        let overdue = 0
+        let dueSoon = 0
+        let noDueDate = 0
+        for (const { i } of group.items) {
+          const visible = visibleStatus(i)
+          if (i.status === 'Complete') complete += 1
+          else if (i.status === 'Waived') waived += 1
+          else {
+            if (!i.dueDate) noDueDate += 1
+            if (visible === 'Overdue') overdue += 1
+            else if (i.dueDate && i.dueDate >= today && i.dueDate <= dueSoonDate) dueSoon += 1
+          }
+        }
+        const total = group.items.length
+        const remaining = Math.max(0, total - complete - waived)
+        let status = { label: `${remaining} remaining`, tone: remaining ? 'warn' : 'ok' }
+        if (remaining === 0) status = { label: 'Ready to officiate', tone: 'ok' }
+        else if (overdue > 0) status = { label: 'Blocked', tone: 'bad' }
+        else if (dueSoon > 0) status = { label: 'Due soon', tone: 'warn' }
+        else if (noDueDate > 0) status = { label: 'Needs dates', tone: 'info' }
+        return { ...group, total, complete, waived, overdue, dueSoon, remaining, noDueDate, status }
+      })
+      .sort((a, b) => {
+        const priority = (g: typeof a) => g.overdue ? 0 : g.dueSoon ? 1 : g.remaining ? 2 : 3
+        const pa = priority(a)
+        const pb = priority(b)
+        if (pa !== pb) return pa - pb
+        return a.title.localeCompare(b.title)
+      })
+  }, [instances, today, visibleStatus])
+
+  const readinessStats = useMemo(() => {
+    const ready = readinessGroups.filter(g => g.remaining === 0).length
+    const blocked = readinessGroups.filter(g => g.overdue > 0).length
+    const dueSoon = readinessGroups.filter(g => g.dueSoon > 0 && g.overdue === 0).length
+    const needsAttention = readinessGroups.filter(g => g.remaining > 0).length
+    return { groups: readinessGroups.length, ready, blocked, dueSoon, needsAttention }
+  }, [readinessGroups])
 
   const requirementInsights = useMemo(() => {
     return instances.flatMap(({ i, def }) => {
@@ -205,10 +342,79 @@ export default function RequirementsPage() {
     })
   }
 
+  function applyTemplate(templateId: string) {
+    const template = requirementTemplates.find(t => t.id === templateId)
+    if (!template) return
+    setNewDef({
+      name: template.id === 'custom' ? '' : template.name,
+      governingBody: template.governingBody ?? newDef.governingBody,
+      sport: newDef.sport,
+      competitionLevel: newDef.competitionLevel,
+      frequency: template.frequency as any,
+      requiredCount: String(template.requiredCount ?? 1),
+      evidenceType: template.evidenceType as any,
+      notes: template.notes ?? '',
+    })
+  }
+
   async function createInstance() {
     if (!selectedDef) return
     const next = createRequirementInstanceIn(db, selectedDef, seasonName || undefined, parseOptionalYear(year), dueDate || undefined)
     await write(next)
+  }
+
+  function duplicateTargetFor(group: (typeof readinessGroups)[number]) {
+    const existing = duplicateTargets[group.key]
+    if (existing) return existing
+    const nextYear = (group.year ?? new Date().getFullYear()) + 1
+    return {
+      seasonName: replaceYearText(group.seasonName, group.year, nextYear),
+      year: String(nextYear),
+    }
+  }
+
+  function setDuplicateTarget(groupKey: string, patch: Partial<{ seasonName: string; year: string }>) {
+    const group = readinessGroups.find(g => g.key === groupKey)
+    if (!group) return
+    const current = duplicateTargetFor(group)
+    setDuplicateTargets({ ...duplicateTargets, [groupKey]: { ...current, ...patch } })
+  }
+
+  async function duplicateReadinessGroup(group: (typeof readinessGroups)[number]) {
+    const target = duplicateTargetFor(group)
+    const targetYear = parseOptionalYear(target.year)
+    if (!targetYear) {
+      alert('Enter a valid target year before duplicating this season.')
+      return
+    }
+    const targetSeasonName = target.seasonName.trim() || `Season ${targetYear}`
+    const existingKeys = new Set(
+      db.requirementInstances.map((instance) => `${instance.definitionId}:${instance.seasonName ?? ''}:${instance.year ?? ''}`)
+    )
+    let next = db
+    let created = 0
+    for (const { i } of group.items) {
+      const duplicateKey = `${i.definitionId}:${targetSeasonName}:${targetYear}`
+      if (existingKeys.has(duplicateKey)) continue
+      next = createRequirementInstanceIn(next, i.definitionId, targetSeasonName, targetYear, i.dueDate ? addOneYear(i.dueDate) : undefined)
+      existingKeys.add(duplicateKey)
+      created += 1
+    }
+    if (!created) {
+      alert('That season already has matching requirement trackers.')
+      return
+    }
+    await write(next)
+  }
+
+  function groupProgressText(group: (typeof readinessGroups)[number]) {
+    const completeLike = group.complete + group.waived
+    return `${completeLike} of ${group.total} ready`
+  }
+
+  function groupProgressPct(group: (typeof readinessGroups)[number]) {
+    if (!group.total) return 0
+    return Math.round(((group.complete + group.waived) / group.total) * 100)
   }
 
   function startEdit(instanceId: string) {
@@ -413,27 +619,27 @@ export default function RequirementsPage() {
       <section className="card requirement-overview-card">
         <div className="page-section-head">
           <div>
-            <h2>Requirement Tracking</h2>
-            <p className="sub">Stay ahead of seasons, annual renewals, activities, and supporting evidence.</p>
+            <h2>Readiness</h2>
+            <p className="sub">Track whether you are ready to officiate by sport, level, governing body, and season.</p>
           </div>
-          <button className="btn primary" onClick={jumpToDefinitionForm}>New requirement</button>
+          <button className="btn primary" onClick={jumpToDefinitionForm}>Add requirement</button>
         </div>
         <div className="kpi compact-kpi requirement-kpi">
           <div className="box">
-            <div className="label">Active</div>
-            <div className="value">{requirementStats.active}</div>
+            <div className="label">Readiness groups</div>
+            <div className="value">{readinessStats.groups}</div>
           </div>
           <div className="box">
-            <div className="label">Complete</div>
-            <div className="value">{requirementStats.complete}</div>
+            <div className="label">Ready</div>
+            <div className="value">{readinessStats.ready}</div>
           </div>
           <div className="box">
-            <div className="label">Due soon</div>
-            <div className="value">{requirementStats.dueSoon}</div>
+            <div className="label">Needs attention</div>
+            <div className="value">{readinessStats.needsAttention}</div>
           </div>
           <div className="box">
-            <div className="label">In progress</div>
-            <div className="value">{requirementStats.inProgress}</div>
+            <div className="label">Blocked</div>
+            <div className="value">{readinessStats.blocked}</div>
           </div>
           <div className="box">
             <div className="label">Evidence files</div>
@@ -442,8 +648,81 @@ export default function RequirementsPage() {
         </div>
         <p className="small requirement-overview-note">
           <span className={`pill ${requirementStats.overdue ? 'bad' : 'ok'}`}>{requirementStats.overdue} overdue</span>{' '}
+          <span className={`pill ${readinessStats.dueSoon ? 'warn' : 'ok'}`}>{readinessStats.dueSoon} season group{readinessStats.dueSoon === 1 ? '' : 's'} due soon</span>{' '}
           <span className={`pill ${requirementStats.noDueDate ? 'warn' : 'ok'}`}>{requirementStats.noDueDate} missing due date</span>
         </p>
+      </section>
+
+      <section className="card readiness-dashboard-card">
+        <div className="page-section-head">
+          <div>
+            <h2>Season Readiness</h2>
+            <p className="sub">Each group answers the practical question: am I cleared for this sport, level, body, and season?</p>
+          </div>
+          <span className={`pill ${readinessStats.blocked ? 'bad' : readinessStats.needsAttention ? 'warn' : 'ok'}`}>
+            {readinessStats.blocked ? `${readinessStats.blocked} blocked` : readinessStats.needsAttention ? `${readinessStats.needsAttention} not ready` : 'Ready'}
+          </span>
+        </div>
+        {readinessGroups.length ? (
+          <div className="readiness-group-grid">
+            {readinessGroups.map((group) => {
+              const target = duplicateTargetFor(group)
+              return (
+                <article key={group.key} className="readiness-group-card">
+                  <div className="readiness-group-head">
+                    <div>
+                      <h3>{group.title}</h3>
+                      <p>{group.subtitle}</p>
+                    </div>
+                    <span className={`pill ${group.status.tone}`}>{group.status.label}</span>
+                  </div>
+                  <div className="requirement-progress-row">
+                    <div>
+                      <div className="small">Readiness</div>
+                      <strong>{groupProgressText(group)}</strong>
+                    </div>
+                    <div className="requirement-progress-track" aria-label={`${groupProgressText(group)}`}>
+                      <span style={{ width: `${groupProgressPct(group)}%` }} />
+                    </div>
+                  </div>
+                  <div className="readiness-remaining-list">
+                    {group.items
+                      .filter(({ i }) => i.status !== 'Complete' && i.status !== 'Waived')
+                      .slice(0, 4)
+                      .map(({ i, def }) => (
+                        <div key={i.id}>
+                          <span>{def.name}</span>
+                          <span className={`pill ${visibleStatus(i) === 'Overdue' ? 'bad' : i.dueDate ? 'warn' : 'info'}`}>{dueText(i)}</span>
+                        </div>
+                      ))}
+                    {group.remaining === 0 ? <p className="small">All tracked items are complete or waived.</p> : null}
+                    {group.remaining > 4 ? <p className="small">+{group.remaining - 4} more remaining</p> : null}
+                  </div>
+                  <div className="readiness-duplicate-panel">
+                    <div className="expanded-label">Duplicate this season</div>
+                    <div className="row">
+                      <div className="field">
+                        <label>New season</label>
+                        <input value={target.seasonName} onChange={e => setDuplicateTarget(group.key, { seasonName: e.target.value })} />
+                      </div>
+                      <div className="field">
+                        <label>Year</label>
+                        <input type="number" min={1900} max={2100} step={1} value={target.year} onChange={e => setDuplicateTarget(group.key, { year: e.target.value })} />
+                      </div>
+                    </div>
+                    <button className="btn compact" onClick={() => duplicateReadinessGroup(group)} disabled={loading}>Create next season</button>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="empty-state centered requirement-empty-state">
+            <h3>No readiness groups yet</h3>
+            <p>Add requirement trackers for a sport, level, governing body, and season. Whistle Keeper will turn them into readiness cards automatically.</p>
+            <button className="btn primary" onClick={jumpToDefinitionForm}>Add first requirement</button>
+          </div>
+        )}
       </section>
 
       <section className="card requirement-attention-card">
@@ -477,8 +756,8 @@ export default function RequirementsPage() {
 
       <section className="grid cols2 requirement-setup-grid">
         <div className="card">
-          <h2>Create tracked requirement</h2>
-          <p className="sub">Start from a reusable definition, then track it for a season or year.</p>
+          <h2>Add to a readiness group</h2>
+          <p className="sub">Apply a reusable requirement to a specific sport season, certification year, or governing body.</p>
 
           {hasDefinitions ? (
             <>
@@ -514,16 +793,25 @@ export default function RequirementsPage() {
         </div>
 
         <div className="card" id="requirement-definition-form">
-          <h2>New requirement definition</h2>
-          <p className="sub">Create the reusable rule once, then apply it to any season or year.</p>
+          <h2>Requirement template</h2>
+          <p className="sub">Start from a common official requirement, then customize it for your association or sport.</p>
+          <div className="field">
+            <label>Common template</label>
+            <select defaultValue="" onChange={e => applyTemplate(e.target.value)}>
+              <option value="" disabled>Choose a template...</option>
+              {requirementTemplates.map(template => (
+                <option key={template.id} value={template.id}>{template.name}</option>
+              ))}
+            </select>
+          </div>
           <div className="row">
             <div className="field">
               <label>Name</label>
-              <input value={newDef.name} onChange={e => setNewDef({ ...newDef, name: e.target.value })} placeholder="e.g., Adult games minimum" />
+              <input value={newDef.name} onChange={e => setNewDef({ ...newDef, name: e.target.value })} placeholder="e.g., Rules Test, Registration, Local Meetings" />
             </div>
             <div className="field">
               <label>Governing body</label>
-              <input value={newDef.governingBody} onChange={e => setNewDef({ ...newDef, governingBody: e.target.value })} placeholder="e.g., US Soccer, Local Association" />
+              <input value={newDef.governingBody} onChange={e => setNewDef({ ...newDef, governingBody: e.target.value })} placeholder="e.g., OHSAA, US Soccer, NISOA, local association" />
             </div>
           </div>
           <div className="row">

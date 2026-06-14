@@ -1936,6 +1936,81 @@ body {
   margin: 12px 0 0;
 }
 
+.readiness-dashboard-card {
+  border-color: rgba(67, 209, 158, 0.24);
+}
+
+.readiness-group-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.readiness-group-card {
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at top right, rgba(67, 209, 158, 0.08), transparent 34%),
+    rgba(2, 6, 23, 0.22);
+}
+
+.readiness-group-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.readiness-group-head h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  color: #f8fbff;
+}
+
+.readiness-group-head p {
+  margin: 0;
+  color: #aebcd0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.readiness-remaining-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.readiness-remaining-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.readiness-remaining-list > div span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.readiness-duplicate-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.readiness-duplicate-panel .row {
+  margin: 6px 0 8px;
+}
+
 .requirement-attention-card {
   border-color: rgba(245, 158, 11, 0.22);
 }
@@ -2189,6 +2264,129 @@ body {
   line-height: 1.45;
 }
 
+.data-privacy-page {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.data-privacy-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 18px;
+  align-items: stretch;
+  background:
+    radial-gradient(circle at top left, rgba(96, 165, 250, 0.16), transparent 36%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.92));
+}
+
+.data-privacy-hero h2 {
+  margin: 10px 0 8px;
+  font-size: clamp(28px, 4vw, 44px);
+  color: #fff;
+}
+
+.data-privacy-hero p {
+  margin: 0;
+  max-width: 780px;
+  color: #b8c7db;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.privacy-mode-card {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(2, 6, 23, 0.28);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.privacy-mode-card strong {
+  display: block;
+  margin: 6px 0;
+  font-size: 22px;
+  color: #eff6ff;
+}
+
+.privacy-mode-card p {
+  font-size: 13px;
+  color: #aebcd0;
+  overflow-wrap: anywhere;
+}
+
+.privacy-status-grid,
+.privacy-control-grid,
+.privacy-two-column {
+  display: grid;
+  gap: 12px;
+}
+
+.privacy-status-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.privacy-control-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.privacy-two-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.privacy-stat-card span {
+  display: block;
+  color: #a7b8ce;
+  font-size: 12px;
+}
+
+.privacy-stat-card strong {
+  display: block;
+  margin: 5px 0;
+  font-size: 30px;
+  color: #fff;
+}
+
+.privacy-stat-card p,
+.privacy-control-grid p,
+.privacy-list p {
+  margin: 6px 0 0;
+  color: #aebcd0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.privacy-control-grid > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.22);
+}
+
+.privacy-table {
+  min-width: 980px;
+}
+
+.privacy-table td {
+  vertical-align: top;
+  line-height: 1.45;
+}
+
+.privacy-list {
+  display: grid;
+  gap: 10px;
+}
+
+.privacy-list a {
+  color: #bfdbfe;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 @media (max-width: 720px) {
   .requirement-card-head,
   .requirement-progress-row,
@@ -2196,8 +2394,13 @@ body {
   .requirement-edit-grid,
   .requirement-activity-row,
   .requirement-insight-row,
+  .readiness-group-grid,
   .tax-confidence-grid,
-  .account-lifecycle-grid {
+  .account-lifecycle-grid,
+  .data-privacy-hero,
+  .privacy-status-grid,
+  .privacy-control-grid,
+  .privacy-two-column {
     grid-template-columns: 1fr;
   }
 

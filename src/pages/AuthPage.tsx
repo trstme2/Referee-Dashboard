@@ -1,53 +1,9 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase, supabaseConfigured } from '../lib/supabaseClient'
 import { useData } from '../lib/DataContext'
 import { createFreshDB, resetDB } from '../lib/storage'
-import { EXPENSE_RECEIPT_BUCKET, REQUIREMENT_EVIDENCE_BUCKET } from '../lib/documents'
-import type { DB } from '../lib/types'
-
-const ACCOUNT_TABLE_DELETE_ORDER = [
-  'csv_import_rows',
-  'csv_imports',
-  'requirement_activities',
-  'requirement_instances',
-  'requirement_definitions',
-  'expenses',
-  'calendar_events',
-  'games',
-  'calendar_feed_sync_runs',
-  'calendar_feeds',
-  'user_settings',
-] as const
-
-const OPTIONAL_ACCOUNT_TABLES = new Set<string>(['calendar_feed_sync_runs'])
-
-function downloadJson(filename: string, value: unknown) {
-  const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-}
-
-function evidencePaths(db: DB) {
-  return {
-    expenseReceipts: db.expenses.map((expense) => expense.receiptStoragePath).filter((path): path is string => Boolean(path)),
-    requirementEvidence: db.requirementActivities.map((activity) => activity.evidenceStoragePath).filter((path): path is string => Boolean(path)),
-  }
-}
-
-function isMissingOptionalTableError(error: any, table: string) {
-  const code = String(error?.code ?? '')
-  const message = String(error?.message ?? error ?? '')
-  if (code === '42P01' || code === 'PGRST205') return true
-  if (message.includes('Could not find the table')) return true
-  if (message.includes(table) && (message.includes('does not exist') || message.includes('schema cache'))) return true
-  return false
-}
+import { deleteCalendarFeeds, deleteSyncHistory, exportAccountData as downloadAccountExport, purgeCloudRows, removeStorageFiles } from '../lib/accountLifecycle'
 
 export default function AuthPage() {
   const { mode, session, refresh, db, write, signOut, loading } = useData()
@@ -82,92 +38,17 @@ export default function AuthPage() {
   if (session) {
     const activeSession = session
 
-    async function calendarFeedsForExport() {
-      if (!activeSession.access_token) return []
-      const res = await fetch('/api/calendar-feeds', {
-        headers: {
-          Authorization: `Bearer ${activeSession.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-      if (!res.ok) return []
-      const json = await res.json().catch(() => ({}))
-      return json.feeds ?? []
-    }
-
-    async function syncHistoryForExport() {
-      if (!activeSession.access_token) return []
-      const res = await fetch('/api/sync-ics?history=1&limit=50', {
-        headers: {
-          Authorization: `Bearer ${activeSession.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-      if (!res.ok) return []
-      const json = await res.json().catch(() => ({}))
-      return json.history ?? []
-    }
-
     async function exportAccountData() {
       setErr(null)
       setMsg(null)
       setAccountBusy(true)
       try {
-        const exportData = {
-          exportedAt: new Date().toISOString(),
-          exportType: 'whistle-keeper-account-data',
-          user: {
-            id: activeSession.user.id,
-            email: activeSession.user.email,
-          },
-          note: 'Receipt and requirement evidence files are not embedded in this JSON export. File paths and filenames are included where saved.',
-          data: db,
-          calendarFeeds: await calendarFeedsForExport(),
-          syncHistory: await syncHistoryForExport(),
-          fileReferences: evidencePaths(db),
-        }
-        downloadJson(`whistle-keeper-account-data-${new Date().toISOString().slice(0, 10)}.json`, exportData)
+        await downloadAccountExport(db, activeSession.user, activeSession.access_token)
         setMsg('Account data export downloaded.')
       } catch (e: any) {
         setErr(String(e?.message ?? e))
       } finally {
         setAccountBusy(false)
-      }
-    }
-
-    async function removeStorageFiles() {
-      if (!supabase) throw new Error('Supabase client missing')
-      const paths = evidencePaths(db)
-      if (paths.expenseReceipts.length) {
-        const { error } = await supabase.storage.from(EXPENSE_RECEIPT_BUCKET).remove(paths.expenseReceipts)
-        if (error) throw new Error(`Delete expense receipts: ${error.message}`)
-      }
-      if (paths.requirementEvidence.length) {
-        const { error } = await supabase.storage.from(REQUIREMENT_EVIDENCE_BUCKET).remove(paths.requirementEvidence)
-        if (error) throw new Error(`Delete requirement evidence: ${error.message}`)
-      }
-    }
-
-    async function deleteSyncHistory() {
-      if (!supabase) throw new Error('Supabase client missing')
-      const { error } = await supabase.from('calendar_feed_sync_runs').delete().eq('user_id', activeSession.user.id)
-      if (error && !isMissingOptionalTableError(error, 'calendar_feed_sync_runs')) {
-        throw new Error(`Delete sync history: ${error.message}`)
-      }
-    }
-
-    async function deleteCalendarFeeds() {
-      if (!supabase) throw new Error('Supabase client missing')
-      const { error } = await supabase.from('calendar_feeds').delete().eq('user_id', activeSession.user.id)
-      if (error) throw new Error(`Delete calendar feeds: ${error.message}`)
-    }
-
-    async function purgeCloudRows() {
-      if (!supabase) throw new Error('Supabase client missing')
-      for (const table of ACCOUNT_TABLE_DELETE_ORDER) {
-        const { error } = await supabase.from(table).delete().eq('user_id', activeSession.user.id)
-        if (error && OPTIONAL_ACCOUNT_TABLES.has(table) && isMissingOptionalTableError(error, table)) continue
-        if (error) throw new Error(`Delete ${table}: ${error.message}`)
       }
     }
 
@@ -178,9 +59,9 @@ export default function AuthPage() {
       setMsg(null)
       setAccountBusy(true)
       try {
-        await removeStorageFiles()
-        await deleteSyncHistory()
-        await deleteCalendarFeeds()
+        await removeStorageFiles(db)
+        await deleteSyncHistory(activeSession.user.id)
+        await deleteCalendarFeeds(activeSession.user.id)
         await write(createFreshDB(), { forceFullReplace: true })
         setMsg('App data reset complete. Your account is still active.')
       } catch (e: any) {
@@ -197,8 +78,8 @@ export default function AuthPage() {
       setMsg(null)
       setAccountBusy(true)
       try {
-        await removeStorageFiles()
-        await purgeCloudRows()
+        await removeStorageFiles(db)
+        await purgeCloudRows(activeSession.user.id)
         const res = await fetch('/api/account-delete', {
           method: 'POST',
           headers: {
@@ -226,6 +107,7 @@ export default function AuthPage() {
           <div className="btnbar">
             <button className="btn primary" onClick={refresh} disabled={loading || accountBusy}>Refresh from cloud</button>
             <button className="btn" onClick={exportAccountData} disabled={loading || accountBusy}>Export account data</button>
+            <Link className="btn" to="/privacy">Data & Privacy</Link>
           </div>
           {msg && <p className="small"><span className="pill ok">{msg}</span></p>}
           {err && <p className="small"><span className="pill bad">{err}</span></p>}

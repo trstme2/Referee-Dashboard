@@ -1,0 +1,127 @@
+import { EXPENSE_RECEIPT_BUCKET, REQUIREMENT_EVIDENCE_BUCKET } from './documents'
+import { supabase } from './supabaseClient'
+import type { DB } from './types'
+
+export const ACCOUNT_TABLE_DELETE_ORDER = [
+  'csv_import_rows',
+  'csv_imports',
+  'requirement_activities',
+  'requirement_instances',
+  'requirement_definitions',
+  'expenses',
+  'calendar_events',
+  'games',
+  'calendar_feed_sync_runs',
+  'calendar_feeds',
+  'user_settings',
+] as const
+
+const OPTIONAL_ACCOUNT_TABLES = new Set<string>(['calendar_feed_sync_runs'])
+
+export function downloadJson(filename: string, value: unknown) {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+export function evidencePaths(db: DB) {
+  return {
+    expenseReceipts: db.expenses.map((expense) => expense.receiptStoragePath).filter((path): path is string => Boolean(path)),
+    requirementEvidence: db.requirementActivities.map((activity) => activity.evidenceStoragePath).filter((path): path is string => Boolean(path)),
+  }
+}
+
+export function isMissingOptionalTableError(error: any, table: string) {
+  const code = String(error?.code ?? '')
+  const message = String(error?.message ?? error ?? '')
+  if (code === '42P01' || code === 'PGRST205') return true
+  if (message.includes('Could not find the table')) return true
+  if (message.includes(table) && (message.includes('does not exist') || message.includes('schema cache'))) return true
+  return false
+}
+
+export async function calendarFeedsForExport(accessToken?: string) {
+  if (!accessToken) return []
+  const res = await fetch('/api/calendar-feeds', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  })
+  if (!res.ok) return []
+  const json = await res.json().catch(() => ({}))
+  return json.feeds ?? []
+}
+
+export async function syncHistoryForExport(accessToken?: string) {
+  if (!accessToken) return []
+  const res = await fetch('/api/sync-ics?history=1&limit=50', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  })
+  if (!res.ok) return []
+  const json = await res.json().catch(() => ({}))
+  return json.history ?? []
+}
+
+export async function exportAccountData(db: DB, user: { id: string; email?: string | null }, accessToken?: string) {
+  const exportData = {
+    exportedAt: new Date().toISOString(),
+    exportType: 'whistle-keeper-account-data',
+    user: {
+      id: user.id,
+      email: user.email,
+    },
+    note: 'Receipt and requirement evidence files are not embedded in this JSON export. File paths and filenames are included where saved.',
+    data: db,
+    calendarFeeds: await calendarFeedsForExport(accessToken),
+    syncHistory: await syncHistoryForExport(accessToken),
+    fileReferences: evidencePaths(db),
+  }
+  downloadJson(`whistle-keeper-account-data-${new Date().toISOString().slice(0, 10)}.json`, exportData)
+}
+
+export async function removeStorageFiles(db: DB) {
+  if (!supabase) throw new Error('Supabase client missing')
+  const paths = evidencePaths(db)
+  if (paths.expenseReceipts.length) {
+    const { error } = await supabase.storage.from(EXPENSE_RECEIPT_BUCKET).remove(paths.expenseReceipts)
+    if (error) throw new Error(`Delete expense receipts: ${error.message}`)
+  }
+  if (paths.requirementEvidence.length) {
+    const { error } = await supabase.storage.from(REQUIREMENT_EVIDENCE_BUCKET).remove(paths.requirementEvidence)
+    if (error) throw new Error(`Delete requirement evidence: ${error.message}`)
+  }
+}
+
+export async function deleteSyncHistory(userId: string) {
+  if (!supabase) throw new Error('Supabase client missing')
+  const { error } = await supabase.from('calendar_feed_sync_runs').delete().eq('user_id', userId)
+  if (error && !isMissingOptionalTableError(error, 'calendar_feed_sync_runs')) {
+    throw new Error(`Delete sync history: ${error.message}`)
+  }
+}
+
+export async function deleteCalendarFeeds(userId: string) {
+  if (!supabase) throw new Error('Supabase client missing')
+  const { error } = await supabase.from('calendar_feeds').delete().eq('user_id', userId)
+  if (error) throw new Error(`Delete calendar feeds: ${error.message}`)
+}
+
+export async function purgeCloudRows(userId: string) {
+  if (!supabase) throw new Error('Supabase client missing')
+  for (const table of ACCOUNT_TABLE_DELETE_ORDER) {
+    const { error } = await supabase.from(table).delete().eq('user_id', userId)
+    if (error && OPTIONAL_ACCOUNT_TABLES.has(table) && isMissingOptionalTableError(error, table)) continue
+    if (error) throw new Error(`Delete ${table}: ${error.message}`)
+  }
+}
+

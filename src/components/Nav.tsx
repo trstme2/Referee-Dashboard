@@ -16,6 +16,7 @@ export default function Nav() {
       <NavLink to="/requirements" className={linkClass}>Requirements</NavLink>
       <NavLink to="/import" className={linkClass}>CSV Import</NavLink>
       <NavLink to="/settings" className={linkClass}>Settings</NavLink>
+      <NavLink to="/privacy" className={linkClass}>Privacy</NavLink>
       {mode === 'supabase' && (
         <NavLink to="/auth" className={linkClass}>Account</NavLink>
       )}
