@@ -19,6 +19,7 @@ export type Feed = {
 }
 
 type SyncFeedStatus = 'success' | 'partial' | 'failed'
+type SyncTrigger = 'manual' | 'scheduled'
 
 type SyncDiagnostic = {
   feedName: string
@@ -29,6 +30,29 @@ type SyncDiagnostic = {
   reason?: string
 }
 
+export type SyncFeedResult = {
+  feedId: string
+  feedName: string
+  platform: string
+  status: SyncFeedStatus
+  attempts: number
+  startedAt: string
+  finishedAt: string
+  durationMs: number
+  createdEvents: number
+  updatedEvents: number
+  createdGames: number
+  updatedGames: number
+  errors: string[]
+  diagnostics: {
+    existingRefMatches: number
+    manualMatches: number
+    createdFromFeed: number
+    ambiguousCandidates: number
+    samples: SyncDiagnostic[]
+  }
+}
+
 const APP_TIMEZONE = 'America/New_York'
 
 function stableFeedKey(feed: Feed): string {
@@ -37,6 +61,10 @@ function stableFeedKey(feed: Feed): string {
     .update(`${feed.platform}:${feedUrl.trim().toLowerCase()}`)
     .digest('hex')
     .slice(0, 16)
+}
+
+type SyncFeedOptions = {
+  trigger?: SyncTrigger
 }
 
 function sourceRefs(feed: Feed, uid: string): { externalRef: string; legacyExternalRef: string } {
@@ -344,7 +372,69 @@ function findManualMatch(dayGames: any[], unusedGameIds: Set<string>, n: any): {
   }
 }
 
-export async function syncFeed(client: any, feed: Feed) {
+function isSyncHistoryMissing(error: any): boolean {
+  const message = String(error?.message ?? error ?? '')
+  return message.includes('calendar_feed_sync_runs') || message.includes('Could not find the table')
+}
+
+async function recordSyncHistory(client: any, feed: Feed, trigger: SyncTrigger, result: SyncFeedResult): Promise<void> {
+  const { error } = await client
+    .from('calendar_feed_sync_runs')
+    .insert([{
+      user_id: feed.user_id,
+      feed_id: feed.id,
+      feed_name: result.feedName,
+      platform: result.platform,
+      trigger,
+      status: result.status,
+      started_at: result.startedAt,
+      finished_at: result.finishedAt,
+      duration_ms: result.durationMs,
+      attempts: result.attempts,
+      created_events: result.createdEvents,
+      updated_events: result.updatedEvents,
+      created_games: result.createdGames,
+      updated_games: result.updatedGames,
+      errors: result.errors,
+      diagnostics: result.diagnostics,
+    }])
+  if (error && !isSyncHistoryMissing(error)) {
+    result.errors.push(`${feed.name}: sync history could not be saved: ${error.message}`)
+    result.status = result.status === 'failed' ? 'failed' : 'partial'
+  }
+}
+
+export async function recordSyncFailure(client: any, feed: Feed, trigger: SyncTrigger, errorValue: unknown): Promise<SyncFeedResult> {
+  const now = new Date().toISOString()
+  const message = `${feed.name}: ${String((errorValue as any)?.message ?? errorValue)}`
+  const result: SyncFeedResult = {
+    feedId: feed.id,
+    feedName: feed.name,
+    platform: feed.platform,
+    status: 'failed',
+    attempts: 0,
+    startedAt: now,
+    finishedAt: now,
+    durationMs: 0,
+    createdEvents: 0,
+    updatedEvents: 0,
+    createdGames: 0,
+    updatedGames: 0,
+    errors: [message],
+    diagnostics: {
+      existingRefMatches: 0,
+      manualMatches: 0,
+      createdFromFeed: 0,
+      ambiguousCandidates: 0,
+      samples: [],
+    },
+  }
+  await recordSyncHistory(client, feed, trigger, result)
+  return result
+}
+
+export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions = {}) {
+  const trigger = options.trigger ?? 'manual'
   const startedAtMs = Date.now()
   const startedAt = new Date(startedAtMs).toISOString()
   const userDefaultTimezone = await loadUserDefaultTimezone(client, feed.user_id)
@@ -357,9 +447,9 @@ export async function syncFeed(client: any, feed: Feed) {
   const errors: string[] = []
   const diagnostics: SyncDiagnostic[] = []
 
-  function finish(status: SyncFeedStatus) {
+  async function finish(status: SyncFeedStatus) {
     const finishedAtMs = Date.now()
-    return {
+    const result: SyncFeedResult = {
       feedId: feed.id,
       feedName: feed.name,
       platform: feed.platform,
@@ -381,6 +471,8 @@ export async function syncFeed(client: any, feed: Feed) {
         samples: diagnostics.slice(0, 20),
       },
     }
+    await recordSyncHistory(client, feed, trigger, result)
+    return result
   }
 
   let raw: string
@@ -391,7 +483,7 @@ export async function syncFeed(client: any, feed: Feed) {
   } catch (e: any) {
     attempts = Number(e?.attempts || attempts || 1)
     errors.push(`${feed.name}: fetch failed after ${attempts} attempt${attempts === 1 ? '' : 's'}: ${String(e?.message || e)}`)
-    return finish('failed')
+    return await finish('failed')
   }
 
   let parsed: Record<string, any>
@@ -399,13 +491,13 @@ export async function syncFeed(client: any, feed: Feed) {
     parsed = ical.parseICS(raw) as Record<string, any>
   } catch (e: any) {
     errors.push(`${feed.name}: parse failed: ${String(e?.message || e)}`)
-    return finish('failed')
+    return await finish('failed')
   }
 
   const icsEvents = Object.values(parsed).filter((x: any) => x?.type === 'VEVENT' && x?.uid && x?.start)
   if (!icsEvents.length) {
     await client.from('calendar_feeds').update({ last_synced_at: now, updated_at: now }).eq('id', feed.id).eq('user_id', feed.user_id)
-    return finish('success')
+    return await finish('success')
   }
 
   const normalizedRows = icsEvents.map((ev: any) => {
@@ -451,7 +543,7 @@ export async function syncFeed(client: any, feed: Feed) {
 
   if (!normalized.length) {
     await client.from('calendar_feeds').update({ last_synced_at: now, updated_at: now }).eq('id', feed.id).eq('user_id', feed.user_id)
-    return finish('success')
+    return await finish('success')
   }
 
   const blockDates = normalized
@@ -701,13 +793,13 @@ export async function syncFeed(client: any, feed: Feed) {
     .eq('user_id', feed.user_id)
   if (stampErr) errors.push(`${feed.name}: last_synced_at update failed: ${stampErr.message}`)
 
-  return finish(errors.length ? 'partial' : 'success')
+  return await finish(errors.length ? 'partial' : 'success')
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setApiSecurityHeaders(res)
 
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
   try {
     const rate = checkRateLimit(req, 'sync-ics', { limit: 20, windowMs: 10 * 60 * 1000 })
     if (!rate.allowed) return sendRateLimited(res, rate.retryAfterSeconds)
@@ -718,6 +810,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: authData, error: authErr } = await client.auth.getUser()
     if (authErr || !authData?.user) return res.status(401).json({ error: 'Invalid auth token' })
     const userId = authData.user.id
+
+    if (req.method === 'GET') {
+      const limit = Math.min(50, Math.max(1, Number(req.query.limit || 25)))
+      const { data, error } = await client
+        .from('calendar_feed_sync_runs')
+        .select('id,feed_id,feed_name,platform,trigger,status,started_at,finished_at,duration_ms,attempts,created_events,updated_events,created_games,updated_games,errors')
+        .eq('user_id', userId)
+        .order('started_at', { ascending: false })
+        .limit(limit)
+
+      if (error) {
+        if (isSyncHistoryMissing(error)) {
+          return res.status(200).json({ history: [], historyUnavailable: 'Sync history table has not been added yet.' })
+        }
+        return res.status(400).json({ error: error.message })
+      }
+
+      return res.status(200).json({
+        history: (data ?? []).map((row: any) => ({
+          id: row.id,
+          feedId: row.feed_id ?? undefined,
+          feedName: row.feed_name,
+          platform: row.platform,
+          trigger: row.trigger,
+          status: row.status,
+          startedAt: row.started_at,
+          finishedAt: row.finished_at,
+          durationMs: row.duration_ms,
+          attempts: row.attempts,
+          createdEvents: row.created_events,
+          updatedEvents: row.updated_events,
+          createdGames: row.created_games,
+          updatedGames: row.updated_games,
+          errors: Array.isArray(row.errors) ? row.errors : [],
+        })),
+      })
+    }
 
     const body = toJsonBody(req)
     const feedId = String(body.feedId || '').trim() || null
@@ -761,7 +890,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (const feed of feeds as Feed[]) {
       try {
-        const result = await syncFeed(client, feed)
+        const result = await syncFeed(client, feed, { trigger: 'manual' })
         feedResults.push(result)
         createdEvents += result.createdEvents
         updatedEvents += result.updatedEvents
@@ -774,30 +903,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         diagnostics.ambiguousCandidates += result.diagnostics?.ambiguousCandidates ?? 0
         diagnostics.samples.push(...(result.diagnostics?.samples ?? []))
       } catch (e: any) {
-        const message = `${feed.name}: ${String(e?.message || e)}`
-        errors.push(message)
-        feedResults.push({
-          feedId: feed.id,
-          feedName: feed.name,
-          platform: feed.platform,
-          status: 'failed',
-          attempts: 0,
-          startedAt: new Date().toISOString(),
-          finishedAt: new Date().toISOString(),
-          durationMs: 0,
-          createdEvents: 0,
-          updatedEvents: 0,
-          createdGames: 0,
-          updatedGames: 0,
-          errors: [message],
-          diagnostics: {
-            existingRefMatches: 0,
-            manualMatches: 0,
-            createdFromFeed: 0,
-            ambiguousCandidates: 0,
-            samples: [],
-          },
-        })
+        const result = await recordSyncFailure(client, feed, 'manual', e)
+        errors.push(...result.errors)
+        feedResults.push(result)
       }
     }
 

@@ -221,6 +221,24 @@ export interface SyncIcsResult {
   }
 }
 
+export interface CalendarFeedSyncRun {
+  id: string
+  feedId?: string
+  feedName: string
+  platform: string
+  trigger: 'manual' | 'scheduled' | string
+  status: 'success' | 'partial' | 'failed'
+  startedAt: string
+  finishedAt: string
+  durationMs: number
+  attempts: number
+  createdEvents: number
+  updatedEvents: number
+  createdGames: number
+  updatedGames: number
+  errors: string[]
+}
+
 export interface DB {
   settings: Settings
   games: Game[]

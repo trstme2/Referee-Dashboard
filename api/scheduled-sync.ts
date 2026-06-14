@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createServiceSupabase, cronAuthorized, setApiSecurityHeaders } from '../src/server/auth-utils.js'
-import { syncFeed, type Feed } from './sync-ics.js'
+import { recordSyncFailure, syncFeed, type Feed } from './sync-ics.js'
 
 type FeedSummary = {
   feedId: string
@@ -43,28 +43,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const summaries: FeedSummary[] = []
     for (const feed of (feeds ?? []) as Feed[]) {
       try {
-        const result = await syncFeed(client, feed)
+        const result = await syncFeed(client, feed, { trigger: 'scheduled' })
         summaries.push({
           userId: feed.user_id,
           name: result.feedName,
           ...result,
         })
       } catch (e: any) {
+        const result = await recordSyncFailure(client, feed, 'scheduled', e)
         summaries.push({
-          feedId: feed.id,
           userId: feed.user_id,
           name: feed.name,
-          platform: feed.platform,
-          status: 'failed',
-          attempts: 0,
-          startedAt: new Date().toISOString(),
-          finishedAt: new Date().toISOString(),
-          durationMs: 0,
-          createdEvents: 0,
-          updatedEvents: 0,
-          createdGames: 0,
-          updatedGames: 0,
-          errors: [String(e?.message ?? e)],
+          ...result,
         })
       }
     }

@@ -3,7 +3,7 @@ import FeedSetupGuide from '../components/FeedSetupGuide'
 import HelpTip from '../components/HelpTip'
 import { useData } from '../lib/DataContext'
 import { trackedSportsFor } from '../lib/preferences'
-import type { CalendarFeed, FeedPlatform, Sport, SyncIcsResult } from '../lib/types'
+import type { CalendarFeed, CalendarFeedSyncRun, FeedPlatform, Sport, SyncIcsResult } from '../lib/types'
 
 type FeedForm = {
   id: string
@@ -49,6 +49,8 @@ export default function SyncPage() {
   const [form, setForm] = useState<FeedForm>(() => emptyForm())
   const [result, setResult] = useState<SyncIcsResult | null>(null)
   const [cleanupResult, setCleanupResult] = useState<any>(null)
+  const [syncHistory, setSyncHistory] = useState<CalendarFeedSyncRun[]>([])
+  const [syncHistoryNote, setSyncHistoryNote] = useState<string | null>(null)
   const [selectedCleanupKeys, setSelectedCleanupKeys] = useState<string[]>([])
   const [cleaning, setCleaning] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -140,10 +142,23 @@ export default function SyncPage() {
       const json = await api('/api/calendar-feeds')
       setFeeds((json.feeds ?? []) as CalendarFeed[])
       setHealthNow(Date.now())
+      await loadSyncHistory()
     } catch (e: any) {
       setErr(String(e?.message ?? e))
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadSyncHistory() {
+    if (!token) return
+    try {
+      const json = await api('/api/sync-ics?history=1&limit=25')
+      setSyncHistory((json.history ?? []) as CalendarFeedSyncRun[])
+      setSyncHistoryNote(json.historyUnavailable ? String(json.historyUnavailable) : null)
+    } catch (e: any) {
+      setSyncHistory([])
+      setSyncHistoryNote(`Could not load sync history: ${String(e?.message ?? e)}`)
     }
   }
 
@@ -416,6 +431,51 @@ export default function SyncPage() {
             )}
           </div>
         )}
+
+        <div className="card sync-history-card" style={{ marginTop: 10 }}>
+          <div className="page-section-head">
+            <div>
+              <h2>Sync History</h2>
+              <p className="sub">Recent feed runs are stored so you can see background and manual sync health over time.</p>
+            </div>
+            <button className="btn" onClick={loadSyncHistory} disabled={loading || syncing}>Refresh history</button>
+          </div>
+          {syncHistoryNote ? <p className="small"><span className="pill warn">{syncHistoryNote}</span></p> : null}
+          {syncHistory.length ? (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Started</th><th>Feed</th><th>Type</th><th>Status</th><th>Changes</th><th>Duration</th><th>Errors</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {syncHistory.map((run) => (
+                    <tr key={run.id}>
+                      <td className="small">{new Date(run.startedAt).toLocaleString()}</td>
+                      <td>
+                        <div>{run.feedName}</div>
+                        <div className="small">{run.platform}</div>
+                      </td>
+                      <td className="small">{run.trigger}</td>
+                      <td><span className={`pill ${run.status === 'success' ? 'ok' : run.status === 'partial' ? 'warn' : 'bad'}`}>{run.status}</span></td>
+                      <td className="small">
+                        Games +{run.createdGames}/{run.updatedGames} | Events +{run.createdEvents}/{run.updatedEvents}
+                      </td>
+                      <td className="small">{formatDuration(run.durationMs)}{run.attempts ? ` | ${run.attempts} attempt${run.attempts === 1 ? '' : 's'}` : ''}</td>
+                      <td className="small">{run.errors?.length ? run.errors.slice(0, 2).join(' | ') : 'None'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty-state centered">
+              <h3>No sync history yet</h3>
+              <p>Run a manual sync or wait for scheduled sync after the history table is added in Supabase.</p>
+            </div>
+          )}
+        </div>
 
         {cleanupResult && (
           <div className="card" style={{ marginTop: 10 }}>

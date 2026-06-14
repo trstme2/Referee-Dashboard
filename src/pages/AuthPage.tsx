@@ -14,9 +14,12 @@ const ACCOUNT_TABLE_DELETE_ORDER = [
   'expenses',
   'calendar_events',
   'games',
+  'calendar_feed_sync_runs',
   'calendar_feeds',
   'user_settings',
 ] as const
+
+const OPTIONAL_ACCOUNT_TABLES = new Set<string>(['calendar_feed_sync_runs'])
 
 function downloadJson(filename: string, value: unknown) {
   const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' })
@@ -35,6 +38,15 @@ function evidencePaths(db: DB) {
     expenseReceipts: db.expenses.map((expense) => expense.receiptStoragePath).filter((path): path is string => Boolean(path)),
     requirementEvidence: db.requirementActivities.map((activity) => activity.evidenceStoragePath).filter((path): path is string => Boolean(path)),
   }
+}
+
+function isMissingOptionalTableError(error: any, table: string) {
+  const code = String(error?.code ?? '')
+  const message = String(error?.message ?? error ?? '')
+  if (code === '42P01' || code === 'PGRST205') return true
+  if (message.includes('Could not find the table')) return true
+  if (message.includes(table) && (message.includes('does not exist') || message.includes('schema cache'))) return true
+  return false
 }
 
 export default function AuthPage() {
@@ -83,6 +95,19 @@ export default function AuthPage() {
       return json.feeds ?? []
     }
 
+    async function syncHistoryForExport() {
+      if (!activeSession.access_token) return []
+      const res = await fetch('/api/sync-ics?history=1&limit=50', {
+        headers: {
+          Authorization: `Bearer ${activeSession.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      if (!res.ok) return []
+      const json = await res.json().catch(() => ({}))
+      return json.history ?? []
+    }
+
     async function exportAccountData() {
       setErr(null)
       setMsg(null)
@@ -98,6 +123,7 @@ export default function AuthPage() {
           note: 'Receipt and requirement evidence files are not embedded in this JSON export. File paths and filenames are included where saved.',
           data: db,
           calendarFeeds: await calendarFeedsForExport(),
+          syncHistory: await syncHistoryForExport(),
           fileReferences: evidencePaths(db),
         }
         downloadJson(`whistle-keeper-account-data-${new Date().toISOString().slice(0, 10)}.json`, exportData)
@@ -122,6 +148,14 @@ export default function AuthPage() {
       }
     }
 
+    async function deleteSyncHistory() {
+      if (!supabase) throw new Error('Supabase client missing')
+      const { error } = await supabase.from('calendar_feed_sync_runs').delete().eq('user_id', activeSession.user.id)
+      if (error && !isMissingOptionalTableError(error, 'calendar_feed_sync_runs')) {
+        throw new Error(`Delete sync history: ${error.message}`)
+      }
+    }
+
     async function deleteCalendarFeeds() {
       if (!supabase) throw new Error('Supabase client missing')
       const { error } = await supabase.from('calendar_feeds').delete().eq('user_id', activeSession.user.id)
@@ -132,6 +166,7 @@ export default function AuthPage() {
       if (!supabase) throw new Error('Supabase client missing')
       for (const table of ACCOUNT_TABLE_DELETE_ORDER) {
         const { error } = await supabase.from(table).delete().eq('user_id', activeSession.user.id)
+        if (error && OPTIONAL_ACCOUNT_TABLES.has(table) && isMissingOptionalTableError(error, table)) continue
         if (error) throw new Error(`Delete ${table}: ${error.message}`)
       }
     }
@@ -144,6 +179,7 @@ export default function AuthPage() {
       setAccountBusy(true)
       try {
         await removeStorageFiles()
+        await deleteSyncHistory()
         await deleteCalendarFeeds()
         await write(createFreshDB(), { forceFullReplace: true })
         setMsg('App data reset complete. Your account is still active.')
@@ -204,7 +240,7 @@ export default function AuthPage() {
           <div className="account-lifecycle-grid">
             <div>
               <div className="expanded-label">What Whistle Keeper stores</div>
-              <p>Assignments, calendar blocks, expenses, receipt/evidence file references, requirement activity, import history, settings, and saved feed metadata.</p>
+              <p>Assignments, calendar blocks, expenses, receipt/evidence file references, requirement activity, import history, sync history, settings, and saved feed metadata.</p>
             </div>
             <div>
               <div className="expanded-label">Private files</div>

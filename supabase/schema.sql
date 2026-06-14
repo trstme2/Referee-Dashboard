@@ -261,6 +261,27 @@ create table if not exists public.calendar_feeds (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.calendar_feed_sync_runs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  feed_id uuid null,
+  feed_name text not null,
+  platform text not null,
+  trigger text not null,
+  status text not null,
+  started_at timestamptz not null,
+  finished_at timestamptz not null,
+  duration_ms int not null default 0,
+  attempts int not null default 0,
+  created_events int not null default 0,
+  updated_events int not null default 0,
+  created_games int not null default 0,
+  updated_games int not null default 0,
+  errors jsonb not null default '[]'::jsonb,
+  diagnostics jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
 do $$
 begin
   if not exists (
@@ -383,6 +404,7 @@ alter table public.user_settings enable row level security;
 alter table public.games enable row level security;
 alter table public.calendar_events enable row level security;
 alter table public.calendar_feeds enable row level security;
+alter table public.calendar_feed_sync_runs enable row level security;
 alter table public.expenses enable row level security;
 alter table public.requirement_definitions enable row level security;
 alter table public.requirement_instances enable row level security;
@@ -398,7 +420,7 @@ begin
     'user_settings',
     'games','calendar_events','expenses','requirement_definitions',
     'requirement_instances','requirement_activities','csv_imports','csv_import_rows',
-    'calendar_feeds'
+    'calendar_feeds','calendar_feed_sync_runs'
   ]
   loop
     execute format('drop policy if exists "select_own_%1$s" on public.%1$s;', t);
@@ -421,6 +443,8 @@ create index if not exists idx_expenses_user_date on public.expenses(user_id, ex
 create index if not exists idx_calendar_user_start on public.calendar_events(user_id, start_ts);
 create unique index if not exists idx_calendar_events_user_external_ref on public.calendar_events(user_id, external_ref) where external_ref is not null;
 create index if not exists idx_calendar_feeds_user_platform on public.calendar_feeds(user_id, platform);
+create index if not exists idx_calendar_feed_sync_runs_user_started on public.calendar_feed_sync_runs(user_id, started_at desc);
+create index if not exists idx_calendar_feed_sync_runs_feed_started on public.calendar_feed_sync_runs(feed_id, started_at desc);
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
