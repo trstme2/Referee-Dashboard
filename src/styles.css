@@ -1954,6 +1954,21 @@ body {
   background:
     radial-gradient(circle at top right, rgba(67, 209, 158, 0.08), transparent 34%),
     rgba(2, 6, 23, 0.22);
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.readiness-group-card:hover,
+.readiness-group-card:focus-visible {
+  border-color: rgba(96, 165, 250, 0.55);
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.14);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.readiness-group-card.selected {
+  border-color: rgba(67, 209, 158, 0.72);
+  box-shadow: 0 0 0 1px rgba(67, 209, 158, 0.2), 0 0 18px rgba(67, 209, 158, 0.08);
 }
 
 .readiness-group-head {

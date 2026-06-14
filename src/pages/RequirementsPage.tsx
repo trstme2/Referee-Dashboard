@@ -93,6 +93,7 @@ export default function RequirementsPage() {
     notes: '',
   })
   const [duplicateTargets, setDuplicateTargets] = useState<Record<string, { seasonName: string; year: string }>>({})
+  const [selectedReadinessKey, setSelectedReadinessKey] = useState<string | null>(null)
 
   const [newDef, setNewDef] = useState({
     name: '',
@@ -251,6 +252,17 @@ export default function RequirementsPage() {
     const needsAttention = readinessGroups.filter(g => g.remaining > 0).length
     return { groups: readinessGroups.length, ready, blocked, dueSoon, needsAttention }
   }, [readinessGroups])
+
+  const selectedReadinessGroup = useMemo(
+    () => readinessGroups.find(group => group.key === selectedReadinessKey) ?? null,
+    [readinessGroups, selectedReadinessKey]
+  )
+
+  const displayedInstances = useMemo(() => {
+    if (!selectedReadinessGroup) return instances
+    const ids = new Set(selectedReadinessGroup.items.map(({ i }) => i.id))
+    return instances.filter(({ i }) => ids.has(i.id))
+  }, [instances, selectedReadinessGroup])
 
   const requirementInsights = useMemo(() => {
     return instances.flatMap(({ i, def }) => {
@@ -555,6 +567,13 @@ export default function RequirementsPage() {
     document.getElementById('requirement-definition-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  function openReadinessGroup(groupKey: string) {
+    setSelectedReadinessKey(groupKey)
+    window.setTimeout(() => {
+      document.getElementById('requirement-tracker-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 0)
+  }
+
   function progressValue(done: number, needed: number) {
     if (!needed) return 0
     return Math.min(100, Math.round((done / needed) * 100))
@@ -668,7 +687,20 @@ export default function RequirementsPage() {
             {readinessGroups.map((group) => {
               const target = duplicateTargetFor(group)
               return (
-                <article key={group.key} className="readiness-group-card">
+                <article
+                  key={group.key}
+                  className={`readiness-group-card ${selectedReadinessKey === group.key ? 'selected' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openReadinessGroup(group.key)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      openReadinessGroup(group.key)
+                    }
+                  }}
+                  aria-label={`Open requirements for ${group.title} ${group.subtitle}`}
+                >
                   <div className="readiness-group-head">
                     <div>
                       <h3>{group.title}</h3>
@@ -698,7 +730,7 @@ export default function RequirementsPage() {
                     {group.remaining === 0 ? <p className="small">All tracked items are complete or waived.</p> : null}
                     {group.remaining > 4 ? <p className="small">+{group.remaining - 4} more remaining</p> : null}
                   </div>
-                  <div className="readiness-duplicate-panel">
+                  <div className="readiness-duplicate-panel" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
                     <div className="expanded-label">Duplicate this season</div>
                     <div className="row">
                       <div className="field">
@@ -865,10 +897,22 @@ export default function RequirementsPage() {
         </div>
       </section>
 
-      <section className="card requirement-tracker-card">
-        <h2>Tracked requirements</h2>
+      <section className="card requirement-tracker-card" id="requirement-tracker-card">
+        <div className="page-section-head">
+          <div>
+            <h2>{selectedReadinessGroup ? selectedReadinessGroup.title : 'Tracked requirements'}</h2>
+            <p className="sub">
+              {selectedReadinessGroup
+                ? `${selectedReadinessGroup.subtitle} | ${displayedInstances.length} requirement${displayedInstances.length === 1 ? '' : 's'}`
+                : 'All tracked requirement records across every readiness group.'}
+            </p>
+          </div>
+          {selectedReadinessGroup ? (
+            <button className="btn" onClick={() => setSelectedReadinessKey(null)}>Show all requirements</button>
+          ) : null}
+        </div>
         <div className="requirement-card-list">
-          {instances.map(({ i, def }) => {
+          {displayedInstances.map(({ i, def }) => {
             const acts = activityByInstance.get(i.id) ?? []
             const needed = def!.requiredCount ?? 0
             const done = acts.reduce((s, a) => s + (a.quantity ?? 1), 0)
@@ -996,9 +1040,9 @@ export default function RequirementsPage() {
               </article>
             )
           })}
-          {instances.length === 0 && (
+          {displayedInstances.length === 0 && (
             <div className="empty-state centered requirement-empty-state">
-              <h3>No tracked requirements yet</h3>
+              <h3>{selectedReadinessGroup ? 'No requirements in this group' : 'No tracked requirements yet'}</h3>
               <p>
                 {hasDefinitions
                   ? 'Pick a definition above and create your first tracked season so activities and document evidence have a place to live.'
