@@ -31,7 +31,7 @@ export default function App() {
             <img src={logo} alt="Whistle Keeper logo" className="brand-logo" />
             <div className="brand">
               <h1>Whistle Keeper</h1>
-              <p>Keep assignments, pay, mileage, and compliance in one place.</p>
+              <p>Keep assignments, pay, mileage, and requirements in one place.</p>
             </div>
           </div>
           <Nav />

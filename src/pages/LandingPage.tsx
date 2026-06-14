@@ -22,10 +22,10 @@ export default function LandingPage() {
       <section className="landing-hero">
         <div className="landing-hero-copy">
           <div className="landing-eyebrow">Referee operations, finally organized</div>
-          <h1>Own your assignments before they own your week.</h1>
+          <h1>Manage your officiating life.</h1>
           <p>
-            Whistle Keeper pulls games, pay, mileage, calendar blocks, compliance,
-            and tax-ready records into one calm command center for officials.
+            Whistle Keeper pulls games, pay, mileage, calendar blocks, requirements,
+            and tax-ready records into one place for officials.
           </p>
           <div className="landing-actions">
             <Link to="/auth" className="landing-cta primary">Start organizing</Link>
@@ -142,7 +142,7 @@ export default function LandingPage() {
           {[
             ['Pay', 'Know what was assigned, earned, paid, and still outstanding.'],
             ['Mileage', 'Track game travel from your saved work locations.'],
-            ['Compliance', 'Stay ahead of requirements, evidence, and season tasks.'],
+            ['Requirements', 'Stay ahead of requirements, evidence, and season tasks.'],
             ['Taxes', 'Export cleaner income and expense records when the year closes.'],
           ].map(([title, text]) => (
             <article key={title}>

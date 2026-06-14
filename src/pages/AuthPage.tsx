@@ -236,7 +236,7 @@ export default function AuthPage() {
 
         <section className="card account-lifecycle-card">
           <h2>Data Lifecycle</h2>
-          <p className="sub">Professional housekeeping for a personal records app: know what is stored, export it, and remove it when needed.</p>
+          <p className="sub">Know what is stored, export it, and remove it when needed.</p>
           <div className="account-lifecycle-grid">
             <div>
               <div className="expanded-label">What Whistle Keeper stores</div>
