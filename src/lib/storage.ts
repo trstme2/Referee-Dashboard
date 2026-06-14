@@ -35,7 +35,7 @@ function nowISO() {
   return new Date().toISOString()
 }
 
-function seedDB(): DB {
+export function createFreshDB(): DB {
   const now = nowISO()
   return {
     settings: {
@@ -86,4 +86,8 @@ function seedDB(): DB {
     csvImports: [],
     csvImportRows: [],
   }
+}
+
+function seedDB(): DB {
+  return createFreshDB()
 }
