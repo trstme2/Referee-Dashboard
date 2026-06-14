@@ -10,6 +10,39 @@ Create a project in Supabase, then grab:
 Open Supabase -> SQL Editor -> paste `supabase/schema.sql` from this repo.
 This now also creates the private `requirement-evidence` Storage bucket plus policies for per-user document access.
 
+## 2a) Production schema drift control
+Before deploying features that touch Supabase, run the read-only drift check:
+
+1. Open Supabase -> SQL Editor.
+2. Paste and run `supabase/production-schema-drift-check.sql`.
+3. Expected healthy result: zero rows.
+
+If the drift check returns rows, production is missing tables, columns, indexes, RLS policies, or storage bucket policy pieces expected by the app. Repair production by running `supabase/schema.sql`, then rerun `supabase/production-schema-drift-check.sql` until it returns zero rows.
+
+Use `supabase/manual-patches/*` only for small targeted fixes when you do not want to rerun the full idempotent schema. The full `supabase/schema.sql` remains the source of truth.
+
+## 2b) Roles, subscriptions, and admin bootstrap
+The app uses `user_profiles` for server-side roles and subscription entitlement metadata:
+
+- `role`: `user`, `support`, `admin`, `owner`
+- `subscription_tier`: `free`, `pro`, `premium`
+- `subscription_status`: `free`, `trialing`, `active`, `past_due`, `canceled`
+
+Roles and subscription fields are not user-editable from the browser. The `/api/platform` server route creates/updates profile heartbeat data and checks admin authorization with the server secret key.
+
+To bootstrap the first admin:
+
+1. Sign in to the app once so `user_profiles` is created.
+2. In Supabase SQL Editor, run:
+
+```sql
+update public.user_profiles
+set role = 'owner', updated_at = now()
+where email = 'you@example.com';
+```
+
+The initial admin metrics page is available at `/admin`. Non-admin users receive a server-side authorization failure.
+
 ## 3) Enable Auth + URLs
 Supabase -> Authentication -> URL Configuration:
 - Site URL: your Vercel production URL (e.g. https://your-app.vercel.app)

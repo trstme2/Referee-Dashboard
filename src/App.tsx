@@ -13,6 +13,7 @@ import TaxPage from './pages/TaxPage'
 import LandingPage from './pages/LandingPage'
 import OnboardingPage from './pages/OnboardingPage'
 import DataPrivacyPage from './pages/DataPrivacyPage'
+import AdminPage from './pages/AdminPage'
 import { useData } from './lib/DataContext'
 import { shouldStartOnboarding } from './lib/onboarding'
 import logo from './assets/logo.png'
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="/sync" element={requireAuth && !session ? <Navigate to="/auth" /> : <SyncPage />} />
           <Route path="/settings" element={requireAuth && !session ? <Navigate to="/auth" /> : <SettingsPage />} />
           <Route path="/privacy" element={requireAuth && !session ? <Navigate to="/auth" /> : <DataPrivacyPage />} />
+          <Route path="/admin" element={requireAuth && !session ? <Navigate to="/auth" /> : <AdminPage />} />
 
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

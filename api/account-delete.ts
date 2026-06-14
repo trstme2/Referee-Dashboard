@@ -18,6 +18,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (authError || !authData?.user) return res.status(401).json({ error: 'Invalid auth token' })
 
     const serviceClient = createServiceSupabase()
+    await serviceClient.from('app_events').delete().eq('user_id', authData.user.id)
+    await serviceClient.from('user_profiles').delete().eq('user_id', authData.user.id)
     const { error } = await serviceClient.auth.admin.deleteUser(authData.user.id)
     if (error) return res.status(500).json({ error: 'Could not delete account' })
 

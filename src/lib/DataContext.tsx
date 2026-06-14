@@ -383,6 +383,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     refresh()
   }, [refresh])
 
+  useEffect(() => {
+    if (mode !== 'supabase' || !session?.access_token) return
+    void fetch('/api/platform?action=me', {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+    }).catch(() => undefined)
+  }, [mode, session?.access_token])
+
   const write = useCallback(async (next: DB, options?: WriteOptions) => {
     setError(null)
     if (mode !== 'supabase' || !userId) {

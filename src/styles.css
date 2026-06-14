@@ -2402,6 +2402,77 @@ body {
   text-underline-offset: 3px;
 }
 
+.admin-page {
+  margin-top: 14px;
+}
+
+.admin-hero-card {
+  border-color: rgba(96, 165, 250, 0.24);
+}
+
+.admin-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-kpi-card span {
+  display: block;
+  color: #a7b8ce;
+  font-size: 12px;
+}
+
+.admin-kpi-card strong {
+  display: block;
+  margin: 5px 0;
+  font-size: 30px;
+  color: #fff;
+}
+
+.admin-kpi-card p {
+  margin: 0;
+  color: #aebcd0;
+  font-size: 13px;
+}
+
+.admin-bar-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-bar-list > div {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) 42px;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-bar-list span {
+  color: #dbeafe;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-bar-list div div {
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  overflow: hidden;
+}
+
+.admin-bar-list i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #60a5fa, #43d19e);
+}
+
+.admin-bar-list strong {
+  color: #fff;
+  text-align: right;
+}
+
 @media (max-width: 720px) {
   .requirement-card-head,
   .requirement-progress-row,
@@ -2415,7 +2486,8 @@ body {
   .data-privacy-hero,
   .privacy-status-grid,
   .privacy-control-grid,
-  .privacy-two-column {
+  .privacy-two-column,
+  .admin-kpi-grid {
     grid-template-columns: 1fr;
   }
 

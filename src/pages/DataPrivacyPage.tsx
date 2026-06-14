@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useData } from '../lib/DataContext'
 import { createFreshDB, resetDB } from '../lib/storage'
 import { supabaseConfigured } from '../lib/supabaseClient'
-import { deleteCalendarFeeds, deleteSyncHistory, evidencePaths, exportAccountData, purgeCloudRows, removeStorageFiles } from '../lib/accountLifecycle'
+import { deleteCalendarFeeds, deleteOwnAppEvents, deleteSyncHistory, evidencePaths, exportAccountData, purgeCloudRows, removeStorageFiles } from '../lib/accountLifecycle'
 
 const dataInventory = [
   {
@@ -35,6 +35,12 @@ const dataInventory = [
     examples: 'Home address, other work address, tracked sports, assigning platforms, leagues, timezone, email preference.',
     location: 'User settings row tied to your signed-in user id.',
     control: 'Edit in Settings, export with account data, or remove through reset/delete.',
+  },
+  {
+    label: 'Profile and product events',
+    examples: 'Role, subscription tier/status, last-seen timestamp, and coarse usage events such as account export.',
+    location: 'Platform tables used for entitlement checks and aggregate product health metrics.',
+    control: 'Included in account export. Reset clears app events but keeps role/subscription profile; delete account removes both.',
   },
 ]
 
@@ -89,6 +95,7 @@ export default function DataPrivacyPage() {
     try {
       if (isCloud && activeSession) {
         await removeStorageFiles(db)
+        await deleteOwnAppEvents(activeSession.user.id)
         await deleteSyncHistory(activeSession.user.id)
         await deleteCalendarFeeds(activeSession.user.id)
         await write(createFreshDB(), { forceFullReplace: true })
@@ -183,11 +190,11 @@ export default function DataPrivacyPage() {
         <div className="privacy-control-grid">
           <div>
             <div className="expanded-label">Export</div>
-            <p>Downloads a JSON file with app records, saved feed metadata, recent sync history, and file references. Receipt and evidence file binaries are not embedded.</p>
+            <p>Downloads a JSON file with app records, profile metadata, coarse app events, saved feed metadata, recent sync history, and file references. Receipt and evidence file binaries are not embedded.</p>
           </div>
           <div>
             <div className="expanded-label">Reset app data</div>
-            <p>Removes app records, saved feeds, sync history, and tracked receipt/evidence files, while keeping your sign-in account active.</p>
+            <p>Removes app records, saved feeds, app events, sync history, and tracked receipt/evidence files, while keeping your sign-in account and entitlement profile active.</p>
           </div>
           <div>
             <div className="expanded-label">Delete account</div>
@@ -237,6 +244,7 @@ export default function DataPrivacyPage() {
             <p><strong>User isolation:</strong> cloud records are tied to your Supabase auth user id and protected by row-level access rules.</p>
             <p><strong>Private uploads:</strong> receipt and requirement evidence files are stored in private buckets under user-scoped paths.</p>
             <p><strong>Feed secrecy:</strong> saved feed URLs are masked in API responses and encrypted at rest when `FEED_URL_ENCRYPTION_KEY` is configured.</p>
+            <p><strong>Admin access:</strong> roles and subscription tiers are checked server-side. The browser cannot promote itself or read global metrics directly.</p>
             <p><strong>Subscription URLs:</strong> outbound calendar feed links should be treated like passwords. You can regenerate the token in <Link to="/settings">Settings</Link>.</p>
           </div>
         </div>
@@ -254,4 +262,3 @@ export default function DataPrivacyPage() {
     </div>
   )
 }
-

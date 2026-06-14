@@ -1,4 +1,5 @@
 import { EXPENSE_RECEIPT_BUCKET, REQUIREMENT_EVIDENCE_BUCKET } from './documents'
+import { recordPlatformEvent } from './platformEvents'
 import { supabase } from './supabaseClient'
 import type { DB } from './types'
 
@@ -72,6 +73,31 @@ export async function syncHistoryForExport(accessToken?: string) {
   return json.history ?? []
 }
 
+export async function platformProfileForExport(userId: string) {
+  if (!supabase) return null
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('user_id,email,role,subscription_tier,subscription_status,created_at,updated_at,last_seen_at')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error && isMissingOptionalTableError(error, 'user_profiles')) return null
+  if (error) throw new Error(`Export platform profile: ${error.message}`)
+  return data ?? null
+}
+
+export async function appEventsForExport(userId: string) {
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('app_events')
+    .select('id,event_type,event_source,metadata,created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(5000)
+  if (error && isMissingOptionalTableError(error, 'app_events')) return []
+  if (error) throw new Error(`Export app events: ${error.message}`)
+  return data ?? []
+}
+
 export async function exportAccountData(db: DB, user: { id: string; email?: string | null }, accessToken?: string) {
   const exportData = {
     exportedAt: new Date().toISOString(),
@@ -82,11 +108,22 @@ export async function exportAccountData(db: DB, user: { id: string; email?: stri
     },
     note: 'Receipt and requirement evidence files are not embedded in this JSON export. File paths and filenames are included where saved.',
     data: db,
+    platformProfile: await platformProfileForExport(user.id),
+    appEvents: await appEventsForExport(user.id),
     calendarFeeds: await calendarFeedsForExport(accessToken),
     syncHistory: await syncHistoryForExport(accessToken),
     fileReferences: evidencePaths(db),
   }
   downloadJson(`whistle-keeper-account-data-${new Date().toISOString().slice(0, 10)}.json`, exportData)
+  await recordPlatformEvent(accessToken, 'account_exported')
+}
+
+export async function deleteOwnAppEvents(userId: string) {
+  if (!supabase) throw new Error('Supabase client missing')
+  const { error } = await supabase.from('app_events').delete().eq('user_id', userId)
+  if (error && !isMissingOptionalTableError(error, 'app_events')) {
+    throw new Error(`Delete app events: ${error.message}`)
+  }
 }
 
 export async function removeStorageFiles(db: DB) {
@@ -124,4 +161,3 @@ export async function purgeCloudRows(userId: string) {
     if (error) throw new Error(`Delete ${table}: ${error.message}`)
   }
 }
-

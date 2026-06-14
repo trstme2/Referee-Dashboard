@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase, supabaseConfigured } from '../lib/supabaseClient'
 import { useData } from '../lib/DataContext'
 import { createFreshDB, resetDB } from '../lib/storage'
-import { deleteCalendarFeeds, deleteSyncHistory, exportAccountData as downloadAccountExport, purgeCloudRows, removeStorageFiles } from '../lib/accountLifecycle'
+import { deleteCalendarFeeds, deleteOwnAppEvents, deleteSyncHistory, exportAccountData as downloadAccountExport, purgeCloudRows, removeStorageFiles } from '../lib/accountLifecycle'
 
 export default function AuthPage() {
   const { mode, session, refresh, db, write, signOut, loading } = useData()
@@ -60,6 +60,7 @@ export default function AuthPage() {
       setAccountBusy(true)
       try {
         await removeStorageFiles(db)
+        await deleteOwnAppEvents(activeSession.user.id)
         await deleteSyncHistory(activeSession.user.id)
         await deleteCalendarFeeds(activeSession.user.id)
         await write(createFreshDB(), { forceFullReplace: true })
