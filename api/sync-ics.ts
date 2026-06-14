@@ -3,6 +3,7 @@ import ical from 'node-ical'
 import { createHash } from 'node:crypto'
 import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from './auth-utils.js'
 import { fetchCalendarFeedText } from './feed-fetch.js'
+import { revealFeedUrl } from './personal-data-security.js'
 import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks } from './sync-ics-utils.js'
 
 export type Feed = {
@@ -29,8 +30,9 @@ type SyncDiagnostic = {
 const APP_TIMEZONE = 'America/New_York'
 
 function stableFeedKey(feed: Feed): string {
+  const feedUrl = revealFeedUrl(feed.feed_url)
   return createHash('sha256')
-    .update(`${feed.platform}:${feed.feed_url.trim().toLowerCase()}`)
+    .update(`${feed.platform}:${feedUrl.trim().toLowerCase()}`)
     .digest('hex')
     .slice(0, 16)
 }
@@ -352,7 +354,7 @@ export async function syncFeed(client: any, feed: Feed) {
 
   let raw: string
   try {
-    raw = await fetchCalendarFeedText(feed.feed_url)
+    raw = await fetchCalendarFeedText(revealFeedUrl(feed.feed_url))
   } catch (e: any) {
     return { createdEvents, updatedEvents, createdGames, updatedGames, errors: [`${feed.name}: fetch failed: ${String(e?.message || e)}`] }
   }

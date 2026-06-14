@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildIcsCalendar, createCalendarExportToken, dedupeCalendarExportRows, isCalendarExportToken } from './calendar-export-utils.js'
+import { buildIcsCalendar, calendarExportTokenLookupValues, createCalendarExportToken, dedupeCalendarExportRows, isCalendarExportToken, storedCalendarExportToken } from './calendar-export-utils.js'
+import { isHashedCalendarExportToken } from './personal-data-security.js'
 
 function block(id: string) {
   return {
@@ -56,5 +57,14 @@ describe('calendar export token hardening', () => {
     expect(isCalendarExportToken('short')).toBe(false)
     expect(isCalendarExportToken('../not-a-token')).toBe(false)
     expect(isCalendarExportToken(`${'a'.repeat(63)}z`)).toBe(false)
+  })
+
+  it('stores new subscription tokens as hashes while supporting legacy lookup', () => {
+    const token = 'a'.repeat(64)
+    const stored = storedCalendarExportToken(token)
+
+    expect(stored).not.toBe(token)
+    expect(isHashedCalendarExportToken(stored)).toBe(true)
+    expect(calendarExportTokenLookupValues(token)).toEqual([stored, token])
   })
 })

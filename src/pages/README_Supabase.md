@@ -29,6 +29,7 @@ Serverless:
 - `SUPABASE_SECRET_KEY` (server-only elevated key for scheduled jobs)
 - `GOOGLE_MAPS_API_KEY` (optional, only needed if you want distance-from-home)
 - `CRON_SECRET` (used by Vercel Cron to authorize scheduled requests)
+- `FEED_URL_ENCRYPTION_KEY` (recommended; 32-byte base64 or 64-character hex key used to encrypt saved iCal feed URLs at rest)
 - `RESEND_API_KEY` (needed for weekly schedule emails)
 - `WEEKLY_EMAIL_FROM` (optional, defaults to Resend's test sender)
 - `WEEKLY_EMAIL_REPLY_TO` (optional)
@@ -46,7 +47,7 @@ Push to GitHub, import into Vercel, deploy.
 - Legacy `VITE_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` still work during rotation, but new deployments should use the publishable and secret key variables above.
 - Requirement evidence uploads are stored in private Supabase Storage, under a user-scoped folder path.
 - Expense receipt uploads are stored in private Supabase Storage, under a user-scoped folder path.
-- Calendar feed URLs and calendar subscription URLs are sensitive secrets. The app masks saved feed URLs in API responses, uses private/no-store response headers for calendar exports, and lets users regenerate subscription tokens from Settings. Treat copied subscription URLs like passwords because calendar clients need unauthenticated access to poll them.
+- Calendar feed URLs and calendar subscription URLs are sensitive secrets. The app masks saved feed URLs in API responses, encrypts newly saved feed URLs when `FEED_URL_ENCRYPTION_KEY` is configured, stores newly generated calendar subscription tokens as hashes, uses private/no-store response headers for calendar exports, and lets users regenerate subscription tokens from Settings. Treat copied subscription URLs like passwords because calendar clients need unauthenticated access to poll them.
 - Serverless endpoints include best-effort in-process rate limits. For high-volume production usage, pair these with a platform or edge rate limit because serverless instances do not share memory.
 - Settings (home address, assigning platforms, league suggestions) are stored in `user_settings`.
 - Distance is calculated via `/api/distance` (serverless) so your API key is not exposed to the browser.

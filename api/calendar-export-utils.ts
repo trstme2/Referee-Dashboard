@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { hashCalendarExportToken, isHashedCalendarExportToken } from './personal-data-security.js'
 import { blockSlotKey, cleanupDragonFlyBlockTitle } from './sync-ics-utils.js'
 
 const FALLBACK_TIMEZONE = 'America/New_York'
@@ -432,6 +433,14 @@ export function isCalendarExportToken(value: unknown): boolean {
   return CALENDAR_EXPORT_TOKEN_PATTERN.test(String(value || '').trim())
 }
 
+export function storedCalendarExportToken(token: string): string {
+  return hashCalendarExportToken(token)
+}
+
+export function calendarExportTokenLookupValues(token: string): string[] {
+  return [hashCalendarExportToken(token), token]
+}
+
 export async function ensureCalendarExportToken(client: any, userId: string) {
   const { data: existing, error: readError } = await client
     .from('user_settings')
@@ -441,12 +450,14 @@ export async function ensureCalendarExportToken(client: any, userId: string) {
   if (readError) throw new Error(`user_settings: ${readError.message}`)
 
   if (isCalendarExportToken(existing?.calendar_export_token)) return String(existing.calendar_export_token)
+  if (isHashedCalendarExportToken(existing?.calendar_export_token)) return null
 
   const token = createCalendarExportToken()
+  const storedToken = storedCalendarExportToken(token)
   if (existing?.user_id) {
     const { error: updateError } = await client
       .from('user_settings')
-      .update({ calendar_export_token: token, updated_at: new Date().toISOString() })
+      .update({ calendar_export_token: storedToken, updated_at: new Date().toISOString() })
       .eq('user_id', userId)
     if (updateError) throw new Error(`user_settings: ${updateError.message}`)
   } else {
@@ -456,7 +467,7 @@ export async function ensureCalendarExportToken(client: any, userId: string) {
       default_timezone: FALLBACK_TIMEZONE,
       assigning_platforms: [],
       leagues: [],
-      calendar_export_token: token,
+      calendar_export_token: storedToken,
       updated_at: new Date().toISOString(),
     }
     const { error: upsertError } = await client
@@ -469,6 +480,7 @@ export async function ensureCalendarExportToken(client: any, userId: string) {
 
 export async function regenerateCalendarExportToken(client: any, userId: string) {
   const token = createCalendarExportToken()
+  const storedToken = storedCalendarExportToken(token)
   const { data: existing, error: readError } = await client
     .from('user_settings')
     .select('user_id')
@@ -479,7 +491,7 @@ export async function regenerateCalendarExportToken(client: any, userId: string)
   if (existing?.user_id) {
     const { error } = await client
       .from('user_settings')
-      .update({ calendar_export_token: token, updated_at: new Date().toISOString() })
+      .update({ calendar_export_token: storedToken, updated_at: new Date().toISOString() })
       .eq('user_id', userId)
     if (error) throw new Error(`user_settings: ${error.message}`)
   } else {
@@ -491,7 +503,7 @@ export async function regenerateCalendarExportToken(client: any, userId: string)
         default_timezone: FALLBACK_TIMEZONE,
         assigning_platforms: [],
         leagues: [],
-        calendar_export_token: token,
+        calendar_export_token: storedToken,
         updated_at: new Date().toISOString(),
       }])
     if (error) throw new Error(`user_settings: ${error.message}`)

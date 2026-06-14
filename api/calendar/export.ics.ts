@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { checkRateLimit, createServiceSupabase, setApiSecurityHeaders } from '../auth-utils.js'
-import { buildIcsCalendar, isCalendarExportToken, loadCalendarExportDataForUser } from '../calendar-export-utils.js'
+import { buildIcsCalendar, calendarExportTokenLookupValues, isCalendarExportToken, loadCalendarExportDataForUser } from '../calendar-export-utils.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setApiSecurityHeaders(res, 'private, no-store')
@@ -22,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: settings, error: settingsError } = await client
       .from('user_settings')
       .select('user_id')
-      .eq('calendar_export_token', token)
+      .in('calendar_export_token', calendarExportTokenLookupValues(token))
       .maybeSingle()
     if (settingsError) return res.status(503).send('Calendar feed is temporarily unavailable')
     if (!settings?.user_id) return res.status(404).send('Calendar feed not found')

@@ -23,6 +23,7 @@ export default function SettingsPage() {
   const [leagues, setLeagues] = useState(toListString(db.settings.leagues))
   const [calendarSubscriptionUrl, setCalendarSubscriptionUrl] = useState('')
   const [calendarDownloadUrl, setCalendarDownloadUrl] = useState('')
+  const [calendarTokenProtected, setCalendarTokenProtected] = useState(false)
   const [calendarFeedLoading, setCalendarFeedLoading] = useState(false)
   const [calendarFeedSaving, setCalendarFeedSaving] = useState(false)
   const [calendarFeedError, setCalendarFeedError] = useState<string | null>(null)
@@ -86,6 +87,7 @@ export default function SettingsPage() {
       const json = await calendarApi('/api/calendar-export-token')
       setCalendarSubscriptionUrl(String(json.subscriptionUrl || ''))
       setCalendarDownloadUrl(String(json.downloadUrl || ''))
+      setCalendarTokenProtected(Boolean(json.tokenProtected))
     } catch (e: any) {
       setCalendarFeedError(String(e?.message ?? e))
     } finally {
@@ -115,6 +117,7 @@ export default function SettingsPage() {
       })
       setCalendarSubscriptionUrl(String(json.subscriptionUrl || ''))
       setCalendarDownloadUrl(String(json.downloadUrl || ''))
+      setCalendarTokenProtected(false)
     } catch (e: any) {
       setCalendarFeedError(String(e?.message ?? e))
     } finally {
@@ -239,6 +242,9 @@ export default function SettingsPage() {
                   <label>Subscription URL</label>
                   <input value={calendarSubscriptionUrl} readOnly placeholder={calendarFeedLoading ? 'Loading...' : 'Not available'} />
                   <div className="small">Use this private ICS URL with Apple Calendar, Google Calendar, or Outlook subscriptions.</div>
+                  {calendarTokenProtected && !calendarSubscriptionUrl ? (
+                    <div className="small">Your existing subscription token is protected and cannot be displayed again. Regenerate the token when you need to copy a new subscription URL.</div>
+                  ) : null}
                 </div>
                 <div className="btnbar">
                   <button className="btn" onClick={copyCalendarSubscriptionUrl} disabled={calendarFeedLoading || calendarFeedSaving || !calendarSubscriptionUrl}>

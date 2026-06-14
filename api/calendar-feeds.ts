@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { checkRateLimit, createAuthedSupabase, getBearerToken, maskUrl, sendRateLimited, setApiSecurityHeaders, toJsonBody } from './auth-utils.js'
 import { validateFeedUrl } from './feed-fetch.js'
+import { protectFeedUrl, revealFeedUrl } from './personal-data-security.js'
 
 type FeedPlatform = 'RefQuest' | 'DragonFly' | string
 type FeedSport = string | null
@@ -97,7 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         lastSyncedAt: f.last_synced_at ?? null,
         createdAt: f.created_at,
         updatedAt: f.updated_at,
-        maskedFeedUrl: maskUrl(String(f.feed_url || '')),
+        maskedFeedUrl: maskUrl(revealFeedUrl(String(f.feed_url || ''))),
       }))
       return res.status(200).json({ feeds })
     }
@@ -108,7 +109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await enforcePlatformLimit(client, userId, platform)
 
       const name = normalizeName(body.name)
-      const feedUrl = mustUrl(body.feedUrl)
+      const feedUrl = protectFeedUrl(mustUrl(body.feedUrl))
       const enabled = body.enabled == null ? true : Boolean(body.enabled)
       const sport = normalizeSport(body.sport)
       const defaultLeague = normalizeDefaultLeague(body.defaultLeague)
@@ -141,7 +142,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           lastSyncedAt: data.last_synced_at ?? null,
           createdAt: data.created_at,
           updatedAt: data.updated_at,
-          maskedFeedUrl: maskUrl(String(data.feed_url || '')),
+          maskedFeedUrl: maskUrl(revealFeedUrl(String(data.feed_url || ''))),
         },
       })
     }
@@ -168,7 +169,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (body.name != null) {
         updates.name = normalizeName(body.name)
       }
-      if (body.feedUrl != null) updates.feed_url = mustUrl(body.feedUrl)
+      if (body.feedUrl != null) updates.feed_url = protectFeedUrl(mustUrl(body.feedUrl))
       if (body.enabled != null) updates.enabled = Boolean(body.enabled)
       if (body.sport !== undefined) updates.sport = normalizeSport(body.sport)
       if (body.defaultLeague !== undefined) updates.default_league = normalizeDefaultLeague(body.defaultLeague)
@@ -194,7 +195,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           lastSyncedAt: data.last_synced_at ?? null,
           createdAt: data.created_at,
           updatedAt: data.updated_at,
-          maskedFeedUrl: maskUrl(String(data.feed_url || '')),
+          maskedFeedUrl: maskUrl(revealFeedUrl(String(data.feed_url || ''))),
         },
       })
     }

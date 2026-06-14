@@ -27,6 +27,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       const token = await ensureCalendarExportToken(client, userId)
+      if (!token) {
+        return res.status(200).json({
+          token: null,
+          subscriptionUrl: null,
+          downloadUrl: `${origin}/api/calendar/download.ics`,
+          tokenProtected: true,
+        })
+      }
       return res.status(200).json({
         token,
         subscriptionUrl: `${origin}/api/calendar/export.ics?token=${encodeURIComponent(token)}`,
