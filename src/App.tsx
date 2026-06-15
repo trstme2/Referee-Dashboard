@@ -9,6 +9,7 @@ import RequirementsPage from './pages/RequirementsPage'
 import ImportPage from './pages/ImportPage'
 import SettingsPage from './pages/SettingsPage'
 import AuthPage from './pages/AuthPage'
+import AuthCallbackPage from './pages/AuthCallbackPage'
 import SyncPage from './pages/SyncPage'
 import TaxPage from './pages/TaxPage'
 import LandingPage from './pages/LandingPage'
@@ -66,6 +67,7 @@ export default function App() {
       <div key={location.pathname} className="route-shell">
         <Routes>
           <Route path="/auth" element={<AuthPage />} />
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
           {/* Guard routes when in supabase mode */}
           <Route path="/" element={authMissing ? <LandingPage /> : startOnboarding ? <Navigate to="/onboarding" replace /> : <HomePage />} />

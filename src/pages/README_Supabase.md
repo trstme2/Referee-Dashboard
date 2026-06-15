@@ -47,8 +47,16 @@ The initial admin metrics page is available at `/admin`. Non-admin users receive
 Supabase -> Authentication -> URL Configuration:
 - Site URL: your Vercel production URL (e.g. https://your-app.vercel.app)
 - Redirect URLs: add the same domain, plus Preview domains if you use them.
+- Add the auth callback path for each app domain, for example:
+  - `https://your-app.vercel.app/auth/callback`
+  - `https://your-preview-domain.vercel.app/auth/callback`
 
-Magic link sign-in uses `emailRedirectTo = window.location.origin`.
+Magic link sign-in uses `emailRedirectTo = ${window.location.origin}/auth/callback`.
+
+## 3a) Branded Auth Email / SMTP
+Whistle Keeper still uses Supabase Auth for passwordless email login. Branded invite and magic-link email delivery is configured in Supabase Auth SMTP settings, not in application code.
+
+Do not store Resend, SMTP, or Supabase Auth email credentials in this repository. Manage those values in Supabase project settings and, where applicable, provider dashboards.
 
 ## 4) Vercel env vars
 In Vercel Project Settings -> Environment Variables:
@@ -74,6 +82,18 @@ Users opt in or out from Settings with the Weekly Sunday game email checkbox.
 
 ## 5) Deploy
 Push to GitHub, import into Vercel, deploy.
+
+## 6) Manual auth QA checklist
+Run these checks after changing Supabase Auth settings, deploying a new domain, or updating the auth UI:
+
+- Login: submit an existing user email from `/auth`, confirm the check-email page says the email comes from Whistle Keeper, open the newest email, and confirm `/auth/callback` routes to the dashboard.
+- Signup/onboarding: submit a brand-new email, open the Whistle Keeper email, and confirm `/auth/callback` routes to onboarding.
+- Resend link: submit an email, click "Resend link", confirm a new Whistle Keeper email arrives, and confirm the newest link works.
+- Change email: from the check-email screen, click "Change email", submit a different address, and confirm the new address receives the email.
+- Expired/reused link: open a previously used or old magic link and confirm the callback page gives a friendly error with options to send a new link or use another email.
+- Invite email: send an invite from Supabase Auth, confirm branding and that the invite link completes sign-in cleanly.
+- Mobile email: request a link on mobile, open it from the mobile email client, and confirm the callback lands in the app without a blank page or confusing redirect.
+- Preview domain: repeat one login on each Vercel preview domain that is added to Supabase redirect URLs.
 
 ## Notes
 - RLS policies enforce `auth.uid() = user_id` across all tables.

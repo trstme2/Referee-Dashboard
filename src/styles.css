@@ -134,6 +134,115 @@ button, input, select, textarea { font: inherit; }
 .card h2 { margin: 0 0 10px; font-size: 14px; color: #cfe3ff; letter-spacing: 0.2px; }
 .card .sub { color: var(--muted); font-size: 12px; margin-top: -6px; margin-bottom: 10px; }
 
+.auth-shell {
+  min-height: calc(100vh - 160px);
+  display: grid;
+  place-items: center;
+  padding: 34px 0;
+}
+
+.auth-card {
+  width: min(100%, 620px);
+  padding: 24px;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at top left, rgba(220, 38, 38, 0.16), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(67, 209, 158, 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(18,26,39,0.96), rgba(15,22,34,0.96));
+}
+
+.auth-brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.auth-brand-lockup img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  padding: 7px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.auth-brand-lockup h2,
+.auth-callback-card h2 {
+  margin: 8px 0 0;
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.02;
+  color: #fff;
+}
+
+.auth-lede,
+.auth-card > p {
+  margin: 0 0 16px;
+  color: #b8c7db;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.auth-submit {
+  width: 100%;
+  justify-content: center;
+  padding: 12px 14px;
+}
+
+.auth-instructions {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.auth-instructions > div {
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.22);
+}
+
+.auth-instructions strong,
+.auth-instructions span {
+  display: block;
+}
+
+.auth-instructions span {
+  margin-top: 4px;
+  color: #aebcd0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.auth-callback-card {
+  text-align: center;
+}
+
+.auth-callback-card .btnbar {
+  justify-content: center;
+}
+
+.auth-spinner {
+  width: 34px;
+  height: 34px;
+  margin: 18px auto 0;
+  border-radius: 999px;
+  border: 3px solid rgba(148, 163, 184, 0.28);
+  border-top-color: var(--ok);
+  animation: auth-spin 800ms linear infinite;
+}
+
+@keyframes auth-spin {
+  to { transform: rotate(360deg); }
+}
+
 .setup-banner {
   border: 1px solid rgba(67, 209, 158, 0.34);
   background:

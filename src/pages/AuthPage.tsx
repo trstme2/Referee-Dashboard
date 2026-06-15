@@ -1,13 +1,17 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, supabaseConfigured } from '../lib/supabaseClient'
 import { useData } from '../lib/DataContext'
 import { createFreshDB, resetDB } from '../lib/storage'
 import { deleteCalendarFeeds, deleteOwnAppEvents, deleteSyncHistory, exportAccountData as downloadAccountExport, purgeCloudRows, removeStorageFiles } from '../lib/accountLifecycle'
+import logo from '../assets/logo.png'
 
 export default function AuthPage() {
   const { mode, session, refresh, db, write, signOut, loading } = useData()
-  const [email, setEmail] = useState('')
+  const initialEmail = useMemo(() => new URLSearchParams(window.location.search).get('email') ?? '', [])
+  const [email, setEmail] = useState(initialEmail)
+  const [submittedEmail, setSubmittedEmail] = useState('')
+  const [authStep, setAuthStep] = useState<'form' | 'check-email'>('form')
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
@@ -147,51 +151,116 @@ export default function AuthPage() {
     )
   }
 
-  async function sendLink() {
+  async function sendLink(emailOverride?: string) {
     setErr(null)
     setMsg(null)
-    const e = email.trim()
-    if (!e) return setErr('Enter an email.')
+    const e = (emailOverride ?? email).trim()
+    if (!e) return setErr('Enter an email address.')
     setSending(true)
     try {
       if (!supabase) throw new Error('Supabase client missing')
       const { error } = await supabase.auth.signInWithOtp({
         email: e,
-        options: { emailRedirectTo: `${window.location.origin}/auth` },
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
       })
       if (error) throw error
-      setMsg('Sign-in link sent. Check your email.')
-    } catch (ex: any) {
-      setErr(String(ex?.message ?? ex))
+      setSubmittedEmail(e)
+      setAuthStep('check-email')
+      setMsg('Whistle Keeper sent your secure sign-in link.')
+    } catch {
+      setErr('We could not send that sign-in link. Check the email address and try again.')
     } finally {
       setSending(false)
     }
   }
 
-  return (
-    <div className="grid">
-      <section className="card">
-        <h2>Sign in</h2>
-        <p className="sub">Secure email sign-in for your Whistle Keeper account.</p>
-
-        <div className="row">
-          <div className="field" style={{ flex: 2 }}>
-            <label>Email</label>
-            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
+  if (authStep === 'check-email') {
+    return (
+      <div className="auth-shell">
+        <section className="card auth-card check-email-card">
+          <div className="auth-brand-lockup">
+            <img src={logo} alt="Whistle Keeper logo" />
+            <div>
+              <span className="pill ok">Email sent</span>
+              <h2>Check your email</h2>
+            </div>
           </div>
-          <div className="field" style={{ flex: 1 }}>
-            <label>&nbsp;</label>
-            <button className="btn primary" onClick={sendLink} disabled={sending}>
-              {sending ? 'Sending...' : 'Send sign-in link'}
+          <p>
+            Whistle Keeper sent a secure sign-in link to <strong>{submittedEmail}</strong>.
+            Open the newest email from Whistle Keeper on this device to finish signing in.
+          </p>
+          <div className="auth-instructions">
+            <div>
+              <strong>Did not get it?</strong>
+              <span>Check spam or promotions, then resend the link.</span>
+            </div>
+            <div>
+              <strong>Opened an old link?</strong>
+              <span>Magic links can expire or be used only once. The newest email is the one that counts.</span>
+            </div>
+          </div>
+          <div className="btnbar">
+            <button className="btn primary" onClick={() => sendLink(submittedEmail)} disabled={sending}>
+              {sending ? 'Sending...' : 'Resend link'}
+            </button>
+            <button
+              className="btn"
+              onClick={() => {
+                setAuthStep('form')
+                setMsg(null)
+                setErr(null)
+              }}
+              disabled={sending}
+            >
+              Change email
             </button>
           </div>
+          {msg && <p className="small"><span className="pill ok">{msg}</span></p>}
+          {err && <p className="small"><span className="pill bad">{err}</span></p>}
+        </section>
+      </div>
+    )
+  }
+
+  return (
+    <div className="auth-shell">
+      <section className="card auth-card auth-login-card">
+        <div className="auth-brand-lockup">
+          <img src={logo} alt="Whistle Keeper logo" />
+          <div>
+            <span className="pill ok">Passwordless sign-in</span>
+            <h2>Welcome to Whistle Keeper</h2>
+          </div>
+        </div>
+        <p className="auth-lede">
+          Sign in with your email to manage assignments, mileage, expenses, readiness, and tax-time records.
+          Your secure link will come from Whistle Keeper.
+        </p>
+
+        <div className="auth-form">
+          <div className="field">
+            <label>Email address</label>
+            <input
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') void sendLink()
+              }}
+              placeholder="you@example.com"
+            />
+          </div>
+          <button className="btn primary auth-submit" onClick={() => sendLink()} disabled={sending}>
+            {sending ? 'Sending...' : 'Email me a secure link'}
+          </button>
         </div>
 
         {msg && <p className="small"><span className="pill ok">{msg}</span></p>}
         {err && <p className="small"><span className="pill bad">{err}</span></p>}
 
         <div className="footer-note">
-          Use your current app address as an approved sign-in redirect URL.
+          Whistle Keeper uses Supabase Auth passwordless email login. No password is stored or required.
         </div>
       </section>
     </div>
