@@ -54,7 +54,13 @@ Supabase -> Authentication -> URL Configuration:
 Magic link sign-in uses `emailRedirectTo = ${window.location.origin}/auth/callback`.
 
 ## 3a) Branded Auth Email / SMTP
-Whistle Keeper still uses Supabase Auth for passwordless email login. Branded invite and magic-link email delivery is configured in Supabase Auth SMTP settings, not in application code.
+Whistle Keeper still uses Supabase Auth for passwordless email login. Branded invite, email-code, and magic-link delivery is configured in Supabase Auth SMTP settings, not in application code.
+
+The current app supports two email sign-in paths:
+- Email OTP/code as the primary mobile and PWA flow
+- Magic link as the alternate desktop/web flow
+
+For the OTP experience to work, update the Supabase Auth email template so the message includes `{{ .Token }}`. If you want one email to support both experiences, include both `{{ .Token }}` and `{{ .ConfirmationURL }}` in the branded template.
 
 Do not store Resend, SMTP, or Supabase Auth email credentials in this repository. Manage those values in Supabase project settings and, where applicable, provider dashboards.
 
@@ -86,13 +92,18 @@ Push to GitHub, import into Vercel, deploy.
 ## 6) Manual auth QA checklist
 Run these checks after changing Supabase Auth settings, deploying a new domain, or updating the auth UI:
 
-- Login: submit an existing user email from `/auth`, confirm the check-email page says the email comes from Whistle Keeper, open the newest email, and confirm `/auth/callback` routes to the dashboard.
-- Signup/onboarding: submit a brand-new email, open the Whistle Keeper email, and confirm `/auth/callback` routes to onboarding.
+- OTP login: submit an existing user email from `/auth`, stay on the code-entry screen, enter the newest 6-digit code from Whistle Keeper, and confirm the app routes to the dashboard.
+- OTP signup/onboarding: submit a brand-new email, enter the newest Whistle Keeper code, and confirm the app routes to onboarding.
+- OTP resend: submit an email, click `Resend code`, and confirm the newest code works while the older one does not.
+- Magic link login: switch to `Magic link`, submit an existing user email, open the newest email, and confirm `/auth/callback` routes to the dashboard.
+- Magic link signup/onboarding: switch to `Magic link`, submit a brand-new email, open the Whistle Keeper email, and confirm `/auth/callback` routes to onboarding.
 - Resend link: submit an email, click "Resend link", confirm a new Whistle Keeper email arrives, and confirm the newest link works.
 - Change email: from the check-email screen, click "Change email", submit a different address, and confirm the new address receives the email.
 - Expired/reused link: open a previously used or old magic link and confirm the callback page gives a friendly error with options to send a new link or use another email.
+- Invalid/expired OTP: enter an old, incorrect, or already-used code and confirm the app shows a friendly recovery message.
 - Invite email: send an invite from Supabase Auth, confirm branding and that the invite link completes sign-in cleanly.
-- Mobile email: request a link on mobile, open it from the mobile email client, and confirm the callback lands in the app without a blank page or confusing redirect.
+- Mobile email OTP: request a code on mobile, switch to the mobile email client, and confirm you can return to Whistle Keeper and sign in without landing in the browser.
+- Mobile magic link fallback: request a link on mobile, open it from the mobile email client, and confirm the callback lands in the app without a blank page or confusing redirect.
 - Preview domain: repeat one login on each Vercel preview domain that is added to Supabase redirect URLs.
 
 ## Notes

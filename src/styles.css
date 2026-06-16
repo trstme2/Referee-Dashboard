@@ -190,10 +190,50 @@ button, input, select, textarea { font: inherit; }
   margin-top: 18px;
 }
 
+.auth-method-toggle {
+  display: inline-flex;
+  gap: 8px;
+  padding: 6px;
+  margin: 4px 0 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.auth-method-pill {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: transparent;
+  color: #aebcd0;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.auth-method-pill:hover {
+  color: #eef7ff;
+  background: rgba(255,255,255,0.05);
+}
+
+.auth-method-pill.active {
+  color: #fff;
+  background: linear-gradient(180deg, rgba(220, 38, 38, 0.85), rgba(185, 28, 28, 0.85));
+  box-shadow: 0 10px 24px rgba(220, 38, 38, 0.22);
+}
+
 .auth-submit {
   width: 100%;
   justify-content: center;
   padding: 12px 14px;
+}
+
+.auth-code-input {
+  text-align: center;
+  letter-spacing: 0.24em;
+  font-size: 24px;
+  font-weight: 700;
 }
 
 .auth-instructions {
@@ -241,6 +281,22 @@ button, input, select, textarea { font: inherit; }
 
 @keyframes auth-spin {
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 720px) {
+  .auth-method-toggle {
+    display: grid;
+    width: 100%;
+  }
+
+  .auth-method-pill {
+    width: 100%;
+  }
+
+  .auth-code-input {
+    font-size: 20px;
+    letter-spacing: 0.18em;
+  }
 }
 
 .setup-banner {

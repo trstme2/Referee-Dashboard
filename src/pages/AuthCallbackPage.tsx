@@ -1,42 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase, supabaseConfigured } from '../lib/supabaseClient'
+import { destinationForUser, friendlyAuthError } from '../lib/authFlow'
 
 type CallbackState =
   | { status: 'checking'; title: string; detail: string }
   | { status: 'success'; title: string; detail: string; destination: string }
   | { status: 'error'; title: string; detail: string; email?: string }
-
-function friendlyAuthError(raw: string | null) {
-  const message = String(raw || '').toLowerCase()
-  if (message.includes('expired')) {
-    return {
-      title: 'This sign-in link expired',
-      detail: 'Magic links are time-limited for your security. Ask Whistle Keeper to send a fresh link and use the newest email.',
-    }
-  }
-  if (message.includes('invalid') || message.includes('otp') || message.includes('token')) {
-    return {
-      title: 'This sign-in link could not be used',
-      detail: 'The link may be invalid, already used, or opened in a different browser. Request a new Whistle Keeper sign-in email.',
-    }
-  }
-  return {
-    title: 'We could not complete sign-in',
-    detail: 'Request a fresh Whistle Keeper sign-in email and try again. If the problem continues, check that the full email link opened in this browser.',
-  }
-}
-
-async function destinationForUser(userId: string) {
-  if (!supabase) return '/'
-  const { data, error } = await supabase
-    .from('user_settings')
-    .select('onboarding_completed_at')
-    .eq('user_id', userId)
-    .maybeSingle()
-  if (error) return '/onboarding'
-  return data?.onboarding_completed_at ? '/' : '/onboarding'
-}
 
 export default function AuthCallbackPage() {
   const navigate = useNavigate()
@@ -66,7 +36,7 @@ export default function AuthCallbackPage() {
       const rawError = query.get('error_description') || query.get('error') || hash.get('error_description') || hash.get('error')
       const email = query.get('email') || hash.get('email') || undefined
       if (rawError) {
-        setState({ status: 'error', ...friendlyAuthError(rawError), email })
+        setState({ status: 'error', ...friendlyAuthError(rawError, 'magic-link'), email })
         return
       }
 
@@ -98,7 +68,7 @@ export default function AuthCallbackPage() {
         })
         window.setTimeout(() => navigate(destination, { replace: true }), 900)
       } catch (e: any) {
-        setState({ status: 'error', ...friendlyAuthError(String(e?.message ?? e)), email })
+        setState({ status: 'error', ...friendlyAuthError(String(e?.message ?? e), 'magic-link'), email })
       }
     }
 
@@ -119,14 +89,15 @@ export default function AuthCallbackPage() {
         ) : null}
         {state.status === 'error' ? (
           <div className="btnbar">
-            <Link className="btn primary" to={`/auth${state.email ? `?email=${encodeURIComponent(state.email)}` : ''}`}>
+            <Link className="btn primary" to={`/auth?method=otp${state.email ? `&email=${encodeURIComponent(state.email)}` : ''}`}>
+              Use email code
+            </Link>
+            <Link className="btn" to={`/auth?method=link${state.email ? `&email=${encodeURIComponent(state.email)}` : ''}`}>
               Send a new link
             </Link>
-            <Link className="btn" to="/auth">Use a different email</Link>
           </div>
         ) : null}
       </section>
     </div>
   )
 }
-

@@ -1,20 +1,36 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase, supabaseConfigured } from '../lib/supabaseClient'
 import { useData } from '../lib/DataContext'
 import { createFreshDB, resetDB } from '../lib/storage'
 import { deleteCalendarFeeds, deleteOwnAppEvents, deleteSyncHistory, exportAccountData as downloadAccountExport, purgeCloudRows, removeStorageFiles } from '../lib/accountLifecycle'
+import { AuthDelivery, destinationForUser, friendlyAuthError, normalizeOtpToken } from '../lib/authFlow'
 import logo from '../assets/logo.png'
+
+type AuthStep = 'form' | 'verify-code' | 'check-email' | 'success'
+
+function deliveryFromSearch(search: string): AuthDelivery {
+  const method = new URLSearchParams(search).get('method')
+  return method === 'link' ? 'magic-link' : 'otp'
+}
 
 export default function AuthPage() {
   const { mode, session, refresh, db, write, signOut, loading } = useData()
-  const initialEmail = useMemo(() => new URLSearchParams(window.location.search).get('email') ?? '', [])
+  const navigate = useNavigate()
+  const initialParams = useMemo(() => new URLSearchParams(window.location.search), [])
+  const initialEmail = initialParams.get('email') ?? ''
+  const initialDelivery = deliveryFromSearch(window.location.search)
+
   const [email, setEmail] = useState(initialEmail)
-  const [submittedEmail, setSubmittedEmail] = useState('')
-  const [authStep, setAuthStep] = useState<'form' | 'check-email'>('form')
+  const [submittedEmail, setSubmittedEmail] = useState(initialEmail)
+  const [delivery, setDelivery] = useState<AuthDelivery>(initialDelivery)
+  const [authStep, setAuthStep] = useState<AuthStep>('form')
+  const [otpCode, setOtpCode] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+  const [successDestination, setSuccessDestination] = useState<string | null>(null)
   const [accountBusy, setAccountBusy] = useState(false)
 
   if (mode !== 'supabase') {
@@ -151,27 +167,217 @@ export default function AuthPage() {
     )
   }
 
-  async function sendLink(emailOverride?: string) {
+  function resetFlow(nextDelivery: AuthDelivery, options?: { keepEmail?: boolean }) {
+    setDelivery(nextDelivery)
+    setAuthStep('form')
+    setMsg(null)
+    setErr(null)
+    setOtpCode('')
+    setSuccessDestination(null)
+    if (!options?.keepEmail) {
+      setEmail('')
+      setSubmittedEmail('')
+    }
+  }
+
+  async function sendOtp(emailOverride?: string) {
     setErr(null)
     setMsg(null)
-    const e = (emailOverride ?? email).trim()
-    if (!e) return setErr('Enter an email address.')
+    const nextEmail = (emailOverride ?? email).trim()
+    if (!nextEmail) {
+      setErr('Enter an email address.')
+      return
+    }
+
     setSending(true)
     try {
       if (!supabase) throw new Error('Supabase client missing')
       const { error } = await supabase.auth.signInWithOtp({
-        email: e,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        email: nextEmail,
+        options: { shouldCreateUser: true },
       })
       if (error) throw error
-      setSubmittedEmail(e)
-      setAuthStep('check-email')
-      setMsg('Whistle Keeper sent your secure sign-in link.')
-    } catch {
-      setErr('We could not send that sign-in link. Check the email address and try again.')
+      setSubmittedEmail(nextEmail)
+      setEmail(nextEmail)
+      setOtpCode('')
+      setAuthStep('verify-code')
+      setMsg('Whistle Keeper sent a fresh sign-in code.')
+    } catch (e: any) {
+      setErr(friendlyAuthError(String(e?.message ?? e), 'otp').detail)
     } finally {
       setSending(false)
     }
+  }
+
+  async function sendMagicLink(emailOverride?: string) {
+    setErr(null)
+    setMsg(null)
+    const nextEmail = (emailOverride ?? email).trim()
+    if (!nextEmail) {
+      setErr('Enter an email address.')
+      return
+    }
+
+    setSending(true)
+    try {
+      if (!supabase) throw new Error('Supabase client missing')
+      const { error } = await supabase.auth.signInWithOtp({
+        email: nextEmail,
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+      if (error) throw error
+      setSubmittedEmail(nextEmail)
+      setEmail(nextEmail)
+      setAuthStep('check-email')
+      setMsg('Whistle Keeper sent your secure sign-in link.')
+    } catch (e: any) {
+      setErr(friendlyAuthError(String(e?.message ?? e), 'magic-link').detail)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  async function verifyCode() {
+    setErr(null)
+    setMsg(null)
+    const token = normalizeOtpToken(otpCode)
+    if (!submittedEmail.trim()) {
+      setErr('Start with your email address so Whistle Keeper knows where to verify the code.')
+      setAuthStep('form')
+      return
+    }
+    if (token.length < 6) {
+      setErr('Enter the 6-digit code from the Whistle Keeper email.')
+      return
+    }
+
+    setVerifying(true)
+    try {
+      if (!supabase) throw new Error('Supabase client missing')
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: submittedEmail.trim(),
+        token,
+        type: 'email',
+      })
+      if (error) throw error
+
+      const userId = data.user?.id ?? data.session?.user?.id
+      if (!userId) throw new Error('No active sign-in session was found.')
+
+      const destination = await destinationForUser(userId)
+      setSuccessDestination(destination)
+      setAuthStep('success')
+      setMsg(
+        destination === '/onboarding'
+          ? 'Code accepted. We are taking you to setup.'
+          : 'Code accepted. We are taking you to your dashboard.'
+      )
+      window.setTimeout(() => navigate(destination, { replace: true }), 900)
+    } catch (e: any) {
+      setErr(friendlyAuthError(String(e?.message ?? e), 'otp').detail)
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  async function submitCurrentMethod() {
+    if (delivery === 'otp') await sendOtp()
+    else await sendMagicLink()
+  }
+
+  function renderMethodToggle() {
+    return (
+      <div className="auth-method-toggle" role="tablist" aria-label="Sign-in method">
+        <button
+          type="button"
+          className={`auth-method-pill ${delivery === 'otp' ? 'active' : ''}`}
+          onClick={() => resetFlow('otp', { keepEmail: true })}
+        >
+          Email code
+        </button>
+        <button
+          type="button"
+          className={`auth-method-pill ${delivery === 'magic-link' ? 'active' : ''}`}
+          onClick={() => resetFlow('magic-link', { keepEmail: true })}
+        >
+          Magic link
+        </button>
+      </div>
+    )
+  }
+
+  if (authStep === 'verify-code') {
+    return (
+      <div className="auth-shell">
+        <section className="card auth-card check-email-card">
+          <div className="auth-brand-lockup">
+            <img src={logo} alt="Whistle Keeper logo" />
+            <div>
+              <span className="pill ok">Email code sent</span>
+              <h2>Enter your code</h2>
+            </div>
+          </div>
+          <p>
+            Whistle Keeper sent a 6-digit sign-in code to <strong>{submittedEmail}</strong>.
+            Open the newest email from Whistle Keeper and enter the code here.
+          </p>
+          {renderMethodToggle()}
+          <div className="auth-form">
+            <div className="field">
+              <label>6-digit code</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={otpCode}
+                onChange={e => setOtpCode(normalizeOtpToken(e.target.value))}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') void verifyCode()
+                }}
+                placeholder="123456"
+                maxLength={8}
+                className="auth-code-input"
+              />
+            </div>
+            <button className="btn primary auth-submit" onClick={() => void verifyCode()} disabled={verifying}>
+              {verifying ? 'Verifying...' : 'Verify code'}
+            </button>
+          </div>
+          <div className="auth-instructions">
+            <div>
+              <strong>Did not get it?</strong>
+              <span>Check spam or promotions, then ask Whistle Keeper to send a fresh code.</span>
+            </div>
+            <div>
+              <strong>Using a phone?</strong>
+              <span>Keep this screen open and copy the code from your email app back into Whistle Keeper.</span>
+            </div>
+          </div>
+          <div className="btnbar">
+            <button className="btn" onClick={() => void sendOtp(submittedEmail)} disabled={sending || verifying}>
+              {sending ? 'Sending...' : 'Resend code'}
+            </button>
+            <button className="btn" onClick={() => resetFlow('otp', { keepEmail: true })} disabled={sending || verifying}>
+              Change email
+            </button>
+            <button className="btn" onClick={() => {
+              setAuthStep('form')
+              setDelivery('magic-link')
+              setMsg(null)
+              setErr(null)
+              setOtpCode('')
+            }} disabled={sending || verifying}>
+              Use magic link instead
+            </button>
+          </div>
+          {msg && <p className="small"><span className="pill ok">{msg}</span></p>}
+          {err && <p className="small"><span className="pill bad">{err}</span></p>}
+        </section>
+      </div>
+    )
   }
 
   if (authStep === 'check-email') {
@@ -189,6 +395,7 @@ export default function AuthPage() {
             Whistle Keeper sent a secure sign-in link to <strong>{submittedEmail}</strong>.
             Open the newest email from Whistle Keeper on this device to finish signing in.
           </p>
+          {renderMethodToggle()}
           <div className="auth-instructions">
             <div>
               <strong>Did not get it?</strong>
@@ -200,23 +407,44 @@ export default function AuthPage() {
             </div>
           </div>
           <div className="btnbar">
-            <button className="btn primary" onClick={() => sendLink(submittedEmail)} disabled={sending}>
+            <button className="btn primary" onClick={() => void sendMagicLink(submittedEmail)} disabled={sending}>
               {sending ? 'Sending...' : 'Resend link'}
             </button>
             <button
               className="btn"
+              onClick={() => resetFlow('magic-link', { keepEmail: true })}
+              disabled={sending}
+            >
+              Change email
+            </button>
+            <button
+              className="btn"
               onClick={() => {
+                setDelivery('otp')
                 setAuthStep('form')
                 setMsg(null)
                 setErr(null)
               }}
               disabled={sending}
             >
-              Change email
+              Use email code instead
             </button>
           </div>
           {msg && <p className="small"><span className="pill ok">{msg}</span></p>}
           {err && <p className="small"><span className="pill bad">{err}</span></p>}
+        </section>
+      </div>
+    )
+  }
+
+  if (authStep === 'success') {
+    return (
+      <div className="auth-shell">
+        <section className="card auth-card auth-callback-card success">
+          <span className="pill ok">Signed in</span>
+          <h2>You are signed in</h2>
+          <p>{msg ?? 'Whistle Keeper is restoring your account.'}</p>
+          <p className="small">Redirecting to {successDestination === '/onboarding' ? 'setup' : 'your dashboard'}...</p>
         </section>
       </div>
     )
@@ -234,8 +462,10 @@ export default function AuthPage() {
         </div>
         <p className="auth-lede">
           Sign in with your email to manage assignments, mileage, expenses, readiness, and tax-time records.
-          Your secure link will come from Whistle Keeper.
+          On phones and PWAs, the fastest path is a one-time email code from Whistle Keeper.
         </p>
+
+        {renderMethodToggle()}
 
         <div className="auth-form">
           <div className="field">
@@ -246,14 +476,29 @@ export default function AuthPage() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               onKeyDown={e => {
-                if (e.key === 'Enter') void sendLink()
+                if (e.key === 'Enter') void submitCurrentMethod()
               }}
               placeholder="you@example.com"
             />
           </div>
-          <button className="btn primary auth-submit" onClick={() => sendLink()} disabled={sending}>
-            {sending ? 'Sending...' : 'Email me a secure link'}
+          <button className="btn primary auth-submit" onClick={() => void submitCurrentMethod()} disabled={sending}>
+            {sending
+              ? 'Sending...'
+              : delivery === 'otp'
+                ? 'Email me a sign-in code'
+                : 'Email me a secure link'}
           </button>
+        </div>
+
+        <div className="auth-instructions">
+          <div>
+            <strong>Email code</strong>
+            <span>Best for phones, tablets, and installed PWAs. Enter the 6-digit code without leaving Whistle Keeper.</span>
+          </div>
+          <div>
+            <strong>Magic link</strong>
+            <span>Useful on desktop when you want to open the secure Whistle Keeper link from your inbox.</span>
+          </div>
         </div>
 
         {msg && <p className="small"><span className="pill ok">{msg}</span></p>}
