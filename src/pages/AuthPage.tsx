@@ -338,7 +338,7 @@ export default function AuthPage() {
                   if (e.key === 'Enter') void verifyCode()
                 }}
                 placeholder="123456"
-                maxLength={8}
+                maxLength={6}
                 className="auth-code-input"
               />
             </div>
