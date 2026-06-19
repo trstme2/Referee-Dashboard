@@ -26,7 +26,13 @@ expected_columns(table_name, column_name) as (
   values
     ('user_settings', 'user_id'),
     ('user_settings', 'home_address'),
+    ('user_settings', 'home_address_place_id'),
+    ('user_settings', 'home_address_latitude'),
+    ('user_settings', 'home_address_longitude'),
     ('user_settings', 'other_work_address'),
+    ('user_settings', 'other_work_address_place_id'),
+    ('user_settings', 'other_work_address_latitude'),
+    ('user_settings', 'other_work_address_longitude'),
     ('user_settings', 'default_timezone'),
     ('user_settings', 'tax_mileage_rate_cents'),
     ('user_settings', 'weekly_games_email_enabled'),

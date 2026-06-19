@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders } from '../src/server/auth-utils.js'
 
 const MAX_ADDRESS_LENGTH = 300
+const MAX_PLACE_ID_LENGTH = 200
 const DISTANCE_TIMEOUT_MS = 5_000
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -22,16 +23,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const origin = String(req.query.origin ?? '').trim()
     const destination = String(req.query.destination ?? '').trim()
+    const originPlaceId = String(req.query.originPlaceId ?? '').trim()
     if (!origin || !destination) return res.status(400).json({ error: 'origin and destination are required' })
     if (origin.length > MAX_ADDRESS_LENGTH || destination.length > MAX_ADDRESS_LENGTH) {
       return res.status(400).json({ error: 'origin and destination are too long' })
+    }
+    if (originPlaceId && originPlaceId.length > MAX_PLACE_ID_LENGTH) {
+      return res.status(400).json({ error: 'origin place id is too long' })
     }
 
     const key = process.env.GOOGLE_MAPS_API_KEY
     if (!key) return res.status(500).json({ error: 'Distance service is not configured' })
 
     const url = new URL('https://maps.googleapis.com/maps/api/distancematrix/json')
-    url.searchParams.set('origins', origin)
+    url.searchParams.set('origins', originPlaceId ? `place_id:${originPlaceId}` : origin)
     url.searchParams.set('destinations', destination)
     url.searchParams.set('key', key)
     url.searchParams.set('units', 'imperial')

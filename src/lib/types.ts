@@ -19,7 +19,13 @@ export type MileageOrigin = 'home' | 'other'
 
 export interface Settings {
   homeAddress: string
+  homeAddressPlaceId?: string
+  homeAddressLatitude?: number
+  homeAddressLongitude?: number
   otherWorkAddress?: string
+  otherWorkAddressPlaceId?: string
+  otherWorkAddressLatitude?: number
+  otherWorkAddressLongitude?: number
   defaultTimezone?: string
   taxMileageRateCents?: number
   weeklyGamesEmailEnabled?: boolean

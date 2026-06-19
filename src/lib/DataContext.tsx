@@ -38,7 +38,13 @@ function isMissingColumnError(error: any, table: string, column: string): boolea
 }
 
 const userSettingsCompatColumns = [
+  'home_address_place_id',
+  'home_address_latitude',
+  'home_address_longitude',
   'other_work_address',
+  'other_work_address_place_id',
+  'other_work_address_latitude',
+  'other_work_address_longitude',
   'default_timezone',
   'tax_mileage_rate_cents',
   'weekly_games_email_enabled',
@@ -458,7 +464,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 function rowToSettings(r: any): Settings {
   return {
     homeAddress: r.home_address ?? '',
+    homeAddressPlaceId: r.home_address_place_id ?? undefined,
+    homeAddressLatitude: r.home_address_latitude != null ? Number(r.home_address_latitude) : undefined,
+    homeAddressLongitude: r.home_address_longitude != null ? Number(r.home_address_longitude) : undefined,
     otherWorkAddress: r.other_work_address ?? '',
+    otherWorkAddressPlaceId: r.other_work_address_place_id ?? undefined,
+    otherWorkAddressLatitude: r.other_work_address_latitude != null ? Number(r.other_work_address_latitude) : undefined,
+    otherWorkAddressLongitude: r.other_work_address_longitude != null ? Number(r.other_work_address_longitude) : undefined,
     defaultTimezone: r.default_timezone ?? 'America/New_York',
     taxMileageRateCents: Number(r.tax_mileage_rate_cents ?? 72.5),
     weeklyGamesEmailEnabled: Boolean(r.weekly_games_email_enabled ?? false),
@@ -618,7 +630,13 @@ function settingsToRow(s: Settings, userId: string) {
   return {
     user_id: userId,
     home_address: s.homeAddress,
+    home_address_place_id: s.homeAddressPlaceId || null,
+    home_address_latitude: s.homeAddressLatitude ?? null,
+    home_address_longitude: s.homeAddressLongitude ?? null,
     other_work_address: s.otherWorkAddress || null,
+    other_work_address_place_id: s.otherWorkAddressPlaceId || null,
+    other_work_address_latitude: s.otherWorkAddressLatitude ?? null,
+    other_work_address_longitude: s.otherWorkAddressLongitude ?? null,
     default_timezone: s.defaultTimezone || 'America/New_York',
     tax_mileage_rate_cents: s.taxMileageRateCents ?? 72.5,
     weekly_games_email_enabled: Boolean(s.weeklyGamesEmailEnabled),

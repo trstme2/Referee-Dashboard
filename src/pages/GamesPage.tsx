@@ -122,9 +122,19 @@ export default function GamesPage() {
   const rolesForSport = form.sport === 'Soccer' ? soccerRoles : form.sport === 'Lacrosse' ? lacrosseRoles : []
   const hasOtherWorkAddress = Boolean(db.settings.otherWorkAddress?.trim())
   const workLocationOptions = [
-    { value: 'home' as MileageOrigin, label: 'Home office', address: db.settings.homeAddress.trim() },
+    {
+      value: 'home' as MileageOrigin,
+      label: 'Home office',
+      address: db.settings.homeAddress.trim(),
+      placeId: db.settings.homeAddressPlaceId,
+    },
     ...(hasOtherWorkAddress
-      ? [{ value: 'other' as MileageOrigin, label: 'Other work location', address: db.settings.otherWorkAddress!.trim() }]
+      ? [{
+        value: 'other' as MileageOrigin,
+        label: 'Other work location',
+        address: db.settings.otherWorkAddress!.trim(),
+        placeId: db.settings.otherWorkAddressPlaceId,
+      }]
       : []),
   ]
   const selectedMileageOrigin = normalizeMileageOrigin(form.mileageOrigin, hasOtherWorkAddress)
@@ -336,7 +346,7 @@ export default function GamesPage() {
     const dest = form.locationAddress.trim()
     if (!origin || !dest) return
     try {
-      const miles = await getDrivingDistanceMiles(origin, dest)
+      const miles = await getDrivingDistanceMiles(origin, dest, { originPlaceId: selectedWorkLocation?.placeId })
       const oneWay = Math.round(miles * 10) / 10
       const rt = Math.round(oneWay * 2)
       setForm(prev => ({ ...prev, distanceMiles: String(oneWay), roundtripMiles: prev.roundtripMiles || String(rt) }))

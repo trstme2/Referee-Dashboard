@@ -13,13 +13,19 @@ begin
     create table public.user_settings (
       user_id uuid primary key,
       home_address text not null,
+      home_address_place_id text null,
+      home_address_latitude numeric null,
+      home_address_longitude numeric null,
       other_work_address text null,
+      other_work_address_place_id text null,
+      other_work_address_latitude numeric null,
+      other_work_address_longitude numeric null,
       default_timezone text null,
       tax_mileage_rate_cents numeric null default 72.5,
       weekly_games_email_enabled boolean not null default false,
       onboarding_completed_at timestamptz null,
       calendar_export_token text null,
-      tracked_sports jsonb not null default '["Soccer","Lacrosse"]'::jsonb,
+      tracked_sports jsonb not null default '[]'::jsonb,
       show_game_platform_chips boolean not null default true,
       assigning_platforms jsonb not null default '[]'::jsonb,
       leagues jsonb not null default '[]'::jsonb,
@@ -28,8 +34,26 @@ begin
   end if;
 
   if exists (select 1 from information_schema.tables where table_schema='public' and table_name='user_settings') then
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='home_address_place_id') then
+      alter table public.user_settings add column home_address_place_id text null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='home_address_latitude') then
+      alter table public.user_settings add column home_address_latitude numeric null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='home_address_longitude') then
+      alter table public.user_settings add column home_address_longitude numeric null;
+    end if;
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='other_work_address') then
       alter table public.user_settings add column other_work_address text null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='other_work_address_place_id') then
+      alter table public.user_settings add column other_work_address_place_id text null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='other_work_address_latitude') then
+      alter table public.user_settings add column other_work_address_latitude numeric null;
+    end if;
+    if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='other_work_address_longitude') then
+      alter table public.user_settings add column other_work_address_longitude numeric null;
     end if;
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='default_timezone') then
       alter table public.user_settings add column default_timezone text null;
@@ -47,8 +71,9 @@ begin
       alter table public.user_settings add column onboarding_completed_at timestamptz null;
     end if;
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='tracked_sports') then
-      alter table public.user_settings add column tracked_sports jsonb not null default '["Soccer","Lacrosse"]'::jsonb;
+      alter table public.user_settings add column tracked_sports jsonb not null default '[]'::jsonb;
     end if;
+    alter table public.user_settings alter column tracked_sports set default '[]'::jsonb;
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='user_settings' and column_name='show_game_platform_chips') then
       alter table public.user_settings add column show_game_platform_chips boolean not null default true;
     end if;
@@ -208,13 +233,19 @@ end $$;
 create table if not exists public.user_settings (
   user_id uuid primary key,
   home_address text not null,
+  home_address_place_id text null,
+  home_address_latitude numeric null,
+  home_address_longitude numeric null,
   other_work_address text null,
+  other_work_address_place_id text null,
+  other_work_address_latitude numeric null,
+  other_work_address_longitude numeric null,
   default_timezone text null,
   tax_mileage_rate_cents numeric null default 72.5,
   weekly_games_email_enabled boolean not null default false,
   onboarding_completed_at timestamptz null,
   calendar_export_token text null,
-  tracked_sports jsonb not null default '["Soccer","Lacrosse"]'::jsonb,
+  tracked_sports jsonb not null default '[]'::jsonb,
   show_game_platform_chips boolean not null default true,
   assigning_platforms jsonb not null default '[]'::jsonb,
   leagues jsonb not null default '[]'::jsonb,

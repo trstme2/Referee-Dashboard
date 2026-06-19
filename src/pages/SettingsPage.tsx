@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useData } from '../lib/DataContext'
+import { resolveVerifiedProfileAddresses } from '../lib/profileAddressValidation'
 import { resetDB } from '../lib/storage'
 import { recordPlatformEvent } from '../lib/platformEvents'
 
@@ -30,6 +31,8 @@ export default function SettingsPage() {
   const [calendarFeedError, setCalendarFeedError] = useState<string | null>(null)
   const [weeklyEmailSaving, setWeeklyEmailSaving] = useState(false)
   const [weeklyEmailMessage, setWeeklyEmailMessage] = useState<string | null>(null)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [settingsMessage, setSettingsMessage] = useState<string | null>(null)
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -49,27 +52,41 @@ export default function SettingsPage() {
   }
 
   async function saveSettings() {
+    setSettingsMessage(null)
     const parsedTaxMileageRateCents = Number(taxMileageRateCents)
     if (!Number.isFinite(parsedTaxMileageRateCents) || parsedTaxMileageRateCents < 0) {
       alert('Enter a mileage rate of 0 or higher.')
       return
     }
-    const next = {
-      ...db,
-      settings: {
-        ...db.settings,
-        homeAddress: home.trim(),
-        otherWorkAddress: otherWork.trim(),
-        defaultTimezone: defaultTimezone.trim() || 'America/New_York',
-        taxMileageRateCents: parsedTaxMileageRateCents,
-        weeklyGamesEmailEnabled,
-        trackedSports: parseList(trackedSports),
-        showGamePlatformChips,
-        assigningPlatforms: parseList(platforms),
-        leagues: parseList(leagues).sort(),
-      },
+    setSettingsSaving(true)
+    try {
+      const verifiedAddresses = await resolveVerifiedProfileAddresses(session?.access_token, {
+        homeAddress: home,
+        otherWorkAddress: otherWork,
+      })
+      setHome(verifiedAddresses.homeAddress)
+      setOtherWork(verifiedAddresses.otherWorkAddress ?? '')
+      const next = {
+        ...db,
+        settings: {
+          ...db.settings,
+          ...verifiedAddresses,
+          defaultTimezone: defaultTimezone.trim() || 'America/New_York',
+          taxMileageRateCents: parsedTaxMileageRateCents,
+          weeklyGamesEmailEnabled,
+          trackedSports: parseList(trackedSports),
+          showGamePlatformChips,
+          assigningPlatforms: parseList(platforms),
+          leagues: parseList(leagues).sort(),
+        },
+      }
+      await write(next)
+      setSettingsMessage('Settings saved. Mileage origins verified.')
+    } catch (e: any) {
+      setSettingsMessage(`Could not save settings: ${String(e?.message ?? e)}`)
+    } finally {
+      setSettingsSaving(false)
     }
-    await write(next)
   }
 
   async function updateWeeklyGamesEmailEnabled(enabled: boolean) {
@@ -200,13 +217,15 @@ export default function SettingsPage() {
             <div className="field">
               <label>Primary work location (home office)</label>
               <input value={home} onChange={e => setHome(e.target.value)} placeholder="123 Main St, Columbus, OH 43215" />
-              <div className="small">This stays the default origin for mileage calculations on each game.</div>
+              <div className="small">This stays the default origin for mileage calculations on each game. Whistle Keeper verifies it against Google Maps before saving.</div>
+              {db.settings.homeAddressPlaceId && home.trim() === db.settings.homeAddress.trim() ? <div className="small">Verified Google Maps origin saved.</div> : null}
             </div>
 
             <div className="field">
               <label>Secondary work location (optional)</label>
               <input value={otherWork} onChange={e => setOtherWork(e.target.value)} placeholder="Office, school, or other work address" />
-              <div className="small">Use this for another IRS work location you sometimes travel from.</div>
+              <div className="small">Use this for another IRS work location you sometimes travel from. If you add it, Whistle Keeper verifies it before saving.</div>
+              {db.settings.otherWorkAddressPlaceId && otherWork.trim() === (db.settings.otherWorkAddress ?? '').trim() ? <div className="small">Verified Google Maps origin saved.</div> : null}
             </div>
 
             <div className="field">
@@ -265,10 +284,11 @@ export default function SettingsPage() {
             </div>
 
             <div className="btnbar">
-              <button className="btn primary" onClick={saveSettings} disabled={loading}>Save settings</button>
+              <button className="btn primary" onClick={saveSettings} disabled={loading || settingsSaving}>{settingsSaving ? 'Verifying...' : 'Save settings'}</button>
               <button className="btn" onClick={refresh} disabled={loading || mode !== 'supabase'}>Refresh from cloud</button>
               <button className="btn" onClick={pushLocalToCloud} disabled={loading || mode !== 'supabase' || !session}>Replace cloud with local</button>
             </div>
+            {settingsMessage ? <div className="small">{settingsMessage}</div> : null}
 
             {mode === 'supabase' && session ? (
               <section className="settings-panel settings-calendar-panel">

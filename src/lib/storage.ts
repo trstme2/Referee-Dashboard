@@ -49,7 +49,13 @@ export function createFreshDB(): DB {
   return {
     settings: {
       homeAddress: '',
+      homeAddressPlaceId: undefined,
+      homeAddressLatitude: undefined,
+      homeAddressLongitude: undefined,
       otherWorkAddress: '',
+      otherWorkAddressPlaceId: undefined,
+      otherWorkAddressLatitude: undefined,
+      otherWorkAddressLongitude: undefined,
       defaultTimezone: 'America/New_York',
       taxMileageRateCents: 72.5,
       weeklyGamesEmailEnabled: false,

@@ -9,7 +9,9 @@ export type OnboardingStep = {
 }
 
 export function getOnboardingSteps(db: DB): OnboardingStep[] {
-  const hasProfile = Boolean(db.settings.homeAddress.trim()) && Boolean(db.settings.defaultTimezone?.trim())
+  const hasProfile = Boolean(db.settings.homeAddress.trim()) &&
+    Boolean(db.settings.homeAddressPlaceId?.trim()) &&
+    Boolean(db.settings.defaultTimezone?.trim())
   const hasSports = (db.settings.trackedSports ?? []).length > 0
   const hasPlatforms = db.settings.assigningPlatforms.length > 0
   const hasAssignmentRecords = db.games.length > 0 || db.csvImports.length > 0

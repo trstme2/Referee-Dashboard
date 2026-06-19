@@ -6,6 +6,7 @@ import { useData } from '../lib/DataContext'
 import { getOnboardingProgress } from '../lib/onboarding'
 import { trackedSportsFor } from '../lib/preferences'
 import { recordPlatformEvent } from '../lib/platformEvents'
+import { resolveVerifiedProfileAddresses } from '../lib/profileAddressValidation'
 import type { CalendarFeed, FeedPlatform, Sport } from '../lib/types'
 
 const platformSuggestions = [
@@ -43,7 +44,8 @@ export default function OnboardingPage() {
   const [feedUrl, setFeedUrl] = useState('')
   const [feedSport, setFeedSport] = useState<'' | Sport>('')
   const [feedSaving, setFeedSaving] = useState(false)
-  const [assignmentPath, setAssignmentPath] = useState<'feed' | 'manual'>(mode === 'supabase' ? 'feed' : 'manual')
+  const [assignmentPath, setAssignmentPath] = useState<'feed' | 'manual' | null>(null)
+  const [defaultsSaving, setDefaultsSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -84,31 +86,43 @@ export default function OnboardingPage() {
   async function saveDefaults(options?: { complete?: boolean }) {
     setError(null)
     setMessage(null)
-    const now = new Date().toISOString()
-    const next = {
-      ...db,
-      settings: {
-        ...db.settings,
-        homeAddress: homeAddress.trim(),
-        defaultTimezone: timezone.trim() || 'America/New_York',
-        weeklyGamesEmailEnabled: weeklyEmail,
-        trackedSports: sportOptions,
-        assigningPlatforms: parseList(platforms),
-        leagues: parseList(leagues).sort(),
-        onboardingCompletedAt: options?.complete ? now : db.settings.onboardingCompletedAt,
-      },
-    }
-    await write(next)
-    setMessage(options?.complete ? 'Setup marked complete.' : 'Defaults saved.')
-    if (options?.complete) {
-      void recordPlatformEvent(session?.access_token, 'onboarding_completed', {
-        trackedSports: sportOptions.length,
-        assigningPlatforms: parseList(platforms).length,
-        weeklyEmailEnabled: weeklyEmail,
-        feeds: feeds.length,
+    setDefaultsSaving(true)
+    try {
+      const now = new Date().toISOString()
+      const verifiedAddresses = await resolveVerifiedProfileAddresses(session?.access_token, {
+        homeAddress,
+        otherWorkAddress: '',
       })
+      setHomeAddress(verifiedAddresses.homeAddress)
+      const next = {
+        ...db,
+        settings: {
+          ...db.settings,
+          ...verifiedAddresses,
+          defaultTimezone: timezone.trim() || 'America/New_York',
+          weeklyGamesEmailEnabled: weeklyEmail,
+          trackedSports: sportOptions,
+          assigningPlatforms: parseList(platforms),
+          leagues: parseList(leagues).sort(),
+          onboardingCompletedAt: options?.complete ? now : db.settings.onboardingCompletedAt,
+        },
+      }
+      await write(next)
+      setMessage(options?.complete ? 'Setup marked complete. Mileage origin verified.' : 'Defaults saved. Mileage origin verified.')
+      if (options?.complete) {
+        void recordPlatformEvent(session?.access_token, 'onboarding_completed', {
+          trackedSports: sportOptions.length,
+          assigningPlatforms: parseList(platforms).length,
+          weeklyEmailEnabled: weeklyEmail,
+          feeds: feeds.length,
+        })
+      }
+      if (options?.complete) navigate('/')
+    } catch (e: any) {
+      setError(String(e?.message ?? e))
+    } finally {
+      setDefaultsSaving(false)
     }
-    if (options?.complete) navigate('/')
   }
 
   async function addFeed() {
@@ -154,6 +168,7 @@ export default function OnboardingPage() {
   const hasProfile = Boolean(homeAddress.trim()) && Boolean(timezone.trim())
   const hasSports = sportOptions.length > 0
   const hasPlatforms = parseList(platforms).length > 0
+  const canSaveDefaults = Boolean(homeAddress.trim()) && Boolean(timezone.trim()) && hasSports && hasPlatforms
 
   return (
     <div className="onboarding-page">
@@ -200,6 +215,8 @@ export default function OnboardingPage() {
           <div className="field">
             <label>Primary mileage origin</label>
             <input value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)} placeholder="Home office or starting address" />
+            <div className="small">Use a real street address. Whistle Keeper verifies it against Google Maps before saving so mileage calculations work.</div>
+            {db.settings.homeAddressPlaceId && homeAddress.trim() === db.settings.homeAddress.trim() ? <div className="small">Verified Google Maps origin saved.</div> : null}
           </div>
           <div className="row">
             <div className="field">
@@ -233,8 +250,8 @@ export default function OnboardingPage() {
           </div>
 
           <div className="btnbar">
-            <button className="btn primary" onClick={() => saveDefaults()} disabled={loading || !hasSports || !hasPlatforms}>
-              Save defaults
+            <button className="btn primary" onClick={() => saveDefaults()} disabled={loading || defaultsSaving || !canSaveDefaults}>
+              {defaultsSaving ? 'Verifying...' : 'Save defaults'}
             </button>
             {!hasProfile ? <span className="small">Add a mileage origin when you are ready to track tax mileage.</span> : null}
           </div>
@@ -247,10 +264,6 @@ export default function OnboardingPage() {
               <h2>Add Existing Assignments</h2>
               <p className="small">Bring in the games you already have. You can either connect an iCal feed from your assignor or start by adding games yourself.</p>
             </div>
-            <HelpTip className="help-tip-inline" title="Two easy ways to get started">
-              <p>Choose the path that matches where your assignments live today. You are not locked in. Most referees end up using both over time.</p>
-              <p>Connect an iCal feed when your assignor already publishes a schedule link. Choose manual entry when you only want to test one game or your platform does not offer a clean feed.</p>
-            </HelpTip>
           </div>
 
           <div className="onboarding-choice-grid">
@@ -274,12 +287,20 @@ export default function OnboardingPage() {
             </button>
           </div>
 
+          {assignmentPath == null ? <p className="small">Choose one option above to keep going.</p> : null}
+
           {mode === 'supabase' && assignmentPath === 'feed' ? (
             <>
+              <div className="onboarding-guidance">
+                <HelpTip label="What is this?" title="What is an iCal feed?">
+                  <p>An iCal feed is a calendar subscription link that allows events from an assigning platform or another system to appear in your calendar app, such as Google Calendar, Apple Calendar, or Outlook.</p>
+                  <p>Most assigning platforms provide iCal feeds as part of their application, and when the source calendar is updated, those changes can automatically sync to your calendar.</p>
+                </HelpTip>
+              </div>
               <HelpTip className="help-tip-inline" title="How to set up an iCal feed">
-              <p>Whistle Keeper ingests iCal feeds from your assignor. Most assigning platforms hide the calendar link inside profile, calendar, or export settings.</p>
-              <p>Common places to check: DragonFly calendar tools, RefQuest calendar export, Arbiter schedule export, and Assignr calendar sync settings.</p>
-              <p>Once you paste the feed URL here, sync pulls assignments into Whistle Keeper without changing anything in the assignor itself.</p>
+                <p>Whistle Keeper ingests iCal feeds from your assignor. Most assigning platforms hide the calendar link inside profile, calendar, or export settings.</p>
+                <p>Common places to check: DragonFly calendar tools, RefQuest calendar export, Arbiter schedule export, and Assignr calendar sync settings.</p>
+                <p>Once you paste the feed URL here, sync pulls assignments into Whistle Keeper without changing anything in the assignor itself.</p>
               </HelpTip>
               <FeedSetupGuide compact />
               <div className="row">
@@ -329,7 +350,7 @@ export default function OnboardingPage() {
                 {feeds.length === 0 ? <p className="small">No feeds added yet.</p> : null}
               </div>
             </>
-          ) : (
+          ) : assignmentPath === 'manual' ? (
             <div className="onboarding-action-list">
               <Link className="onboarding-action" to="/games">
                 <strong>Add a game manually</strong>
@@ -341,7 +362,7 @@ export default function OnboardingPage() {
               </Link>
               {mode === 'supabase' ? <p className="small">Prefer not to type games in? Switch back to the iCal feed option above.</p> : null}
             </div>
-          )}
+          ) : null}
         </div>
       </section>
 
@@ -369,8 +390,8 @@ export default function OnboardingPage() {
           <p className="small">You can return to setup from the nav any time.</p>
         </div>
         <div className="btnbar">
-          <button className="btn primary" onClick={finishSetup} disabled={loading || !hasSports || !hasPlatforms}>
-            Mark setup complete
+          <button className="btn primary" onClick={finishSetup} disabled={loading || defaultsSaving || !canSaveDefaults}>
+            {defaultsSaving ? 'Verifying...' : 'Mark setup complete'}
           </button>
           <button className="btn" onClick={async () => { await refresh(); navigate('/') }}>
             Go to dashboard
