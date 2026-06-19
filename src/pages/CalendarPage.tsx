@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
 import { addDays, endOfMonth, startOfMonth, yyyyMmDd } from '../lib/utils'
@@ -123,6 +123,14 @@ export default function CalendarPage() {
   const navigate = useNavigate()
   const [cursor, setCursor] = useState(() => new Date())
   const [selectedDay, setSelectedDay] = useState(() => yyyyMmDd(new Date()))
+  const [isMobileViewport, setIsMobileViewport] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia('(max-width: 720px)').matches
+  })
+  const [mobileView, setMobileView] = useState<'agenda' | 'month'>(() => {
+    if (typeof window === 'undefined') return 'month'
+    return window.matchMedia('(max-width: 720px)').matches ? 'agenda' : 'month'
+  })
   const [notice, setNotice] = useState<string | null>(null)
   const [form, setForm] = useState({
     id: '',
@@ -170,6 +178,21 @@ export default function CalendarPage() {
 
   const selectedEvents = eventsByDay.get(selectedDay) ?? []
   const selectedDayTitle = selectedDayHeading(selectedDay)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+
+    const media = window.matchMedia('(max-width: 720px)')
+    const applyState = (matches: boolean) => {
+      setIsMobileViewport(matches)
+      setMobileView(matches ? 'agenda' : 'month')
+    }
+
+    applyState(media.matches)
+    const handleChange = (event: MediaQueryListEvent) => applyState(event.matches)
+    media.addEventListener('change', handleChange)
+    return () => media.removeEventListener('change', handleChange)
+  }, [])
 
   function weekBarLayout(week: CalendarWeek): WeekBarLayout {
     const weekKeys = week.days.map(yyyyMmDd)
@@ -227,6 +250,21 @@ export default function CalendarPage() {
       .sort((a, b) => (a.start < b.start ? -1 : 1))
       .slice(0, 6)
   }, [displayEvents])
+
+  const mobileQuickDays = useMemo(() => {
+    const selectedDate = new Date(`${selectedDay}T00:00:00`)
+    const start = addDays(selectedDate, -2)
+    return Array.from({ length: 7 }, (_, index) => addDays(start, index))
+  }, [selectedDay])
+
+  const mobileUpcomingGroups = useMemo(() => {
+    const groups = new Map<string, CalendarEvent[]>()
+    for (const event of upcomingEvents) {
+      const dayKey = calendarDateKey(event.start, event.timezone)
+      groups.set(dayKey, [...(groups.get(dayKey) ?? []), event])
+    }
+    return Array.from(groups.entries())
+  }, [upcomingEvents])
 
   function startNew(day = selectedDay) {
     setNotice(null)
@@ -319,6 +357,73 @@ export default function CalendarPage() {
     setSelectedDay(yyyyMmDd(today))
   }
 
+  function selectDay(day: string) {
+    setSelectedDay(day)
+    const next = new Date(`${day}T00:00:00`)
+    setCursor(next)
+  }
+
+  function renderAgendaCard(className = 'calendar-agenda', compact = false) {
+    return (
+      <aside className={className}>
+        <div className="calendar-agenda-head">
+          <div>
+            <span className="calendar-panel-eyebrow">Selected day</span>
+            <h3>{selectedDayTitle}</h3>
+            <p>{selectedDay} | {selectedEvents.length ? `${selectedEvents.length} event${selectedEvents.length === 1 ? '' : 's'}` : 'No events'}</p>
+          </div>
+          <button className="btn compact" onClick={() => startNew(selectedDay)}>Add</button>
+        </div>
+        <div className={`calendar-agenda-list${compact ? ' compact' : ''}`}>
+          {selectedEvents.map(event => (
+            <article key={event.id} className={`agenda-item is-${eventTone(event.eventType)} ${eventPlatformClass(event)}`}>
+              <div>
+                <span>{calendarEventTimeRangeLabel(event)}</span>
+                <strong>{calendarEventDisplayTitle(event)}</strong>
+                <em>{eventTypeLabel(event)} | {eventSourceLabel(event)}</em>
+              </div>
+              <div className="calendar-agenda-actions">
+                <button className="btn compact" onClick={() => edit(event.id)}>Details</button>
+                {event.eventType !== 'Game' && !event.linkedGameId ? (
+                  <button className="btn compact danger" onClick={() => del(event.id)}>Delete</button>
+                ) : null}
+              </div>
+            </article>
+          ))}
+          {selectedEvents.length === 0 ? (
+            <div className="empty-state calendar-empty-day">
+              <h3>Open day</h3>
+              <p>Add blocked time, travel, or admin work here.</p>
+            </div>
+          ) : null}
+        </div>
+      </aside>
+    )
+  }
+
+  function renderUpcomingCard(className = 'card upcoming-card') {
+    return (
+      <section className={className}>
+        <h2>Upcoming</h2>
+        <div className="upcoming-list">
+          {upcomingEvents.map(event => (
+            <button key={event.id} className={`upcoming-item is-${eventTone(event.eventType)} ${eventPlatformClass(event)}`} onClick={() => edit(event.id)} type="button">
+              <span>{calendarDateKey(event.start, event.timezone)} | {eventSourceLabel(event)} | {calendarEventTimeRangeLabel(event)}</span>
+              <strong>{calendarEventDisplayTitle(event)}</strong>
+              <em>{event.eventType}</em>
+            </button>
+          ))}
+          {upcomingEvents.length === 0 ? (
+            <div className="empty-state">
+              <h3>No upcoming calendar events</h3>
+              <p>Blocks, travel, admin work, and synced games will appear here.</p>
+            </div>
+          ) : null}
+        </div>
+      </section>
+    )
+  }
+
   return (
     <div className="grid calendar-page">
       <section className="card calendar-board-card">
@@ -357,7 +462,94 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        <div className="calendar-shell">
+        <div className="calendar-mobile-layout">
+          {isMobileViewport ? (
+            <div className="calendar-view-toggle" role="tablist" aria-label="Calendar view">
+              <button
+                type="button"
+                className={`calendar-view-chip ${mobileView === 'agenda' ? 'active' : ''}`}
+                onClick={() => setMobileView('agenda')}
+                aria-pressed={mobileView === 'agenda'}
+              >
+                Agenda
+              </button>
+              <button
+                type="button"
+                className={`calendar-view-chip ${mobileView === 'month' ? 'active' : ''}`}
+                onClick={() => setMobileView('month')}
+                aria-pressed={mobileView === 'month'}
+              >
+                Month
+              </button>
+            </div>
+          ) : null}
+
+          <div className="calendar-mobile-day-strip" aria-label="Quick day picker">
+            {mobileQuickDays.map(day => {
+              const dayKey = yyyyMmDd(day)
+              const isSelected = dayKey === selectedDay
+              const count = (eventsByDay.get(dayKey) ?? []).length
+              return (
+                <button
+                  key={dayKey}
+                  type="button"
+                  className={`calendar-mobile-day-button ${isSelected ? 'active' : ''}`}
+                  onClick={() => selectDay(dayKey)}
+                >
+                  <span>{day.toLocaleDateString([], { weekday: 'short' })}</span>
+                  <strong>{day.getDate()}</strong>
+                  <em>{count ? `${count} event${count === 1 ? '' : 's'}` : 'Open'}</em>
+                </button>
+              )
+            })}
+          </div>
+
+          {mobileView === 'agenda' ? (
+            <div className="calendar-mobile-stack">
+              {renderAgendaCard('calendar-agenda mobile')}
+              <section className="card upcoming-card calendar-mobile-upcoming">
+                <div className="page-section-head">
+                  <div>
+                    <h2>Coming up</h2>
+                    <p className="sub">A phone-friendly view of your next scheduled items.</p>
+                  </div>
+                </div>
+                <div className="calendar-mobile-groups">
+                  {mobileUpcomingGroups.map(([dayKey, events]) => (
+                    <section key={dayKey} className="calendar-mobile-group">
+                      <header>
+                        <strong>{selectedDayHeading(dayKey)}</strong>
+                        <span>{events.length} item{events.length === 1 ? '' : 's'}</span>
+                      </header>
+                      <div className="upcoming-list">
+                        {events.map(event => (
+                          <button
+                            key={event.id}
+                            className={`upcoming-item is-${eventTone(event.eventType)} ${eventPlatformClass(event)}`}
+                            onClick={() => edit(event.id)}
+                            type="button"
+                          >
+                            <span>{eventSourceLabel(event)} | {calendarEventTimeRangeLabel(event)}</span>
+                            <strong>{calendarEventDisplayTitle(event)}</strong>
+                            <em>{eventTypeLabel(event)}</em>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                  {mobileUpcomingGroups.length === 0 ? (
+                    <div className="empty-state">
+                      <h3>No upcoming calendar events</h3>
+                      <p>Blocks, travel, admin work, and synced games will appear here.</p>
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+            </div>
+          ) : null}
+        </div>
+
+        <div className={`calendar-shell ${mobileView === 'agenda' ? 'is-hidden-mobile' : ''}`}>
           <div className="calendar-scroll" aria-label="Month calendar">
             <div className="calhead">
               {DOW.map(d => <div key={d}>{d}</div>)}
@@ -387,7 +579,7 @@ export default function CalendarPage() {
                           <button
                             key={ymd}
                             className={`calendar-day ${inMonth ? '' : 'is-muted'} ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected' : ''}`}
-                            onClick={() => setSelectedDay(ymd)}
+                            onClick={() => selectDay(ymd)}
                             type="button"
                           >
                             <div className="calendar-day-top">
@@ -436,43 +628,11 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          <aside className="calendar-agenda">
-            <div className="calendar-agenda-head">
-              <div>
-                <span className="calendar-panel-eyebrow">Selected day</span>
-                <h3>{selectedDayTitle}</h3>
-                <p>{selectedDay} | {selectedEvents.length ? `${selectedEvents.length} event${selectedEvents.length === 1 ? '' : 's'}` : 'No events'}</p>
-              </div>
-              <button className="btn compact" onClick={() => startNew(selectedDay)}>Add</button>
-            </div>
-            <div className="calendar-agenda-list">
-              {selectedEvents.map(event => (
-                <article key={event.id} className={`agenda-item is-${eventTone(event.eventType)} ${eventPlatformClass(event)}`}>
-                  <div>
-                    <span>{calendarEventTimeRangeLabel(event)}</span>
-                    <strong>{calendarEventDisplayTitle(event)}</strong>
-                    <em>{eventTypeLabel(event)} | {eventSourceLabel(event)}</em>
-                  </div>
-                  <div className="calendar-agenda-actions">
-                    <button className="btn compact" onClick={() => edit(event.id)}>Details</button>
-                    {event.eventType !== 'Game' && !event.linkedGameId ? (
-                      <button className="btn compact danger" onClick={() => del(event.id)}>Delete</button>
-                    ) : null}
-                  </div>
-                </article>
-              ))}
-              {selectedEvents.length === 0 ? (
-                <div className="empty-state calendar-empty-day">
-                  <h3>Open day</h3>
-                  <p>Add blocked time, travel, or admin work here.</p>
-                </div>
-              ) : null}
-            </div>
-          </aside>
+          {renderAgendaCard()}
         </div>
       </section>
 
-      <section className="grid cols2 calendar-side-grid">
+      <section className={`grid cols2 calendar-side-grid ${isMobileViewport ? 'is-mobile' : ''}`}>
         <section className="card calendar-editor-card">
           <h2>{form.id ? 'Edit event' : 'Add calendar event'}</h2>
           <p className="sub">Use this for blocked time, travel, and admin work. Game events come from Games.</p>
@@ -558,24 +718,7 @@ export default function CalendarPage() {
           </div>
         </section>
 
-        <section className="card upcoming-card">
-          <h2>Upcoming</h2>
-          <div className="upcoming-list">
-            {upcomingEvents.map(event => (
-              <button key={event.id} className={`upcoming-item is-${eventTone(event.eventType)} ${eventPlatformClass(event)}`} onClick={() => edit(event.id)} type="button">
-                <span>{calendarDateKey(event.start, event.timezone)} | {eventSourceLabel(event)} | {calendarEventTimeRangeLabel(event)}</span>
-                <strong>{calendarEventDisplayTitle(event)}</strong>
-                <em>{event.eventType}</em>
-              </button>
-            ))}
-            {upcomingEvents.length === 0 ? (
-              <div className="empty-state">
-                <h3>No upcoming calendar events</h3>
-                <p>Blocks, travel, admin work, and synced games will appear here.</p>
-              </div>
-            ) : null}
-          </div>
-        </section>
+        {renderUpcomingCard()}
       </section>
     </div>
   )
