@@ -42,7 +42,6 @@ function stepStatusLabel(kind: 'required' | 'recommended' | 'optional', complete
 export default function OnboardingPage() {
   const { db, write, loading, mode, session, refresh } = useData()
   const navigate = useNavigate()
-  const progress = useMemo(() => getOnboardingProgress(db), [db])
   const profilePanelRef = useRef<HTMLDivElement | null>(null)
   const [homeAddress, setHomeAddress] = useState(db.settings.homeAddress)
   const [timezone, setTimezone] = useState(db.settings.defaultTimezone || 'America/New_York')
@@ -64,7 +63,9 @@ export default function OnboardingPage() {
   const [feedError, setFeedError] = useState<string | null>(null)
 
   const token = session?.access_token ?? null
-  const sportOptions = useMemo(() => trackedSportsFor(parseList(trackedSports)), [trackedSports])
+  const enteredSports = useMemo(() => parseList(trackedSports), [trackedSports])
+  const sportOptions = useMemo(() => trackedSportsFor(enteredSports), [enteredSports])
+  const progress = useMemo(() => getOnboardingProgress(db, { savedFeedCount: feeds.length }), [db, feeds.length])
 
   async function feedApi(path: string, init?: RequestInit) {
     if (!token) throw new Error('Sign in to manage assignment feeds.')
@@ -97,6 +98,25 @@ export default function OnboardingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, token])
 
+  useEffect(() => {
+    const syncId = window.requestAnimationFrame(() => {
+      setHomeAddress(db.settings.homeAddress)
+      setTimezone(db.settings.defaultTimezone || 'America/New_York')
+      setWeeklyEmail(Boolean(db.settings.weeklyGamesEmailEnabled))
+      setTrackedSports(listString(db.settings.trackedSports))
+      setPlatforms(listString(db.settings.assigningPlatforms))
+      setLeagues(listString(db.settings.leagues))
+    })
+    return () => window.cancelAnimationFrame(syncId)
+  }, [
+    db.settings.homeAddress,
+    db.settings.defaultTimezone,
+    db.settings.weeklyGamesEmailEnabled,
+    db.settings.trackedSports,
+    db.settings.assigningPlatforms,
+    db.settings.leagues,
+  ])
+
   async function saveDefaults(options?: { complete?: boolean }) {
     setProfileError(null)
     setProfileMessage(null)
@@ -115,7 +135,7 @@ export default function OnboardingPage() {
           ...verifiedAddresses,
           defaultTimezone: timezone.trim() || 'America/New_York',
           weeklyGamesEmailEnabled: weeklyEmail,
-          trackedSports: sportOptions,
+          trackedSports: enteredSports,
           assigningPlatforms: parseList(platforms),
           leagues: parseList(leagues).sort(),
           onboardingCompletedAt: options?.complete ? now : db.settings.onboardingCompletedAt,
@@ -125,7 +145,7 @@ export default function OnboardingPage() {
       setProfileMessage(options?.complete ? 'Setup marked complete. Mileage origin verified.' : 'Defaults saved. Mileage origin verified.')
       if (options?.complete) {
         void recordPlatformEvent(session?.access_token, 'onboarding_completed', {
-          trackedSports: sportOptions.length,
+          trackedSports: enteredSports.length,
           assigningPlatforms: parseList(platforms).length,
           weeklyEmailEnabled: weeklyEmail,
           feeds: feeds.length,
@@ -357,7 +377,7 @@ export default function OnboardingPage() {
                 </HelpTip>
               </div>
               <div className="btnbar">
-                <button className="btn primary" onClick={addFeed} disabled={feedSaving || !feedUrl.trim()}>
+              <button className="btn primary" onClick={addFeed} disabled={feedSaving || !feedUrl.trim()}>
                   {feedSaving ? 'Adding...' : 'Add feed'}
                 </button>
                 <Link className="btn" to="/sync">Manage feeds</Link>
@@ -425,7 +445,7 @@ export default function OnboardingPage() {
           <button className="btn primary" onClick={finishSetup} disabled={loading || defaultsSaving || !canSaveDefaults}>
             {defaultsSaving ? 'Verifying...' : 'Finish quick start'}
           </button>
-          <button className="btn" onClick={async () => { await refresh(); navigate('/') }}>
+          <button className="btn" onClick={async () => { await refresh(); navigate('/') }} disabled={!progress.minimumReady}>
             Go to dashboard
           </button>
         </div>

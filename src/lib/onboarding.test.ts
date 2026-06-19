@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createFreshDB } from './storage'
-import { getOnboardingProgress, getOnboardingSteps } from './onboarding'
+import { getOnboardingProgress, getOnboardingSteps, hasRequiredProfileSetup } from './onboarding'
 
 describe('onboarding progress', () => {
   it('starts a fresh account at zero completed steps', () => {
@@ -39,6 +39,15 @@ describe('onboarding progress', () => {
     expect(progress.isComplete).toBe(true)
     expect(progress.steps.find((step) => step.id === 'profile')?.complete).toBe(true)
     expect(progress.steps.find((step) => step.id === 'assignments')?.complete).toBe(false)
+  })
+
+  it('counts a saved feed as completing the assignments step', () => {
+    const db = createFreshDB()
+
+    const progress = getOnboardingProgress(db, { savedFeedCount: 1 })
+
+    expect(progress.steps.find((step) => step.id === 'assignments')?.complete).toBe(true)
+    expect(progress.complete).toBe(1)
   })
 
   it('does not mark tax readiness complete for a newly scheduled game by itself', () => {
@@ -87,5 +96,29 @@ describe('onboarding progress', () => {
     const taxStep = getOnboardingSteps(db).find((step) => step.id === 'tax')
 
     expect(taxStep?.complete).toBe(true)
+  })
+
+  it('requires a verified profile even when onboarding was previously marked complete', () => {
+    const db = createFreshDB()
+    db.settings.onboardingCompletedAt = '2026-06-19T00:00:00.000Z'
+
+    const progress = getOnboardingProgress(db)
+
+    expect(progress.minimumReady).toBe(false)
+    expect(progress.isComplete).toBe(false)
+  })
+
+  it('shares the same required-profile rule across onboarding checks', () => {
+    expect(hasRequiredProfileSetup({
+      homeAddress: '399 S. Columbia Ave, Bexley, OH 43209',
+      homeAddressPlaceId: 'place-123',
+      defaultTimezone: 'America/New_York',
+    })).toBe(true)
+
+    expect(hasRequiredProfileSetup({
+      homeAddress: '399 S. Columbia Ave, Bexley, OH 43209',
+      homeAddressPlaceId: '',
+      defaultTimezone: 'America/New_York',
+    })).toBe(false)
   })
 })

@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { hasRequiredProfileSetup } from './onboarding'
 
 export type AuthDelivery = 'otp' | 'magic-link'
 
@@ -48,10 +49,15 @@ export async function destinationForUser(userId: string) {
   if (!supabase) return '/'
   const { data, error } = await supabase
     .from('user_settings')
-    .select('onboarding_completed_at')
+    .select('home_address, home_address_place_id, default_timezone, onboarding_completed_at')
     .eq('user_id', userId)
     .maybeSingle()
 
   if (error) return '/onboarding'
-  return data?.onboarding_completed_at ? '/' : '/onboarding'
+  const ready = hasRequiredProfileSetup({
+    homeAddress: data?.home_address ?? '',
+    homeAddressPlaceId: data?.home_address_place_id ?? undefined,
+    defaultTimezone: data?.default_timezone ?? undefined,
+  })
+  return ready ? '/' : '/onboarding'
 }

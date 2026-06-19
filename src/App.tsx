@@ -32,7 +32,7 @@ export default function App() {
   const showLanding = authMissing && location.pathname === '/'
   const isAuthRoute = location.pathname === '/auth' || location.pathname === '/auth/callback'
   const showAppShell = !showLanding && !isAuthRoute
-  const startOnboarding = !loading && authReady && Boolean(session) && shouldStartOnboarding(db)
+  const onboardingRequired = !loading && authReady && Boolean(session) && shouldStartOnboarding(db)
   const routeMeta = routeMetaForPath(location.pathname)
 
   useEffect(() => {
@@ -76,6 +76,9 @@ export default function App() {
           </section>
         </div>
       )
+    }
+    if (onboardingRequired && location.pathname !== '/onboarding') {
+      return <Navigate to="/onboarding" replace />
     }
     return authMissing ? <Navigate to="/auth" replace /> : element
   }
@@ -121,7 +124,7 @@ export default function App() {
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
           {/* Guard routes when in supabase mode */}
-          <Route path="/" element={authMissing ? <LandingPage /> : startOnboarding ? <Navigate to="/onboarding" replace /> : <HomePage />} />
+          <Route path="/" element={authMissing ? <LandingPage /> : onboardingRequired ? <Navigate to="/onboarding" replace /> : <HomePage />} />
           <Route path="/onboarding" element={protectedElement(<OnboardingPage />)} />
           <Route path="/games" element={protectedElement(<GamesPage />)} />
           <Route path="/calendar" element={protectedElement(<CalendarPage />)} />

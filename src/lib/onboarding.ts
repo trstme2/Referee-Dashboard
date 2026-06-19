@@ -1,4 +1,4 @@
-import type { DB } from './types'
+import type { DB, Settings } from './types'
 
 export type OnboardingStepId = 'profile' | 'assignments' | 'requirements' | 'tax'
 export type OnboardingStepKind = 'required' | 'recommended' | 'optional'
@@ -10,11 +10,19 @@ export type OnboardingStep = {
   kind: OnboardingStepKind
 }
 
-export function getOnboardingSteps(db: DB): OnboardingStep[] {
-  const hasProfile = Boolean(db.settings.homeAddress.trim()) &&
-    Boolean(db.settings.homeAddressPlaceId?.trim()) &&
-    Boolean(db.settings.defaultTimezone?.trim())
-  const hasAssignmentRecords = db.games.length > 0 || db.csvImports.length > 0
+type OnboardingProgressOptions = {
+  savedFeedCount?: number
+}
+
+export function hasRequiredProfileSetup(settings: Pick<Settings, 'homeAddress' | 'homeAddressPlaceId' | 'defaultTimezone'>): boolean {
+  return Boolean(settings.homeAddress.trim()) &&
+    Boolean(settings.homeAddressPlaceId?.trim()) &&
+    Boolean(settings.defaultTimezone?.trim())
+}
+
+export function getOnboardingSteps(db: DB, options?: OnboardingProgressOptions): OnboardingStep[] {
+  const hasProfile = hasRequiredProfileSetup(db.settings)
+  const hasAssignmentRecords = db.games.length > 0 || db.csvImports.length > 0 || Number(options?.savedFeedCount ?? 0) > 0
   const hasRequirements = db.requirementInstances.length > 0 || db.requirementActivities.length > 0
   const hasTaxBasics = db.expenses.length > 0 || db.games.some((g) =>
     g.roundtripMiles != null ||
@@ -31,13 +39,13 @@ export function getOnboardingSteps(db: DB): OnboardingStep[] {
   ]
 }
 
-export function getOnboardingProgress(db: DB) {
-  const steps = getOnboardingSteps(db)
+export function getOnboardingProgress(db: DB, options?: OnboardingProgressOptions) {
+  const steps = getOnboardingSteps(db, options)
   const quickStartSteps = steps.filter((step) => step.kind !== 'optional')
   const laterSteps = steps.filter((step) => step.kind === 'optional')
   const quickStartComplete = quickStartSteps.filter((step) => step.complete).length
   const laterComplete = laterSteps.filter((step) => step.complete).length
-  const minimumReady = Boolean(steps.find((step) => step.id === 'profile')?.complete)
+  const minimumReady = hasRequiredProfileSetup(db.settings)
   return {
     steps,
     quickStartSteps,
@@ -48,14 +56,10 @@ export function getOnboardingProgress(db: DB) {
     laterComplete,
     laterTotal: laterSteps.length,
     minimumReady,
-    isComplete: minimumReady || Boolean(db.settings.onboardingCompletedAt),
+    isComplete: minimumReady,
   }
 }
 
 export function shouldStartOnboarding(db: DB): boolean {
-  if (db.settings.onboardingCompletedAt) return false
-  const hasProfile = Boolean(db.settings.homeAddress.trim()) &&
-    Boolean(db.settings.homeAddressPlaceId?.trim()) &&
-    Boolean(db.settings.defaultTimezone?.trim())
-  return !hasProfile
+  return !hasRequiredProfileSetup(db.settings)
 }
