@@ -5,6 +5,7 @@ import { upsertExpenseIn, deleteExpenseIn, updateExpenseIn } from '../lib/mutate
 import { formatMoney, safeNumber } from '../lib/utils'
 import { createExpenseReceiptSignedUrl, deleteExpenseReceipt, uploadExpenseReceipt } from '../lib/documents'
 import { expenseCategoryCaution, IRS_TAX_REVIEW_LINKS, taxReviewFlags } from '../lib/taxReview'
+import { recordPlatformEvent } from '../lib/platformEvents'
 
 const expenseCategories: ExpenseCategory[] = [
   'Mileage','Gear','Uniform','Dues/Registration',
@@ -119,6 +120,7 @@ export default function ExpensesPage() {
 
   async function save() {
     if (!form.expenseDate || !form.amount) return
+    const isNew = !form.id
     const next = upsertExpenseIn(db, {
       id: form.id || undefined,
       expenseDate: form.expenseDate,
@@ -132,6 +134,13 @@ export default function ExpensesPage() {
       notes: form.notes || undefined,
     })
     await write(next)
+    if (isNew) {
+      void recordPlatformEvent(session?.access_token, 'expense_created', {
+        category: form.category,
+        markedForDeductibleReview: form.taxDeductible === 'Yes',
+        linkedToGame: Boolean(form.gameId),
+      })
+    }
     startNew()
   }
 

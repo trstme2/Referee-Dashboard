@@ -3,6 +3,7 @@ import ical from 'node-ical'
 import { createHash } from 'node:crypto'
 import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
 import { fetchCalendarFeedTextWithRetry } from '../src/server/feed-fetch.js'
+import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
 import { revealFeedUrl } from '../src/server/personal-data-security.js'
 import { enqueueFeedSyncJobs, loadSyncJobsForUser, processDueSyncJobs, type SyncJobResult } from '../src/server/sync-jobs.js'
 import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks } from '../src/server/sync-ics-utils.js'
@@ -882,18 +883,33 @@ function summarizeFeedResults(startedAtMs: number, feedResults: Array<SyncFeedRe
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const route = '/api/sync-ics'
+  const requestStartedAtMs = Date.now()
   setApiSecurityHeaders(res)
+  logApiStart(route, req)
 
-  if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    logApiDone(route, requestStartedAtMs, { status: 405 })
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
   try {
     const rate = checkRateLimit(req, 'sync-ics', { limit: 20, windowMs: 10 * 60 * 1000 })
-    if (!rate.allowed) return sendRateLimited(res, rate.retryAfterSeconds)
+    if (!rate.allowed) {
+      logApiDone(route, requestStartedAtMs, { status: 429 })
+      return sendRateLimited(res, rate.retryAfterSeconds)
+    }
 
     const token = getBearerToken(req)
-    if (!token) return res.status(401).json({ error: 'Missing bearer token' })
+    if (!token) {
+      logApiDone(route, requestStartedAtMs, { status: 401 })
+      return res.status(401).json({ error: 'Missing bearer token' })
+    }
     const client = createAuthedSupabase(token)
     const { data: authData, error: authErr } = await client.auth.getUser()
-    if (authErr || !authData?.user) return res.status(401).json({ error: 'Invalid auth token' })
+    if (authErr || !authData?.user) {
+      logApiDone(route, requestStartedAtMs, { status: 401 })
+      return res.status(401).json({ error: 'Invalid auth token' })
+    }
     const userId = authData.user.id
 
     if (req.method === 'GET') {
@@ -907,8 +923,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (error) {
         if (isSyncHistoryMissing(error)) {
+          logApiDone(route, requestStartedAtMs, { status: 200, action: 'history_unavailable' })
           return res.status(200).json({ history: [], historyUnavailable: 'Sync history table has not been added yet.' })
         }
+        logApiDone(route, requestStartedAtMs, { status: 400, action: 'history_error' })
         return res.status(400).json({ error: error.message })
       }
 
@@ -918,7 +936,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         throw jobError
       })
-
+      logApiDone(route, requestStartedAtMs, { status: 200, action: 'history', history: (data ?? []).length, jobs: jobsResult.jobs.length })
       return res.status(200).json({
         history: (data ?? []).map((row: any) => ({
           id: row.id,
@@ -950,8 +968,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     else query = query.eq('enabled', true)
 
     const { data: feeds, error: feedsErr } = await query
-    if (feedsErr) return res.status(400).json({ error: feedsErr.message })
+    if (feedsErr) {
+      logApiDone(route, requestStartedAtMs, { status: 400, action: 'feed_query_error' })
+      return res.status(400).json({ error: feedsErr.message })
+    }
     if (!feeds?.length) {
+      logApiDone(route, requestStartedAtMs, { status: 200, action: 'sync', feeds: 0 })
       return res.status(200).json({
         startedAt: new Date().toISOString(),
         finishedAt: new Date().toISOString(),
@@ -966,11 +988,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
-    const startedAtMs = Date.now()
+    const syncStartedAtMs = Date.now()
     const enqueued = await enqueueFeedSyncJobs(client, feeds as Feed[], 'manual')
     if (enqueued.queueUnavailable) {
       const direct = await runFeedsDirect(client, feeds as Feed[], 'manual')
-      return res.status(direct.errors.length ? 207 : 200).json({
+      const status = direct.errors.length ? 207 : 200
+      logApiDone(route, requestStartedAtMs, {
+        status,
+        action: 'sync_direct',
+        feeds: direct.feedsSynced,
+        createdGames: direct.createdGames,
+        updatedGames: direct.updatedGames,
+        errors: direct.errors.length,
+      })
+      return res.status(status).json({
         ...direct,
         queueUnavailable: enqueued.queueUnavailable,
       })
@@ -993,7 +1024,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     )
 
-    const response = summarizeFeedResults(startedAtMs, processed.feedResults, {
+    const response = summarizeFeedResults(syncStartedAtMs, processed.feedResults, {
       jobsQueued: enqueued.jobs.length,
       jobsClaimed: processed.jobsClaimed,
       jobsCompleted: processed.jobsCompleted,
@@ -1001,8 +1032,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       jobsFailed: processed.jobsFailed,
       queueErrors: processed.errors,
     })
-    return res.status(response.errors.length || processed.errors.length ? 207 : 200).json(response)
+    const status = response.errors.length || processed.errors.length ? 207 : 200
+    logApiDone(route, requestStartedAtMs, {
+      status,
+      action: 'sync_queued',
+      feeds: response.feedsSynced,
+      jobsQueued: enqueued.jobs.length,
+      jobsCompleted: processed.jobsCompleted,
+      jobsFailed: processed.jobsFailed,
+      errors: response.errors.length + processed.errors.length,
+    })
+    return res.status(status).json(response)
   } catch (e: any) {
+    logApiError(route, requestStartedAtMs, e)
     return res.status(500).json({ error: String(e?.message || e || 'Unknown error') })
   }
 }

@@ -4,6 +4,7 @@ import { useData } from '../lib/DataContext'
 import { createFreshDB, resetDB } from '../lib/storage'
 import { supabaseConfigured } from '../lib/supabaseClient'
 import { deleteCalendarFeeds, deleteOwnAppEvents, deleteSyncHistory, evidencePaths, exportAccountData, purgeCloudRows, removeStorageFiles } from '../lib/accountLifecycle'
+import { recordPlatformEvent } from '../lib/platformEvents'
 
 const dataInventory = [
   {
@@ -99,6 +100,10 @@ export default function DataPrivacyPage() {
         await deleteSyncHistory(activeSession.user.id)
         await deleteCalendarFeeds(activeSession.user.id)
         await write(createFreshDB(), { forceFullReplace: true })
+        void recordPlatformEvent(activeSession.access_token, 'app_data_reset', {
+          deletedRecords: totalRecords,
+          deletedFiles: savedFileCount,
+        })
       } else {
         resetDB()
         await write(createFreshDB(), { forceFullReplace: true })

@@ -5,7 +5,9 @@ type AdminMetrics = {
   generatedAt: string
   users: {
     total: number
+    active1d: number
     active7d: number
+    active30d: number
     new30d: number
     admins: number
     byRole: Record<string, number>
@@ -16,13 +18,40 @@ type AdminMetrics = {
     total: number
     enabled: number
     usersWithFeeds: number
+    usersWithRecentlySyncedFeeds: number
   }
   sync: {
     runs7d: number
+    successRate7d: number
+    failed7d: number
+    partial7d: number
+    averageDurationMs7d: number
+    averageAttempts7d: number
     byStatus7d: Record<string, number>
+  }
+  syncJobs: {
+    unavailable: boolean
+    total: number
+    due: number
+    byStatus: Record<string, number>
+  }
+  activation: {
+    usersWithFeeds: number
+    usersWithGames: number
+    usersWithExpenses: number
+    usersWithRequirements: number
+    usersWithAnyCoreData: number
+    coreActivationRate: number
   }
   events: {
     total30d: number
+    usersWithEvents30d: number
+    pageViews7d: number
+    clientErrors7d: number
+    apiErrors7d: number
+    workflowEvents30d: number
+    taxExports30d: number
+    accountExports30d: number
     byType30d: Record<string, number>
     bySource30d: Record<string, number>
   }
@@ -41,6 +70,16 @@ function MiniBarList({ values }: { values: Record<string, number> }) {
           <strong>{value}</strong>
         </div>
       ))}
+    </div>
+  )
+}
+
+function HealthRow({ label, value, detail }: { label: string; value: string | number; detail?: string }) {
+  return (
+    <div className="admin-health-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {detail ? <small>{detail}</small> : null}
     </div>
   )
 }
@@ -117,21 +156,63 @@ export default function AdminPage() {
             <div className="card admin-kpi-card">
               <span>Active users</span>
               <strong>{metrics.users.active7d}</strong>
-              <p>Seen in the last 7 days</p>
+              <p>{metrics.users.active30d} active in 30 days</p>
             </div>
             <div className="card admin-kpi-card">
-              <span>Connected feeds</span>
-              <strong>{metrics.feeds.enabled}</strong>
-              <p>{metrics.feeds.usersWithFeeds} users with feeds</p>
+              <span>Activation</span>
+              <strong>{metrics.activation.coreActivationRate}%</strong>
+              <p>{metrics.activation.usersWithAnyCoreData} users with core data</p>
             </div>
             <div className="card admin-kpi-card">
-              <span>Sync runs</span>
-              <strong>{metrics.sync.runs7d}</strong>
-              <p>Last 7 days</p>
+              <span>Sync success</span>
+              <strong>{metrics.sync.successRate7d}%</strong>
+              <p>{metrics.sync.runs7d} runs in 7 days</p>
             </div>
           </section>
 
           <section className="grid cols2">
+            <div className="card">
+              <h2>Activation</h2>
+              <div className="admin-health-list">
+                <HealthRow label="Users with feeds" value={metrics.activation.usersWithFeeds} />
+                <HealthRow label="Users with games" value={metrics.activation.usersWithGames} />
+                <HealthRow label="Users with expenses" value={metrics.activation.usersWithExpenses} />
+                <HealthRow label="Users with requirements" value={metrics.activation.usersWithRequirements} />
+              </div>
+            </div>
+            <div className="card">
+              <h2>Reliability</h2>
+              <div className="admin-health-list">
+                <HealthRow label="Sync success rate" value={`${metrics.sync.successRate7d}%`} detail="Last 7 days" />
+                <HealthRow label="Failed sync runs" value={metrics.sync.failed7d} />
+                <HealthRow label="Partial sync runs" value={metrics.sync.partial7d} />
+                <HealthRow label="Average sync duration" value={`${metrics.sync.averageDurationMs7d} ms`} />
+                <HealthRow label="Average attempts" value={metrics.sync.averageAttempts7d} />
+              </div>
+            </div>
+            <div className="card">
+              <h2>Sync Jobs</h2>
+              {metrics.syncJobs.unavailable ? (
+                <p className="small">Sync job table is not installed in this environment yet.</p>
+              ) : (
+                <>
+                  <div className="admin-health-list">
+                    <HealthRow label="Total queued history" value={metrics.syncJobs.total} />
+                    <HealthRow label="Due now" value={metrics.syncJobs.due} />
+                  </div>
+                  <MiniBarList values={metrics.syncJobs.byStatus} />
+                </>
+              )}
+            </div>
+            <div className="card">
+              <h2>Error Signals</h2>
+              <div className="admin-health-list">
+                <HealthRow label="Client errors" value={metrics.events.clientErrors7d} detail="Last 7 days" />
+                <HealthRow label="API errors" value={metrics.events.apiErrors7d} detail="Last 7 days" />
+                <HealthRow label="Page views" value={metrics.events.pageViews7d} detail="Last 7 days" />
+                <HealthRow label="Workflow events" value={metrics.events.workflowEvents30d} detail="Last 30 days" />
+              </div>
+            </div>
             <div className="card">
               <h2>Users By Tier</h2>
               <MiniBarList values={metrics.users.byTier} />
@@ -141,11 +222,11 @@ export default function AdminPage() {
               <MiniBarList values={metrics.users.bySubscriptionStatus} />
             </div>
             <div className="card">
-              <h2>Sync Health</h2>
+              <h2>Sync Run Status</h2>
               <MiniBarList values={metrics.sync.byStatus7d} />
             </div>
             <div className="card">
-              <h2>Events</h2>
+              <h2>Product Events</h2>
               <MiniBarList values={metrics.events.byType30d} />
             </div>
           </section>

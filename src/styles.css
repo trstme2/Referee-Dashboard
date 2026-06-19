@@ -3041,6 +3041,38 @@ body {
   gap: 10px;
 }
 
+.admin-health-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-health-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: baseline;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.admin-health-row:last-child {
+  border-bottom: 0;
+}
+
+.admin-health-row span,
+.admin-health-row small {
+  color: #aebcd0;
+}
+
+.admin-health-row strong {
+  color: #fff;
+}
+
+.admin-health-row small {
+  grid-column: 1 / -1;
+  font-size: 12px;
+}
+
 .admin-bar-list > div {
   display: grid;
   grid-template-columns: 120px minmax(0, 1fr) 42px;

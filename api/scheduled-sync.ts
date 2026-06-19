@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createServiceSupabase, cronAuthorized, setApiSecurityHeaders } from '../src/server/auth-utils.js'
+import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
 import { enqueueFeedSyncJobs, processDueSyncJobs } from '../src/server/sync-jobs.js'
 import { recordSyncFailure, syncFeed, type Feed } from './sync-ics.js'
 
@@ -21,15 +22,21 @@ type FeedSummary = {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const route = '/api/scheduled-sync'
+  const startedAtMs = Date.now()
   setApiSecurityHeaders(res)
+  logApiStart(route, req)
 
   if (req.method !== 'GET' && req.method !== 'POST') {
+    logApiDone(route, startedAtMs, { status: 405 })
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  if (!cronAuthorized(req)) return res.status(401).json({ error: 'Unauthorized' })
+  if (!cronAuthorized(req)) {
+    logApiDone(route, startedAtMs, { status: 401 })
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
 
   try {
-    const startedAtMs = Date.now()
     const startedAt = new Date(startedAtMs).toISOString()
     const client = createServiceSupabase()
     const { data: feeds, error } = await client
@@ -39,7 +46,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .order('last_synced_at', { ascending: true, nullsFirst: true })
       .order('created_at', { ascending: true })
 
-    if (error) return res.status(400).json({ error: error.message })
+    if (error) {
+      logApiDone(route, startedAtMs, { status: 400, error: 'feed_query_failed' })
+      return res.status(400).json({ error: error.message })
+    }
 
     const feedRows = (feeds ?? []) as Feed[]
     const enqueued = await enqueueFeedSyncJobs(client, feedRows, 'scheduled')
@@ -93,7 +103,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const errors = summaries.flatMap((s) => s.errors)
     const finishedAtMs = Date.now()
-    return res.status(errors.length ? 207 : 200).json({
+    const status = errors.length ? 207 : 200
+    logApiDone(route, startedAtMs, {
+      status,
+      feeds: summaries.length,
+      jobsQueued: enqueued.jobs.length,
+      failedFeeds: summaries.filter((s) => s.status === 'failed').length,
+      queueUnavailable,
+    })
+    return res.status(status).json({
       startedAt,
       finishedAt: new Date(finishedAtMs).toISOString(),
       durationMs: finishedAtMs - startedAtMs,
@@ -112,6 +130,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       summaries,
     })
   } catch (e: any) {
+    logApiError(route, startedAtMs, e)
     return res.status(500).json({ error: String(e?.message ?? e ?? 'Unknown error') })
   }
 }

@@ -3,6 +3,7 @@ import { useData } from '../lib/DataContext'
 import { formatMoney } from '../lib/utils'
 import HelpTip from '../components/HelpTip'
 import { IRS_TAX_REVIEW_LINKS, taxReviewFlags } from '../lib/taxReview'
+import { recordPlatformEvent } from '../lib/platformEvents'
 
 type IncomeBasis = 'cash' | 'accrual'
 
@@ -41,7 +42,7 @@ function downloadCsv(filename: string, csv: string) {
 }
 
 export default function TaxPage() {
-  const { db, write, loading } = useData()
+  const { db, write, loading, session } = useData()
   const [year, setYear] = useState(String(new Date().getFullYear()))
   const [basis, setBasis] = useState<IncomeBasis>('cash')
   const [mileageRateCents, setMileageRateCents] = useState(String(db.settings.taxMileageRateCents ?? suggestedMileageRateCents(year)))
@@ -202,26 +203,31 @@ export default function TaxPage() {
   function exportIncomeCsv() {
     const csv = toCsv(incomeRows, ['incomeDate', 'gameDate', 'paidDate', 'payor', 'league', 'sport', 'competitionLevel', 'homeTeam', 'awayTeam', 'amount', 'paidConfirmed', 'status', 'id'])
     downloadCsv(`tax-income-${basis}-${year}.csv`, csv)
+    void recordPlatformEvent(session?.access_token, 'tax_export_downloaded', { exportType: 'income', year, basis, rowCount: incomeRows.length })
   }
 
   function exportMileageCsv() {
     const csv = toCsv(mileageExportRows, ['source', 'date', 'description', 'miles', 'rateCents', 'estimatedStandardMileageAmount', 'refId'])
     downloadCsv(`tax-mileage-${year}.csv`, csv)
+    void recordPlatformEvent(session?.access_token, 'tax_export_downloaded', { exportType: 'mileage', year, rowCount: mileageExportRows.length })
   }
 
   function exportExpensesCsv() {
     const csv = toCsv(expenseRows, ['expenseDate', 'category', 'amount', 'vendor', 'description', 'markedForDeductibleReview', 'gameId', 'notes', 'id'])
     downloadCsv(`tax-expenses-${year}.csv`, csv)
+    void recordPlatformEvent(session?.access_token, 'tax_export_downloaded', { exportType: 'expenses', year, rowCount: expenseRows.length })
   }
 
   function exportReconCsv() {
     const csv = toCsv(reconRows, ['payor', 'dashboardIncome', 'entered1099', 'variance'])
     downloadCsv(`tax-1099-reconciliation-${basis}-${year}.csv`, csv)
+    void recordPlatformEvent(session?.access_token, 'tax_export_downloaded', { exportType: 'reconciliation', year, basis, rowCount: reconRows.length })
   }
 
   function exportReviewChecklistCsv() {
     const csv = toCsv(reviewChecklistRows, ['expenseDate', 'category', 'amount', 'markedForDeductibleReview', 'expenseDescription', 'reviewCode', 'reviewItem', 'reviewDetails', 'expenseId'])
     downloadCsv(`tax-export-review-checklist-${year}.csv`, csv)
+    void recordPlatformEvent(session?.access_token, 'tax_export_downloaded', { exportType: 'review_checklist', year, rowCount: reviewChecklistRows.length })
   }
 
   async function saveMileageRate() {

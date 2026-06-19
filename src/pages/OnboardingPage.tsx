@@ -5,6 +5,7 @@ import HelpTip from '../components/HelpTip'
 import { useData } from '../lib/DataContext'
 import { getOnboardingProgress } from '../lib/onboarding'
 import { trackedSportsFor } from '../lib/preferences'
+import { recordPlatformEvent } from '../lib/platformEvents'
 import type { CalendarFeed, FeedPlatform, Sport } from '../lib/types'
 
 const platformSuggestions = [
@@ -98,6 +99,14 @@ export default function OnboardingPage() {
     }
     await write(next)
     setMessage(options?.complete ? 'Setup marked complete.' : 'Defaults saved.')
+    if (options?.complete) {
+      void recordPlatformEvent(session?.access_token, 'onboarding_completed', {
+        trackedSports: sportOptions.length,
+        assigningPlatforms: parseList(platforms).length,
+        weeklyEmailEnabled: weeklyEmail,
+        feeds: feeds.length,
+      })
+    }
     if (options?.complete) navigate('/')
   }
 
@@ -120,6 +129,11 @@ export default function OnboardingPage() {
       setFeedUrl('')
       setFeedSport('')
       await loadFeeds()
+      void recordPlatformEvent(session?.access_token, 'feed_created', {
+        platform: feedPlatform,
+        sport: feedSport || 'unspecified',
+        source: 'onboarding',
+      })
       setMessage('Assignment feed added.')
     } catch (e: any) {
       setError(String(e?.message ?? e))

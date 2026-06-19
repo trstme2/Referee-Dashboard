@@ -7,6 +7,7 @@ import type { CompetitionLevel, GameStatus, Role, SoccerRole, LacrosseRole, Mile
 import { upsertGameIn, deleteGameIn } from '../lib/mutate'
 import { getDrivingDistanceMiles } from '../lib/distance'
 import { formatMoney, isWithinNextDays } from '../lib/utils'
+import { recordPlatformEvent } from '../lib/platformEvents'
 
 const levels: CompetitionLevel[] = ['High School', 'College', 'Club']
 const statuses: GameStatus[] = ['Scheduled', 'Played', 'Paid / Complete', 'Canceled']
@@ -82,7 +83,7 @@ function uniquePlatforms(platforms: string[], games: Array<{ platformConfirmatio
 }
 
 export default function GamesPage() {
-  const { db, write, loading } = useData()
+  const { db, write, loading, session } = useData()
   const navigate = useNavigate()
   const initialSport = trackedSportsFor(db.settings.trackedSports, db.games.map(g => g.sport))[0] ?? 'Soccer'
   const [filter, setFilter] = useState<'All' | GameStatus>('All')
@@ -224,6 +225,7 @@ export default function GamesPage() {
 
   async function save() {
     if (!form.gameDate || !form.locationAddress.trim()) return
+    const isNew = !form.id
     const next = upsertGameIn(db, {
       id: form.id || undefined,
       sport: form.sport,
@@ -247,6 +249,15 @@ export default function GamesPage() {
       roundtripMiles: form.roundtripMiles ? Number(form.roundtripMiles) : undefined,
     })
     await write(next)
+    if (isNew) {
+      void recordPlatformEvent(session?.access_token, 'game_created', {
+        sport: form.sport,
+        competitionLevel: form.competitionLevel,
+        status: form.status,
+        hasFee: Boolean(form.gameFee),
+        hasMileage: Boolean(form.distanceMiles || form.roundtripMiles),
+      })
+    }
     resetForm()
     setFormOpen(false)
   }

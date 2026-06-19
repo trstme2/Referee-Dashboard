@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import FeedSetupGuide from '../components/FeedSetupGuide'
 import HelpTip from '../components/HelpTip'
 import { useData } from '../lib/DataContext'
+import { recordPlatformEvent } from '../lib/platformEvents'
 import { trackedSportsFor } from '../lib/preferences'
 import type { CalendarFeed, CalendarFeedSyncRun, CalendarSyncJob, FeedPlatform, Sport, SyncIcsResult } from '../lib/types'
 
@@ -187,6 +188,7 @@ export default function SyncPage() {
     setErr(null)
     setSaving(true)
     try {
+      const isNew = !form.id
       if (!form.name.trim()) throw new Error('Name is required')
       if (!form.id && !form.feedUrl.trim()) throw new Error('Feed URL is required')
       const platform = form.platform.trim()
@@ -220,6 +222,13 @@ export default function SyncPage() {
           }),
         })
       }
+      if (isNew) {
+        void recordPlatformEvent(session?.access_token, 'feed_created', {
+          platform,
+          sport: form.sport || 'unspecified',
+          source: 'sync_page',
+        })
+      }
       if (!db.settings.assigningPlatforms.some(p => p.toLowerCase() === platform.toLowerCase())) {
         await write({
           ...db,
@@ -244,6 +253,9 @@ export default function SyncPage() {
     try {
       await api(`/api/calendar-feeds?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
       if (form.id === id) setForm(emptyForm())
+      void recordPlatformEvent(session?.access_token, 'feed_deleted', {
+        source: 'sync_page',
+      })
       await loadFeeds()
     } catch (e: any) {
       setErr(String(e?.message ?? e))
@@ -260,10 +272,25 @@ export default function SyncPage() {
         body: JSON.stringify(feedId ? { feedId } : {}),
       })
       setResult(json as SyncIcsResult)
+      const result = json as SyncIcsResult
+      const failed = (result.errors?.length ?? 0) > 0 || (result.jobsFailed ?? 0) > 0
+      void recordPlatformEvent(session?.access_token, failed ? 'sync_failed' : 'sync_completed', {
+        scope: feedId ? 'single_feed' : 'all_feeds',
+        jobsQueued: result.jobsQueued ?? 0,
+        jobsCompleted: result.jobsCompleted ?? 0,
+        jobsFailed: result.jobsFailed ?? 0,
+        createdGames: result.createdGames ?? 0,
+        updatedGames: result.updatedGames ?? 0,
+        errorCount: result.errors?.length ?? 0,
+      })
       await refresh()
       await loadFeeds()
     } catch (e: any) {
       setErr(String(e?.message ?? e))
+      void recordPlatformEvent(session?.access_token, 'sync_failed', {
+        scope: feedId ? 'single_feed' : 'all_feeds',
+        errorCount: 1,
+      })
     } finally {
       setSyncing(false)
     }

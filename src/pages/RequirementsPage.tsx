@@ -14,6 +14,7 @@ import { trackedSportsFor } from '../lib/preferences'
 import type { RequirementActivity, RequirementDefinition, RequirementInstance, RequirementStatus } from '../lib/types'
 import { yyyyMmDd } from '../lib/utils'
 import { createRequirementEvidenceSignedUrl, deleteRequirementEvidence, uploadRequirementEvidence } from '../lib/documents'
+import { recordPlatformEvent } from '../lib/platformEvents'
 
 const statusOptions: RequirementStatus[] = ['Not Started', 'In Progress', 'Complete', 'Waived', 'Overdue']
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -373,6 +374,14 @@ export default function RequirementsPage() {
     if (!selectedDef) return
     const next = createRequirementInstanceIn(db, selectedDef, seasonName || undefined, parseOptionalYear(year), dueDate || undefined)
     await write(next)
+    const definition = db.requirementDefinitions.find((item) => item.id === selectedDef)
+    void recordPlatformEvent(session?.access_token, 'readiness_group_created', {
+      action: 'create_tracker',
+      evidenceType: definition?.evidenceType ?? 'unknown',
+      frequency: definition?.frequency ?? 'unknown',
+      hasDueDate: Boolean(dueDate),
+      hasYear: Boolean(parseOptionalYear(year)),
+    })
   }
 
   function duplicateTargetFor(group: (typeof readinessGroups)[number]) {
@@ -417,6 +426,11 @@ export default function RequirementsPage() {
       return
     }
     await write(next)
+    void recordPlatformEvent(session?.access_token, 'readiness_group_created', {
+      action: 'duplicate_season',
+      created,
+      targetYear,
+    })
   }
 
   function groupProgressText(group: (typeof readinessGroups)[number]) {

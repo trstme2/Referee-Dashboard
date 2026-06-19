@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useData } from '../lib/DataContext'
 import { resetDB } from '../lib/storage'
+import { recordPlatformEvent } from '../lib/platformEvents'
 
 function parseList(s: string): string[] {
   return s.split(',').map(x => x.trim()).filter(Boolean)
@@ -83,6 +84,7 @@ export default function SettingsPage() {
           weeklyGamesEmailEnabled: enabled,
         },
       })
+      void recordPlatformEvent(session?.access_token, enabled ? 'weekly_email_enabled' : 'weekly_email_disabled')
       setWeeklyEmailMessage(enabled ? 'Weekly Sunday email is on.' : 'Weekly Sunday email is off.')
     } catch (e: any) {
       setWeeklyGamesEmailEnabled(Boolean(db.settings.weeklyGamesEmailEnabled))
@@ -146,6 +148,7 @@ export default function SettingsPage() {
       setCalendarSubscriptionUrl(String(json.subscriptionUrl || ''))
       setCalendarDownloadUrl(String(json.downloadUrl || ''))
       setCalendarTokenProtected(false)
+      void recordPlatformEvent(session.access_token, 'calendar_feed_token_regenerated')
     } catch (e: any) {
       setCalendarFeedError(String(e?.message ?? e))
     } finally {
@@ -176,6 +179,7 @@ export default function SettingsPage() {
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
+      void recordPlatformEvent(session.access_token, 'calendar_export_downloaded')
     } catch (e: any) {
       setCalendarFeedError(String(e?.message ?? e))
     } finally {

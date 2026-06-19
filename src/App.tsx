@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import Nav from './components/Nav'
 import HomePage from './pages/HomePage'
@@ -19,6 +20,7 @@ import AdminPage from './pages/AdminPage'
 import { useData } from './lib/DataContext'
 import { shouldStartOnboarding } from './lib/onboarding'
 import { routeMetaForPath } from './lib/navigation'
+import { errorMetadata, recordPlatformEvent, safeRoutePath } from './lib/platformEvents'
 import logo from './assets/logo.png'
 
 export default function App() {
@@ -32,6 +34,38 @@ export default function App() {
   const showAppShell = !showLanding && !isAuthRoute
   const startOnboarding = !loading && authReady && Boolean(session) && shouldStartOnboarding(db)
   const routeMeta = routeMetaForPath(location.pathname)
+
+  useEffect(() => {
+    if (!session?.access_token || authMissing || isAuthRoute) return
+    void recordPlatformEvent(session.access_token, 'page_view', {
+      route: safeRoutePath(location.pathname),
+      mode,
+    })
+  }, [authMissing, isAuthRoute, location.pathname, mode, session?.access_token])
+
+  useEffect(() => {
+    if (!session?.access_token || authMissing) return undefined
+    const route = safeRoutePath(location.pathname)
+    const onError = (event: ErrorEvent) => {
+      void recordPlatformEvent(session.access_token, 'client_error', errorMetadata(event.error || event.message, {
+        route,
+        kind: 'window_error',
+      }))
+    }
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      void recordPlatformEvent(session.access_token, 'client_error', errorMetadata(event.reason, {
+        route,
+        kind: 'unhandled_rejection',
+      }))
+    }
+    window.addEventListener('error', onError)
+    window.addEventListener('unhandledrejection', onUnhandledRejection)
+    return () => {
+      window.removeEventListener('error', onError)
+      window.removeEventListener('unhandledrejection', onUnhandledRejection)
+    }
+  }, [authMissing, location.pathname, session?.access_token])
+
   const protectedElement = (element: ReactNode) => {
     if (authRestoring) {
       return (
