@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
-import { upsertGameIn } from '../lib/mutate'
-import { getOnboardingProgress } from '../lib/onboarding'
-import '../styles/mobileDashboard.css'
 import {
   displayNameForUser,
   getAttentionNeeded,
@@ -14,8 +11,11 @@ import {
   getWeekSummary,
   mapsHrefForAddress,
 } from '../lib/mobileDashboard'
+import { upsertGameIn } from '../lib/mutate'
+import { getOnboardingProgress } from '../lib/onboarding'
 import type { CalendarFeed, CalendarFeedSyncRun, Game } from '../lib/types'
 import { formatMoney } from '../lib/utils'
+import '../styles/mobileDashboard.css'
 
 function greetingForHour(hour: number): string {
   if (hour < 12) return 'Good morning'
@@ -118,30 +118,41 @@ export default function HomePage() {
 
   const now = useMemo(() => new Date(), [])
   const greeting = useMemo(() => greetingForHour(now.getHours()), [now])
-  const todayLabel = useMemo(() => now.toLocaleDateString([], {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  }), [now])
+  const todayLabel = useMemo(
+    () =>
+      now.toLocaleDateString([], {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      }),
+    [now]
+  )
   const displayName = useMemo(() => displayNameForUser(session?.user), [session?.user])
 
   const nextAssignment = useMemo(() => getNextAssignment(db, now), [db, now])
   const upcomingAssignments = useMemo(() => getUpcomingAssignments(db, now, 4), [db, now])
   const weekSummary = useMemo(() => getWeekSummary(db, now), [db, now])
   const readinessSummary = useMemo(() => getReadinessSummary(db, now, 4), [db, now])
-  const syncHealth = useMemo(() => getSyncHealthSummary(activeFeeds, activeSyncHistory, now), [activeFeeds, activeSyncHistory, now])
-  const attentionItems = useMemo(() => getAttentionNeeded({
-    db,
-    onboardingIncomplete: !onboarding.isComplete,
-    feeds: activeFeeds,
-    syncHistory: activeSyncHistory,
-    syncError: activeSyncHealthError,
-    appError: error,
-    today: now,
-  }), [db, onboarding.isComplete, activeFeeds, activeSyncHistory, activeSyncHealthError, error, now])
+  const syncHealth = useMemo(
+    () => getSyncHealthSummary(activeFeeds, activeSyncHistory, now),
+    [activeFeeds, activeSyncHistory, now]
+  )
+  const attentionItems = useMemo(
+    () =>
+      getAttentionNeeded({
+        db,
+        onboardingIncomplete: !onboarding.isComplete,
+        feeds: activeFeeds,
+        syncHistory: activeSyncHistory,
+        syncError: activeSyncHealthError,
+        appError: error,
+        today: now,
+      }),
+    [db, onboarding.isComplete, activeFeeds, activeSyncHistory, activeSyncHealthError, error, now]
+  )
   const recentCompleted = useMemo(() => {
     return [...db.games]
-      .filter(game => game.status === 'Played' || game.status === 'Paid / Complete')
+      .filter((game) => game.status === 'Played' || game.status === 'Paid / Complete')
       .sort((a, b) => {
         const ak = `${a.gameDate} ${a.startTime ?? '99:99'}`
         const bk = `${b.gameDate} ${b.startTime ?? '99:99'}`
@@ -153,15 +164,32 @@ export default function HomePage() {
   async function markGameComplete(game: Game) {
     setMarkingGameId(game.id)
     try {
-      await write(upsertGameIn(db, {
-        ...game,
-        id: game.id,
-        status: 'Played',
-      }))
+      await write(
+        upsertGameIn(db, {
+          ...game,
+          id: game.id,
+          status: 'Played',
+        })
+      )
     } finally {
       setMarkingGameId(null)
     }
   }
+
+  const secondaryAssignments =
+    upcomingAssignments.length > 0
+      ? upcomingAssignments
+      : recentCompleted.map((game) => ({
+          game,
+          title: game.homeTeam && game.awayTeam ? `${game.homeTeam} vs ${game.awayTeam}` : game.sport,
+          competitionLabel: [game.competitionLevel, game.levelDetail, game.league].filter(Boolean).join(' | '),
+          sourceLabel: 'Saved in Whistle Keeper',
+          locationLabel: game.locationAddress,
+          roleLabel: game.role ?? null,
+          fee: game.gameFee ?? null,
+          canAddMileage: false,
+          canMarkComplete: false,
+        }))
 
   return (
     <div className="dashboard-page">
@@ -170,9 +198,13 @@ export default function HomePage() {
           <div>
             <span className="landing-eyebrow">Setup in progress</span>
             <h2>Finish your Whistle Keeper foundation.</h2>
-            <p className="small">{onboarding.complete} of {onboarding.total} setup areas are ready.</p>
+            <p className="small">
+              {onboarding.complete} of {onboarding.total} setup areas are ready.
+            </p>
           </div>
-          <Link className="btn primary" to="/onboarding">Continue setup</Link>
+          <Link className="btn primary" to="/onboarding">
+            Continue setup
+          </Link>
         </section>
       )}
 
@@ -180,8 +212,13 @@ export default function HomePage() {
         <div className="dashboard-header-row">
           <div>
             <span className="landing-eyebrow">{todayLabel}</span>
-            <h2>{greeting}{displayName ? `, ${displayName}` : ''}.</h2>
-            <p className="sub">Your mobile-first referee dashboard for the next assignment, this week, readiness, and sync health.</p>
+            <h2>
+              {greeting}
+              {displayName ? `, ${displayName}` : ''}.
+            </h2>
+            <p className="sub">
+              Your mobile-first referee dashboard for the next assignment, this week, readiness, and sync health.
+            </p>
           </div>
           <div className="dashboard-header-pills">
             {mode === 'supabase' && session?.user?.email ? <span className="pill ok">{session.user.email}</span> : null}
@@ -198,7 +235,9 @@ export default function HomePage() {
               <h2>Next Assignment</h2>
               <p className="sub">The next game that needs your attention.</p>
             </div>
-            {nextAssignment ? <span className={`pill ${statusTone(nextAssignment.game.status)}`}>{nextAssignment.game.status}</span> : null}
+            {nextAssignment ? (
+              <span className={`pill ${statusTone(nextAssignment.game.status)}`}>{nextAssignment.game.status}</span>
+            ) : null}
           </div>
 
           {nextAssignment ? (
@@ -221,7 +260,11 @@ export default function HomePage() {
                 </div>
                 <div>
                   <span>Time</span>
-                  <strong>{nextAssignment.game.startTime ? formatGameDateTime(nextAssignment.game).split(' at ')[1] : 'Time not set'}</strong>
+                  <strong>
+                    {nextAssignment.game.startTime
+                      ? formatGameDateTime(nextAssignment.game).split(' at ')[1]
+                      : 'Time not set'}
+                  </strong>
                 </div>
                 <div>
                   <span>Role</span>
@@ -238,13 +281,24 @@ export default function HomePage() {
               </div>
 
               <div className="btnbar dashboard-next-actions">
-                <Link className="btn primary" to="/games">View details</Link>
+                <Link className="btn primary" to="/games">
+                  View details
+                </Link>
                 {nextAssignment.locationLabel ? (
-                  <a className="btn" href={mapsHrefForAddress(nextAssignment.locationLabel)} target="_blank" rel="noreferrer">
+                  <a
+                    className="btn"
+                    href={mapsHrefForAddress(nextAssignment.locationLabel)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     Directions
                   </a>
                 ) : null}
-                {nextAssignment.canAddMileage ? <Link className="btn" to="/games">Add mileage</Link> : null}
+                {nextAssignment.canAddMileage ? (
+                  <Link className="btn" to="/games">
+                    Add mileage
+                  </Link>
+                ) : null}
                 {nextAssignment.canMarkComplete ? (
                   <button
                     className="btn"
@@ -259,10 +313,16 @@ export default function HomePage() {
           ) : (
             <div className="empty-state">
               <h3>No upcoming assignments yet</h3>
-              <p>Start with a calendar feed or add a game manually so Whistle Keeper has something to organize for you.</p>
+              <p>
+                Start with a calendar feed or add a game manually so Whistle Keeper has something to organize for you.
+              </p>
               <div className="btnbar">
-                <Link className="btn primary" to="/sync">Add calendar feed</Link>
-                <Link className="btn" to="/games">Add assignment</Link>
+                <Link className="btn primary" to="/sync">
+                  Add calendar feed
+                </Link>
+                <Link className="btn" to="/games">
+                  Add assignment
+                </Link>
               </div>
             </div>
           )}
@@ -296,11 +356,13 @@ export default function HomePage() {
             </div>
             {weekSummary.pendingItems > 0 ? (
               <p className="small dashboard-inline-note">
-                <span className="pill warn">{weekSummary.pendingItems} pending detail{weekSummary.pendingItems === 1 ? '' : 's'}</span>
+                <span className="pill warn">
+                  {weekSummary.pendingItems} pending detail{weekSummary.pendingItems === 1 ? '' : 's'}
+                </span>
                 Some games this week are still missing a start time, role, or fee.
               </p>
             ) : (
-              <p className="small dashboard-inline-note">No obvious detail gaps in this week’s assignments.</p>
+              <p className="small dashboard-inline-note">No obvious detail gaps in this week's assignments.</p>
             )}
           </section>
 
@@ -310,11 +372,13 @@ export default function HomePage() {
                 <h2>Readiness</h2>
                 <p className="sub">Season and certification progress at a glance.</p>
               </div>
-              <Link className="btn compact" to="/requirements">Open</Link>
+              <Link className="btn compact" to="/requirements">
+                Open
+              </Link>
             </div>
             {readinessSummary.length ? (
               <div className="dashboard-readiness-list">
-                {readinessSummary.map(item => (
+                {readinessSummary.map((item) => (
                   <div key={item.id} className="dashboard-readiness-item">
                     <div>
                       <strong>{item.title}</strong>
@@ -327,9 +391,13 @@ export default function HomePage() {
             ) : (
               <div className="empty-state">
                 <h3>No readiness tracking yet</h3>
-                <p>Add requirements so Whistle Keeper can tell you what still needs to happen before the season gets busy.</p>
+                <p>
+                  Add requirements so Whistle Keeper can tell you what still needs to happen before the season gets busy.
+                </p>
                 <div className="btnbar">
-                  <Link className="btn primary" to="/requirements">Add requirements</Link>
+                  <Link className="btn primary" to="/requirements">
+                    Add requirements
+                  </Link>
                 </div>
               </div>
             )}
@@ -341,7 +409,9 @@ export default function HomePage() {
                 <h2>Sync Health</h2>
                 <p className="sub">Feed freshness and recent sync behavior.</p>
               </div>
-              <Link className="btn compact" to="/sync">Manage</Link>
+              <Link className="btn compact" to="/sync">
+                Manage
+              </Link>
             </div>
             <div className="dashboard-sync-card">
               <span className={`pill ${syncHealth.tone}`}>{syncHealth.title}</span>
@@ -362,7 +432,7 @@ export default function HomePage() {
             </div>
           </div>
           <div className="dashboard-attention-list">
-            {attentionItems.map(item => (
+            {attentionItems.map((item) =>
               item.href ? (
                 <Link key={item.id} to={item.href} className={`dashboard-attention-item is-${item.tone}`}>
                   <strong>{item.title}</strong>
@@ -374,74 +444,101 @@ export default function HomePage() {
                   <span>{item.detail}</span>
                 </div>
               )
-            ))}
+            )}
           </div>
-          <div className="box">
-            <div className="label">Open requirements</div>
-            <div className="value">{kpis.due}</div>
+        </section>
+      ) : null}
+
+      <section className="card">
+        <div className="page-section-head">
+          <div>
+            <h2>{upcomingAssignments.length ? 'Upcoming Assignments' : 'Recent Assignments'}</h2>
+            <p className="sub">
+              {upcomingAssignments.length
+                ? 'A short list instead of a giant dashboard table.'
+                : 'Your latest played or completed games.'}
+            </p>
           </div>
-          <Link className="btn compact" to="/games">Open games</Link>
+          <Link className="btn compact" to="/games">
+            Open games
+          </Link>
         </div>
 
-        <div className="footer-note">
-          A clear weekly view of upcoming matches, mileage, expenses, and open requirements.
+        <div className="dashboard-assignment-list">
+          {secondaryAssignments.map((item) => (
+            <article key={item.game.id} className="dashboard-assignment-card">
+              <div className="dashboard-assignment-head">
+                <div>
+                  <div className="dashboard-assignment-date">{formatGameDateTime(item.game)}</div>
+                  <div className="dashboard-assignment-title">{item.title}</div>
+                </div>
+                <span className={`pill ${statusTone(item.game.status)}`}>{item.game.status}</span>
+              </div>
+              <div className="dashboard-assignment-meta">
+                <span>{item.competitionLabel || item.game.sport}</span>
+                {item.roleLabel ? <span>{item.roleLabel}</span> : null}
+                <span>{item.sourceLabel}</span>
+                {item.fee != null ? <span>{formatMoney(item.fee)}</span> : null}
+              </div>
+              <p>{item.locationLabel}</p>
+            </article>
+          ))}
+
+          {secondaryAssignments.length === 0 ? (
+            <div className="empty-state">
+              <h3>No assignments yet</h3>
+              <p>
+                Once you add a game or connect a feed, your upcoming schedule will show up here in a mobile-friendly list.
+              </p>
+              <div className="btnbar">
+                <Link className="btn primary" to="/games">
+                  Add assignment
+                </Link>
+                <Link className="btn" to="/sync">
+                  Connect feed
+                </Link>
+              </div>
+            </div>
+          ) : null}
         </div>
       </section>
 
-      <section className="grid cols2">
-        <div className="card">
-          <h2>Games Next 7 Days</h2>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Date</th><th>Time</th><th>Match</th><th>Location</th>
-              </tr>
-            </thead>
-            <tbody>
-              {upcomingWeekGames.map(g => (
-                <tr key={g.id}>
-                  <td>{g.gameDate}</td>
-                  <td>{g.startTime ?? '-'}</td>
-                  <td>{g.homeTeam && g.awayTeam ? `${g.homeTeam} vs ${g.awayTeam}` : `${g.sport} (${g.competitionLevel})`}</td>
-                  <td>{g.locationAddress}</td>
-                </tr>
-              ))}
-              {upcomingWeekGames.length === 0 && (
-                <tr><td colSpan={4} className="small">No scheduled games in the next 7 days.</td></tr>
-              )}
-            </tbody>
-          </table>
+      <section className="card">
+        <div className="page-section-head">
+          <div>
+            <h2>Quick Actions</h2>
+            <p className="sub">The paths you are most likely to need from your phone.</p>
+          </div>
         </div>
-
-        <div className="card">
-          <h2>Outstanding Requirements</h2>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Requirement</th><th>Due</th><th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {outstandingRequirements.map(r => (
-                <tr key={r.id}>
-                  <td>
-                    <div>{r.name}</div>
-                    {r.governingBody ? <div className="small">{r.governingBody}</div> : null}
-                  </td>
-                  <td>{r.dueDate ?? '-'}</td>
-                  <td>
-                    {(() => {
-                      const badge = requirementStatusBadge(r.status as RequirementStatus, r.overdue)
-                      return <span className={`pill ${badge.tone}`}>{badge.label}</span>
-                    })()}
-                  </td>
-                </tr>
-              ))}
-              {outstandingRequirements.length === 0 && (
-                <tr><td colSpan={3} className="small">No outstanding requirements.</td></tr>
-              )}
-            </tbody>
-          </table>
+        <div className="dashboard-action-grid">
+          <Link className="dashboard-action-tile" to="/sync">
+            <strong>Add calendar feed</strong>
+            <span>Pull assignments in automatically.</span>
+          </Link>
+          <Link className="dashboard-action-tile" to="/games">
+            <strong>Add assignment</strong>
+            <span>Enter a game manually.</span>
+          </Link>
+          <Link className="dashboard-action-tile" to="/requirements">
+            <strong>Add requirement</strong>
+            <span>Track tests, clinics, and meetings.</span>
+          </Link>
+          <Link className="dashboard-action-tile" to="/games">
+            <strong>Add mileage</strong>
+            <span>Fill in missing travel details.</span>
+          </Link>
+          <Link className="dashboard-action-tile" to="/expenses">
+            <strong>Add expense</strong>
+            <span>Capture a cost while it is fresh.</span>
+          </Link>
+          <Link className="dashboard-action-tile" to="/calendar">
+            <strong>View calendar</strong>
+            <span>See games, blocks, and travel together.</span>
+          </Link>
+          <Link className="dashboard-action-tile" to="/requirements">
+            <strong>View requirements</strong>
+            <span>See what still needs attention.</span>
+          </Link>
         </div>
       </section>
     </div>
