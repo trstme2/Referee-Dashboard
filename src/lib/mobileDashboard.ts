@@ -423,8 +423,8 @@ export function getAttentionNeeded(args: {
   if (onboardingIncomplete && !db.games.length) {
     items.push({
       id: 'onboarding',
-      title: 'Setup is still in progress',
-      detail: 'Finish your setup defaults so new assignments, feeds, and mileage work smoothly.',
+      title: 'Finish your referee profile',
+      detail: 'Save a verified mileage origin so directions, mileage, and future assignments work smoothly.',
       tone: 'info',
       href: '/onboarding',
     })

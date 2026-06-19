@@ -193,17 +193,17 @@ export default function HomePage() {
 
   return (
     <div className="dashboard-page">
-      {!onboarding.isComplete && (
+      {!onboarding.minimumReady && (
         <section className="setup-banner">
           <div>
             <span className="landing-eyebrow">Setup in progress</span>
-            <h2>Finish your Whistle Keeper foundation.</h2>
+            <h2>Finish your referee profile.</h2>
             <p className="small">
-              {onboarding.complete} of {onboarding.total} setup areas are ready.
+              Save a verified mileage origin and timezone so directions, mileage, and weekly planning work cleanly.
             </p>
           </div>
           <Link className="btn primary" to="/onboarding">
-            Continue setup
+            Finish profile
           </Link>
         </section>
       )}

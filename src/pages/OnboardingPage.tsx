@@ -28,6 +28,17 @@ function listString(values: string[]): string {
   return values.join(', ')
 }
 
+function stepStatusLabel(kind: 'required' | 'recommended' | 'optional', complete: boolean): string {
+  if (complete) {
+    if (kind === 'required') return 'Required and ready'
+    if (kind === 'recommended') return 'Recommended and ready'
+    return 'Optional and ready'
+  }
+  if (kind === 'required') return 'Required before you begin'
+  if (kind === 'recommended') return 'Recommended for day one'
+  return 'Optional for later'
+}
+
 export default function OnboardingPage() {
   const { db, write, loading, mode, session, refresh } = useData()
   const navigate = useNavigate()
@@ -165,28 +176,27 @@ export default function OnboardingPage() {
     }
   }
 
-  const hasProfile = Boolean(homeAddress.trim()) && Boolean(timezone.trim())
-  const hasSports = sportOptions.length > 0
-  const hasPlatforms = parseList(platforms).length > 0
-  const canSaveDefaults = Boolean(homeAddress.trim()) && Boolean(timezone.trim()) && hasSports && hasPlatforms
+  const hasProfileFields = Boolean(homeAddress.trim()) && Boolean(timezone.trim())
+  const canSaveDefaults = hasProfileFields
 
   return (
     <div className="onboarding-page">
       <section className="onboarding-hero accent-frame">
         <div>
           <span className="landing-eyebrow">First-run setup</span>
-          <h2>Get Whistle Keeper ready for your season.</h2>
+          <h2>Get moving quickly, then come back for the deeper tools.</h2>
           <p>
-            Save the defaults that make every assignment easier: mileage origin, platforms, leagues, feeds, requirements, and tax-ready records.
+            Your profile is the only required setup. Adding assignments is the best next step. Requirements and tax review can wait until you are ready for them.
           </p>
         </div>
         <div className="onboarding-progress-card">
-          <div className="label">Setup progress</div>
+          <div className="label">Quick start progress</div>
           <div className="value">{progress.percent}%</div>
           <div className="onboarding-progress-track">
             <span style={{ width: `${progress.percent}%` }} />
           </div>
-          <div className="small">{progress.complete} of {progress.total} foundations in place</div>
+          <div className="small">{progress.complete} of {progress.total} quick-start steps ready</div>
+          <div className="small">{progress.laterComplete} of {progress.laterTotal} advanced tools set up</div>
         </div>
       </section>
 
@@ -196,7 +206,7 @@ export default function OnboardingPage() {
             <span>{index + 1}</span>
             <div>
               <strong>{step.label}</strong>
-              <small>{step.complete ? 'Ready' : 'Needs setup'}</small>
+              <small>{stepStatusLabel(step.kind, step.complete)}</small>
             </div>
           </div>
         ))}
@@ -208,7 +218,7 @@ export default function OnboardingPage() {
             <span className="pill ok">1</span>
             <div>
               <h2>Referee Profile</h2>
-              <p className="small">These defaults power mileage, weekly emails, and faster game entry.</p>
+              <p className="small">This is the only part you need before using the app. The rest of these defaults can be filled in later.</p>
             </div>
           </div>
 
@@ -235,7 +245,7 @@ export default function OnboardingPage() {
           <div className="field">
             <label>Sports you want to track</label>
             <input value={trackedSports} onChange={(e) => setTrackedSports(e.target.value)} placeholder="Soccer, Lacrosse, Basketball, Football" />
-            <div className="small">These sports appear in game entry, CSV imports, feeds, and requirements. You can change this later in Settings.</div>
+            <div className="small">Helpful for game entry, feeds, and requirements, but not required to get started.</div>
           </div>
 
           <div className="row">
@@ -251,9 +261,11 @@ export default function OnboardingPage() {
 
           <div className="btnbar">
             <button className="btn primary" onClick={() => saveDefaults()} disabled={loading || defaultsSaving || !canSaveDefaults}>
-              {defaultsSaving ? 'Verifying...' : 'Save defaults'}
+              {defaultsSaving ? 'Verifying...' : 'Save profile'}
             </button>
-            {!hasProfile ? <span className="small">Add a mileage origin when you are ready to track tax mileage.</span> : null}
+            {progress.minimumReady
+              ? <span className="small">Profile saved. You can head to the dashboard now and come back here any time.</span>
+              : <span className="small">Save a verified home address so mileage and directions work correctly.</span>}
           </div>
         </div>
 
@@ -262,7 +274,7 @@ export default function OnboardingPage() {
             <span className="pill ok">2</span>
             <div>
               <h2>Add Existing Assignments</h2>
-              <p className="small">Bring in the games you already have. You can either connect an iCal feed from your assignor or start by adding games yourself.</p>
+              <p className="small">Strongly recommended for day one, but not required. You can connect an iCal feed or start by adding games yourself.</p>
             </div>
           </div>
 
@@ -367,6 +379,16 @@ export default function OnboardingPage() {
       </section>
 
       <section className="onboarding-layout">
+        <div className="onboarding-panel">
+          <div className="onboarding-panel-head">
+            <span className="pill">Later</span>
+            <div>
+              <h2>Advanced setup</h2>
+              <p className="small">These tools are valuable, but they do not need to block first-day use.</p>
+            </div>
+          </div>
+          <p className="small">Once your profile and assignments are in place, come back here to track season readiness and prepare cleaner tax records.</p>
+        </div>
         <Link className="onboarding-action" to="/requirements">
           <strong>Track requirements</strong>
           <span>Set up meetings, tests, training, and evidence.</span>
@@ -386,12 +408,12 @@ export default function OnboardingPage() {
 
       <section className="onboarding-finish">
         <div>
-          <h2>Ready to use Whistle Keeper?</h2>
-          <p className="small">You can return to setup from the nav any time.</p>
+          <h2>Ready to start using Whistle Keeper?</h2>
+          <p className="small">Profile is required. Assignments are recommended. Requirements and tax tools can wait until later.</p>
         </div>
         <div className="btnbar">
           <button className="btn primary" onClick={finishSetup} disabled={loading || defaultsSaving || !canSaveDefaults}>
-            {defaultsSaving ? 'Verifying...' : 'Mark setup complete'}
+            {defaultsSaving ? 'Verifying...' : 'Finish quick start'}
           </button>
           <button className="btn" onClick={async () => { await refresh(); navigate('/') }}>
             Go to dashboard
