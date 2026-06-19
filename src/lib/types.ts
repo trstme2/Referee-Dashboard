@@ -195,6 +195,7 @@ export interface SyncIcsResult {
   updatedEvents: number
   createdGames: number
   updatedGames: number
+  autoMileageUpdatedGames?: number
   errors: string[]
   jobsQueued?: number
   jobsClaimed?: number
@@ -216,6 +217,7 @@ export interface SyncIcsResult {
     updatedEvents: number
     createdGames: number
     updatedGames: number
+    autoMileageUpdatedGames?: number
     errors: string[]
   }>
   diagnostics?: {

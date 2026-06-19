@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import ical from 'node-ical'
 import { createHash } from 'node:crypto'
 import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
+import { lookupDrivingDistanceMiles } from '../src/server/distance-service.js'
 import { fetchCalendarFeedTextWithRetry } from '../src/server/feed-fetch.js'
 import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
 import { revealFeedUrl } from '../src/server/personal-data-security.js'
@@ -45,6 +46,7 @@ export type SyncFeedResult = {
   updatedEvents: number
   createdGames: number
   updatedGames: number
+  autoMileageUpdatedGames: number
   errors: string[]
   diagnostics: {
     existingRefMatches: number
@@ -53,6 +55,11 @@ export type SyncFeedResult = {
     ambiguousCandidates: number
     samples: SyncDiagnostic[]
   }
+}
+
+type MileageOriginSettings = {
+  homeAddress: string | null
+  homeAddressPlaceId: string | null
 }
 
 const APP_TIMEZONE = 'America/New_York'
@@ -84,6 +91,19 @@ async function loadUserDefaultTimezone(client: any, userId: string): Promise<str
     .maybeSingle()
   if (error) return APP_TIMEZONE
   return String(data?.default_timezone || APP_TIMEZONE)
+}
+
+async function loadMileageOriginSettings(client: any, userId: string): Promise<MileageOriginSettings> {
+  const { data, error } = await client
+    .from('user_settings')
+    .select('home_address,home_address_place_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) return { homeAddress: null, homeAddressPlaceId: null }
+  return {
+    homeAddress: String(data?.home_address || '').trim() || null,
+    homeAddressPlaceId: String(data?.home_address_place_id || '').trim() || null,
+  }
 }
 
 function datePartsInZone(d: Date, timeZone: string): { y: number; m: number; day: number; hh: number; mm: number } {
@@ -326,6 +346,38 @@ async function applyBlockConfirmations(client: any, feed: Feed, blockDates: stri
   return updated
 }
 
+async function hydrateMissingMileage(gameRows: any[], mileageOrigin: MileageOriginSettings): Promise<number> {
+  const origin = mileageOrigin.homeAddress?.trim() ?? ''
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY
+  if (!origin || !apiKey) return 0
+
+  let updated = 0
+  for (const row of gameRows) {
+    const destination = String(row.location_address || '').trim()
+    const alreadyHasMileage = row.distance_miles != null || row.roundtrip_miles != null
+    const optedOut = row.mileage_origin === 'other'
+    if (!destination || alreadyHasMileage || optedOut) continue
+
+    try {
+      const miles = await lookupDrivingDistanceMiles({
+        origin,
+        destination,
+        apiKey,
+        originPlaceId: mileageOrigin.homeAddressPlaceId,
+      })
+      const oneWay = Math.round(miles * 10) / 10
+      row.distance_miles = oneWay
+      row.roundtrip_miles = Math.round(oneWay * 2)
+      row.mileage_origin = 'home'
+      updated += 1
+    } catch {
+      // Leave mileage blank when the destination is too vague for a clean lookup.
+    }
+  }
+
+  return updated
+}
+
 function findManualMatch(dayGames: any[], unusedGameIds: Set<string>, n: any): {
   match: any | null
   topScore?: number
@@ -422,6 +474,7 @@ export async function recordSyncFailure(client: any, feed: Feed, trigger: SyncTr
     updatedEvents: 0,
     createdGames: 0,
     updatedGames: 0,
+    autoMileageUpdatedGames: 0,
     errors: [message],
     diagnostics: {
       existingRefMatches: 0,
@@ -440,11 +493,13 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
   const startedAtMs = Date.now()
   const startedAt = new Date(startedAtMs).toISOString()
   const userDefaultTimezone = await loadUserDefaultTimezone(client, feed.user_id)
+  const mileageOrigin = await loadMileageOriginSettings(client, feed.user_id)
   const now = new Date().toISOString()
   let createdEvents = 0
   let updatedEvents = 0
   let createdGames = 0
   let updatedGames = 0
+  let autoMileageUpdatedGames = 0
   let attempts = 0
   const errors: string[] = []
   const diagnostics: SyncDiagnostic[] = []
@@ -464,6 +519,7 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
       updatedEvents,
       createdGames,
       updatedGames,
+      autoMileageUpdatedGames,
       errors,
       diagnostics: {
         existingRefMatches: diagnostics.filter((d) => d.action === 'matched-existing').length,
@@ -715,6 +771,7 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
       location_address: existing?.location_address || n.location || '',
       distance_miles: existing?.distance_miles ?? null,
       roundtrip_miles: existing?.roundtrip_miles ?? null,
+      mileage_origin: existing?.mileage_origin ?? 'home',
       role: existing?.role ?? n.role ?? null,
       status: existing?.status ?? 'Scheduled',
       game_fee: existing?.game_fee ?? null,
@@ -730,6 +787,8 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
       updated_at: now,
     }
   })
+
+  autoMileageUpdatedGames = await hydrateMissingMileage(gameRows, mileageOrigin)
 
   let upsertedGames: any[] = []
   if (gameRows.length) {
@@ -805,6 +864,7 @@ async function runFeedsDirect(client: any, feeds: Feed[], trigger: SyncTrigger) 
   let updatedEvents = 0
   let createdGames = 0
   let updatedGames = 0
+  let autoMileageUpdatedGames = 0
   const errors: string[] = []
   const feedResults: SyncFeedResult[] = []
   const diagnostics = {
@@ -823,6 +883,7 @@ async function runFeedsDirect(client: any, feeds: Feed[], trigger: SyncTrigger) 
       updatedEvents += result.updatedEvents
       createdGames += result.createdGames
       updatedGames += result.updatedGames
+      autoMileageUpdatedGames += result.autoMileageUpdatedGames
       errors.push(...result.errors)
       diagnostics.existingRefMatches += result.diagnostics?.existingRefMatches ?? 0
       diagnostics.manualMatches += result.diagnostics?.manualMatches ?? 0
@@ -846,6 +907,7 @@ async function runFeedsDirect(client: any, feeds: Feed[], trigger: SyncTrigger) 
     updatedEvents,
     createdGames,
     updatedGames,
+    autoMileageUpdatedGames,
     errors,
     feedResults,
     diagnostics: {
@@ -875,6 +937,7 @@ function summarizeFeedResults(startedAtMs: number, feedResults: Array<SyncFeedRe
     updatedEvents: feedResults.reduce((sum, result) => sum + result.updatedEvents, 0),
     createdGames: feedResults.reduce((sum, result) => sum + result.createdGames, 0),
     updatedGames: feedResults.reduce((sum, result) => sum + result.updatedGames, 0),
+    autoMileageUpdatedGames: feedResults.reduce((sum, result) => sum + Number((result as any).autoMileageUpdatedGames ?? 0), 0),
     errors,
     feedResults,
     diagnostics,
@@ -983,6 +1046,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updatedEvents: 0,
         createdGames: 0,
         updatedGames: 0,
+        autoMileageUpdatedGames: 0,
         errors: [],
         feedResults: [],
       })

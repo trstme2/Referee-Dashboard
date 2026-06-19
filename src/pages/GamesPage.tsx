@@ -98,11 +98,10 @@ function gameStatusTone(status: GameStatus) {
   return 'info'
 }
 
-function uniquePlatforms(platforms: string[], games: Array<{ platformConfirmations?: Record<string, boolean> }>): string[] {
-  return Array.from(new Set([
-    ...platforms.map(p => p.trim()).filter(Boolean),
-    ...games.flatMap(g => Object.keys(g.platformConfirmations ?? {})),
-  ])).sort((a, b) => a.localeCompare(b))
+const commonPlatformSuggestions = ['DragonFly', 'RefQuest', 'Arbiter', 'Assignr', 'GameOfficials', 'GotSport']
+
+function normalizeTrackedPlatforms(platforms: string[]): string[] {
+  return Array.from(new Set(platforms.map((platform) => platform.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b))
 }
 
 function createGameForm(sport: string, startTime = DEFAULT_GAME_START_TIME): GameFormState {
@@ -139,6 +138,7 @@ export default function GamesPage() {
   const [yearFilter, setYearFilter] = useState<string>('All years')
   const [expandedGameId, setExpandedGameId] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
+  const [trackedPlatformInput, setTrackedPlatformInput] = useState('')
 
   const [form, setForm] = useState<GameFormState>(() => createGameForm(initialSport))
 
@@ -168,8 +168,8 @@ export default function GamesPage() {
   const selectedWorkLocation = workLocationOptions.find(option => option.value === selectedMileageOrigin) ?? workLocationOptions[0]
   const timeParts = to12HourParts(form.startTime || undefined)
   const assigningPlatforms = useMemo(
-    () => uniquePlatforms(db.settings.assigningPlatforms, db.games),
-    [db.settings.assigningPlatforms, db.games]
+    () => normalizeTrackedPlatforms(db.settings.assigningPlatforms),
+    [db.settings.assigningPlatforms]
   )
   const showPlatformChips = db.settings.showGamePlatformChips !== false
   const gameTableColSpan = showPlatformChips ? 13 : 12
@@ -347,6 +347,31 @@ export default function GamesPage() {
     }))
   }
 
+  async function saveTrackedPlatforms(nextPlatforms: string[]) {
+    await write({
+      ...db,
+      settings: {
+        ...db.settings,
+        assigningPlatforms: normalizeTrackedPlatforms(nextPlatforms),
+      },
+    })
+  }
+
+  async function addTrackedPlatform(platformName: string) {
+    const platform = platformName.trim()
+    if (!platform) return
+    if (assigningPlatforms.some((existing) => existing.toLowerCase() === platform.toLowerCase())) {
+      setTrackedPlatformInput('')
+      return
+    }
+    await saveTrackedPlatforms([...assigningPlatforms, platform])
+    setTrackedPlatformInput('')
+  }
+
+  async function removeTrackedPlatform(platformName: string) {
+    await saveTrackedPlatforms(assigningPlatforms.filter((platform) => platform !== platformName))
+  }
+
   async function calcDistance() {
     const origin = selectedWorkLocation?.address?.trim() ?? ''
     const dest = form.locationAddress.trim()
@@ -387,6 +412,40 @@ export default function GamesPage() {
           <button className="btn primary" onClick={startNew}>Add game</button>
           <button className="btn" onClick={() => navigate('/sync')}>Sync calendars</button>
           <button className="btn" onClick={() => navigate('/import')}>Import CSV</button>
+        </div>
+
+        <div className="games-platform-manager">
+          <div>
+            <strong>Tracked platforms for blocks and confirmations</strong>
+            <p className="small">Choose which assigning platforms should appear as block-tracking chips on this page. Remove any platform you do not use.</p>
+          </div>
+          <div className="platform-row">
+            {assigningPlatforms.map((platform) => (
+              <button key={platform} className="platform-chip on platform-manager-chip" onClick={() => removeTrackedPlatform(platform)}>
+                {platform} <span aria-hidden="true">x</span>
+              </button>
+            ))}
+            {assigningPlatforms.length === 0 ? <span className="small">No tracked platforms yet.</span> : null}
+          </div>
+          <div className="games-platform-manager-add">
+            <input
+              value={trackedPlatformInput}
+              onChange={(event) => setTrackedPlatformInput(event.target.value)}
+              placeholder="Add another platform"
+            />
+            <button className="btn" onClick={() => void addTrackedPlatform(trackedPlatformInput)} disabled={!trackedPlatformInput.trim()}>
+              Add platform
+            </button>
+          </div>
+          <div className="platform-row">
+            {commonPlatformSuggestions
+              .filter((platform) => !assigningPlatforms.some((existing) => existing.toLowerCase() === platform.toLowerCase()))
+              .map((platform) => (
+                <button key={platform} className="platform-chip off platform-suggestion-chip" onClick={() => void addTrackedPlatform(platform)}>
+                  Add {platform}
+                </button>
+              ))}
+          </div>
         </div>
 
         <div className="row">

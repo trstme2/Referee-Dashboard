@@ -207,6 +207,7 @@ export default function SyncPage() {
       const isNew = !form.id
       const platform = submitted.resolvedPlatform.trim()
       if (!platform) throw new Error('Platform is required')
+      let syncSummary: SyncIcsResult | null = null
 
       if (form.id) {
         await api('/api/calendar-feeds', {
@@ -223,7 +224,7 @@ export default function SyncPage() {
           }),
         })
       } else {
-        await api('/api/calendar-feeds', {
+        const created = await api('/api/calendar-feeds', {
           method: 'POST',
           body: JSON.stringify({
             platform,
@@ -235,6 +236,13 @@ export default function SyncPage() {
             importStartDate: submitted.importStartDate || null,
           }),
         })
+        if (created?.feed?.id) {
+          syncSummary = await api('/api/sync-ics', {
+            method: 'POST',
+            body: JSON.stringify({ feedId: String(created.feed.id) }),
+          }) as SyncIcsResult
+          setResult(syncSummary)
+        }
       }
       if (isNew) {
         void recordPlatformEvent(session?.access_token, 'feed_created', {
@@ -260,6 +268,7 @@ export default function SyncPage() {
         })
       }
       setForm(emptyForm())
+      await refresh()
       await loadFeeds()
     } catch (e: any) {
       setFormError(String(e?.message ?? e))
@@ -480,6 +489,9 @@ export default function SyncPage() {
               {result.durationMs != null ? ` in ${formatDuration(result.durationMs)}` : ''}. Events: +{result.createdEvents} created, {result.updatedEvents} updated | Games: +{result.createdGames} created, {result.updatedGames} updated
               {result.jobsQueued != null ? ` | Jobs: ${result.jobsCompleted ?? 0} done, ${result.jobsRequeued ?? 0} retrying, ${result.jobsFailed ?? 0} failed` : ''}
             </p>
+            {Number(result.autoMileageUpdatedGames ?? 0) > 0 ? (
+              <p className="small"><span className="pill ok">Auto-filled mileage for {Number(result.autoMileageUpdatedGames)} game{Number(result.autoMileageUpdatedGames) === 1 ? '' : 's'} with mappable addresses.</span></p>
+            ) : null}
             {result.queueUnavailable ? <p className="small"><span className="pill warn">{result.queueUnavailable}</span></p> : null}
             {result.queueErrors?.length ? (
               <div>

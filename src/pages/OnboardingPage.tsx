@@ -8,7 +8,7 @@ import { getOnboardingProgress } from '../lib/onboarding'
 import { trackedSportsFor } from '../lib/preferences'
 import { recordPlatformEvent } from '../lib/platformEvents'
 import { resolveVerifiedProfileAddresses } from '../lib/profileAddressValidation'
-import type { CalendarFeed } from '../lib/types'
+import type { CalendarFeed, SyncIcsResult } from '../lib/types'
 
 function parseList(value: string): string[] {
   return value.split(',').map((x) => x.trim()).filter(Boolean)
@@ -59,6 +59,7 @@ export default function OnboardingPage() {
   const [profileError, setProfileError] = useState<string | null>(null)
   const [feedMessage, setFeedMessage] = useState<string | null>(null)
   const [feedError, setFeedError] = useState<string | null>(null)
+  const [feedSyncSummary, setFeedSyncSummary] = useState<SyncIcsResult | null>(null)
 
   const token = session?.access_token ?? null
   const enteredSports = useMemo(() => parseList(trackedSports), [trackedSports])
@@ -88,6 +89,13 @@ export default function OnboardingPage() {
     } catch {
       setFeeds([])
     }
+  }
+
+  async function syncFeedNow(feedId: string) {
+    return await feedApi('/api/sync-ics', {
+      method: 'POST',
+      body: JSON.stringify({ feedId }),
+    }) as SyncIcsResult
   }
 
   useEffect(() => {
@@ -175,15 +183,17 @@ export default function OnboardingPage() {
     }
     setFeedMessage(null)
     setFeedError(null)
+    setFeedSyncSummary(null)
     setAssignmentPath(nextPath)
   }
 
   async function addFeed(submitted: CalendarFeedSetupSubmitValue) {
     setFeedError(null)
     setFeedMessage(null)
+    setFeedSyncSummary(null)
     setFeedSaving(true)
     try {
-      await feedApi('/api/calendar-feeds', {
+      const created = await feedApi('/api/calendar-feeds', {
         method: 'POST',
         body: JSON.stringify({
           platform: submitted.resolvedPlatform,
@@ -193,6 +203,7 @@ export default function OnboardingPage() {
           sport: submitted.sport || null,
         }),
       })
+      const syncSummary = created?.feed?.id ? await syncFeedNow(String(created.feed.id)) : null
       if (!db.settings.assigningPlatforms.some((platform) => platform.toLowerCase() === submitted.resolvedPlatform.toLowerCase())) {
         await write({
           ...db,
@@ -203,6 +214,8 @@ export default function OnboardingPage() {
         })
       }
       setFeedForm(createInitialFeedForm())
+      setFeedSyncSummary(syncSummary)
+      await refresh()
       await loadFeeds()
       void recordPlatformEvent(session?.access_token, 'feed_created', {
         platform: submitted.resolvedPlatform,
@@ -216,8 +229,24 @@ export default function OnboardingPage() {
         urlScheme: submitted.urlScheme ?? 'unknown',
         usedOther: submitted.guideId === 'other',
       })
-      setFeedMessage('Assignment feed added.')
+      const importedAssignments = Number(syncSummary?.createdGames ?? 0) + Number(syncSummary?.updatedGames ?? 0)
+      const mileageHydrated = Number(syncSummary?.autoMileageUpdatedGames ?? 0)
+      if (syncSummary && !syncSummary.errors.length) {
+        setFeedMessage(
+          importedAssignments > 0
+            ? `Feed added and synced. ${importedAssignments} assignment${importedAssignments === 1 ? '' : 's'} imported.`
+            : 'Feed added and synced. No assignments were imported yet.'
+        )
+      } else if (syncSummary) {
+        setFeedMessage('Feed added. Whistle Keeper tried an immediate sync, but some items still need review.')
+      } else {
+        setFeedMessage('Feed added. Open Sync if you want to run it right away.')
+      }
+      if (mileageHydrated > 0) {
+        setFeedMessage((current) => `${current ?? 'Feed added and synced.'} Auto-filled mileage for ${mileageHydrated} game${mileageHydrated === 1 ? '' : 's'} with mappable addresses.`)
+      }
     } catch (e: any) {
+      setFeedSyncSummary(null)
       setFeedError(String(e?.message ?? e))
     } finally {
       setFeedSaving(false)
@@ -402,6 +431,26 @@ export default function OnboardingPage() {
                 ))}
                 {feeds.length === 0 ? <p className="small">No feeds added yet.</p> : null}
               </div>
+              {feedSyncSummary ? (
+                <div className="onboarding-next-steps">
+                  <strong>What to review next</strong>
+                  <ul className="guided-platform-list is-bulleted">
+                    <li>Open Games and review imported assignments.</li>
+                    <li>Calendar feeds usually bring only partial information. Exact field address, pay, teams, and level details often still need manual cleanup.</li>
+                    <li>Use Calculate mileage on any game that still does not show mileage.</li>
+                    {Number(feedSyncSummary.autoMileageUpdatedGames ?? 0) > 0 ? (
+                      <li>Whistle Keeper already auto-filled mileage for {Number(feedSyncSummary.autoMileageUpdatedGames)} game{Number(feedSyncSummary.autoMileageUpdatedGames) === 1 ? '' : 's'} where the address was clear enough to map.</li>
+                    ) : null}
+                  </ul>
+                  <div className="btnbar">
+                    <Link className="btn primary" to="/games">Review games</Link>
+                    <Link className="btn" to="/sync">Open Sync</Link>
+                  </div>
+                  {feedSyncSummary.errors.length ? (
+                    <p className="small"><span className="pill warn">{feedSyncSummary.errors[0]}</span></p>
+                  ) : null}
+                </div>
+              ) : null}
             </>
           ) : assignmentPath === 'manual' ? (
             <div className="onboarding-action-list">
