@@ -337,8 +337,8 @@ export default function AuthPage() {
                 onKeyDown={e => {
                   if (e.key === 'Enter') void verifyCode()
                 }}
-                placeholder="123456"
-                maxLength={6}
+                placeholder="12345678"
+                maxLength={8}
                 className="auth-code-input"
               />
             </div>

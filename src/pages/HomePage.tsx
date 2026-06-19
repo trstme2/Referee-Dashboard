@@ -376,97 +376,72 @@ export default function HomePage() {
               )
             ))}
           </div>
-        </section>
-      ) : null}
-
-      <section className="card">
-        <div className="page-section-head">
-          <div>
-            <h2>{upcomingAssignments.length ? 'Upcoming Assignments' : 'Recent Assignments'}</h2>
-            <p className="sub">{upcomingAssignments.length ? 'A short list instead of a giant dashboard table.' : 'Your latest played or completed games.'}</p>
+          <div className="box">
+            <div className="label">Open requirements</div>
+            <div className="value">{kpis.due}</div>
           </div>
           <Link className="btn compact" to="/games">Open games</Link>
         </div>
 
-        <div className="dashboard-assignment-list">
-          {(upcomingAssignments.length ? upcomingAssignments : recentCompleted.map(game => ({
-            game,
-            title: game.homeTeam && game.awayTeam ? `${game.homeTeam} vs ${game.awayTeam}` : game.sport,
-            competitionLabel: [game.competitionLevel, game.levelDetail, game.league].filter(Boolean).join(' | '),
-            sourceLabel: 'Saved in Whistle Keeper',
-            locationLabel: game.locationAddress,
-            roleLabel: game.role ?? null,
-            fee: game.gameFee ?? null,
-            canAddMileage: false,
-            canMarkComplete: false,
-          }))).map(item => (
-            <article key={item.game.id} className="dashboard-assignment-card">
-              <div className="dashboard-assignment-head">
-                <div>
-                  <div className="dashboard-assignment-date">{formatGameDateTime(item.game)}</div>
-                  <div className="dashboard-assignment-title">{item.title}</div>
-                </div>
-                <span className={`pill ${statusTone(item.game.status)}`}>{item.game.status}</span>
-              </div>
-              <div className="dashboard-assignment-meta">
-                <span>{item.competitionLabel || item.game.sport}</span>
-                {item.roleLabel ? <span>{item.roleLabel}</span> : null}
-                <span>{item.sourceLabel}</span>
-                {item.fee != null ? <span>{formatMoney(item.fee)}</span> : null}
-              </div>
-              <p>{item.locationLabel}</p>
-            </article>
-          ))}
-
-          {upcomingAssignments.length === 0 && recentCompleted.length === 0 ? (
-            <div className="empty-state">
-              <h3>No assignments yet</h3>
-              <p>Once you add a game or connect a feed, your upcoming schedule will show up here in a mobile-friendly list.</p>
-              <div className="btnbar">
-                <Link className="btn primary" to="/games">Add assignment</Link>
-                <Link className="btn" to="/sync">Connect feed</Link>
-              </div>
-            </div>
-          ) : null}
+        <div className="footer-note">
+          A clear weekly view of upcoming matches, mileage, expenses, and open requirements.
         </div>
       </section>
 
-      <section className="card">
-        <div className="page-section-head">
-          <div>
-            <h2>Quick Actions</h2>
-            <p className="sub">The paths you are most likely to need from your phone.</p>
-          </div>
+      <section className="grid cols2">
+        <div className="card">
+          <h2>Games Next 7 Days</h2>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Date</th><th>Time</th><th>Match</th><th>Location</th>
+              </tr>
+            </thead>
+            <tbody>
+              {upcomingWeekGames.map(g => (
+                <tr key={g.id}>
+                  <td>{g.gameDate}</td>
+                  <td>{g.startTime ?? '-'}</td>
+                  <td>{g.homeTeam && g.awayTeam ? `${g.homeTeam} vs ${g.awayTeam}` : `${g.sport} (${g.competitionLevel})`}</td>
+                  <td>{g.locationAddress}</td>
+                </tr>
+              ))}
+              {upcomingWeekGames.length === 0 && (
+                <tr><td colSpan={4} className="small">No scheduled games in the next 7 days.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
-        <div className="dashboard-action-grid">
-          <Link className="dashboard-action-tile" to="/sync">
-            <strong>Add calendar feed</strong>
-            <span>Pull assignments in automatically.</span>
-          </Link>
-          <Link className="dashboard-action-tile" to="/games">
-            <strong>Add assignment</strong>
-            <span>Enter a game manually.</span>
-          </Link>
-          <Link className="dashboard-action-tile" to="/requirements">
-            <strong>Add requirement</strong>
-            <span>Track tests, clinics, and meetings.</span>
-          </Link>
-          <Link className="dashboard-action-tile" to="/games">
-            <strong>Add mileage</strong>
-            <span>Fill in missing travel details.</span>
-          </Link>
-          <Link className="dashboard-action-tile" to="/expenses">
-            <strong>Add expense</strong>
-            <span>Capture a cost while it is fresh.</span>
-          </Link>
-          <Link className="dashboard-action-tile" to="/calendar">
-            <strong>View calendar</strong>
-            <span>See games, blocks, and travel together.</span>
-          </Link>
-          <Link className="dashboard-action-tile" to="/requirements">
-            <strong>View requirements</strong>
-            <span>See what still needs attention.</span>
-          </Link>
+
+        <div className="card">
+          <h2>Outstanding Requirements</h2>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Requirement</th><th>Due</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {outstandingRequirements.map(r => (
+                <tr key={r.id}>
+                  <td>
+                    <div>{r.name}</div>
+                    {r.governingBody ? <div className="small">{r.governingBody}</div> : null}
+                  </td>
+                  <td>{r.dueDate ?? '-'}</td>
+                  <td>
+                    {(() => {
+                      const badge = requirementStatusBadge(r.status as RequirementStatus, r.overdue)
+                      return <span className={`pill ${badge.tone}`}>{badge.label}</span>
+                    })()}
+                  </td>
+                </tr>
+              ))}
+              {outstandingRequirements.length === 0 && (
+                <tr><td colSpan={3} className="small">No outstanding requirements.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
     </div>
