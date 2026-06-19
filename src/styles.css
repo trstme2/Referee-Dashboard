@@ -460,6 +460,40 @@ button, input, select, textarea { font: inherit; }
   gap: 8px;
   margin-top: 12px;
 }
+.onboarding-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.onboarding-choice-card {
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.025);
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+}
+.onboarding-choice-card:hover {
+  border-color: rgba(220,38,38,0.45);
+  transform: translateY(-1px);
+}
+.onboarding-choice-card.selected {
+  border-color: rgba(67, 209, 158, 0.5);
+  background: rgba(67, 209, 158, 0.08);
+}
+.onboarding-choice-card strong {
+  color: #eef7ff;
+}
+.onboarding-choice-card span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
 .onboarding-feed-list > div {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -4000,6 +4034,10 @@ body {
 
   .onboarding-steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .onboarding-choice-grid {
+    grid-template-columns: 1fr;
   }
 }
 

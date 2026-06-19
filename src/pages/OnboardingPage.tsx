@@ -43,6 +43,7 @@ export default function OnboardingPage() {
   const [feedUrl, setFeedUrl] = useState('')
   const [feedSport, setFeedSport] = useState<'' | Sport>('')
   const [feedSaving, setFeedSaving] = useState(false)
+  const [assignmentPath, setAssignmentPath] = useState<'feed' | 'manual'>(mode === 'supabase' ? 'feed' : 'manual')
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -243,18 +244,43 @@ export default function OnboardingPage() {
           <div className="onboarding-panel-head">
             <span className="pill ok">2</span>
             <div>
-              <h2>Assignment Feeds</h2>
-              <p className="small">Cloud users can add an iCal feed now, or start with manual entry/imports.</p>
+              <h2>Add Existing Assignments</h2>
+              <p className="small">Bring in the games you already have. You can either connect an iCal feed from your assignor or start by adding games yourself.</p>
             </div>
-            <HelpTip className="help-tip-inline" title="How to set up an iCal feed">
-              <p>Whistle Keeper ingests iCal feeds from your assignor. Most assigning platforms hide the calendar link inside profile, calendar, or export settings.</p>
-              <p>Common places to check: DragonFly calendar tools, RefQuest calendar export, Arbiter schedule export, and Assignr calendar sync settings.</p>
-              <p>Once you paste the feed URL here, sync pulls assignments into Whistle Keeper without changing anything in the assignor itself.</p>
+            <HelpTip className="help-tip-inline" title="Two easy ways to get started">
+              <p>Choose the path that matches where your assignments live today. You are not locked in. Most referees end up using both over time.</p>
+              <p>Connect an iCal feed when your assignor already publishes a schedule link. Choose manual entry when you only want to test one game or your platform does not offer a clean feed.</p>
             </HelpTip>
           </div>
 
-          {mode === 'supabase' ? (
+          <div className="onboarding-choice-grid">
+            {mode === 'supabase' ? (
+              <button
+                type="button"
+                className={`onboarding-choice-card${assignmentPath === 'feed' ? ' selected' : ''}`}
+                onClick={() => setAssignmentPath('feed')}
+              >
+                <strong>Connect an iCal feed</strong>
+                <span>Best when DragonFly, RefQuest, Arbiter, or another assignor already has your schedule.</span>
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={`onboarding-choice-card${assignmentPath === 'manual' ? ' selected' : ''}`}
+              onClick={() => setAssignmentPath('manual')}
+            >
+              <strong>Add games yourself</strong>
+              <span>Best for trying one assignment now or importing from your own spreadsheet.</span>
+            </button>
+          </div>
+
+          {mode === 'supabase' && assignmentPath === 'feed' ? (
             <>
+              <HelpTip className="help-tip-inline" title="How to set up an iCal feed">
+              <p>Whistle Keeper ingests iCal feeds from your assignor. Most assigning platforms hide the calendar link inside profile, calendar, or export settings.</p>
+              <p>Common places to check: DragonFly calendar tools, RefQuest calendar export, Arbiter schedule export, and Assignr calendar sync settings.</p>
+              <p>Once you paste the feed URL here, sync pulls assignments into Whistle Keeper without changing anything in the assignor itself.</p>
+              </HelpTip>
               <FeedSetupGuide compact />
               <div className="row">
                 <div className="field">
@@ -307,22 +333,19 @@ export default function OnboardingPage() {
             <div className="onboarding-action-list">
               <Link className="onboarding-action" to="/games">
                 <strong>Add a game manually</strong>
-                <span>Best for testing the workflow with one assignment.</span>
+                <span>Enter one assignment now, then fill in pay, mileage, teams, and status.</span>
               </Link>
               <Link className="onboarding-action" to="/import">
-                <strong>Import a CSV</strong>
-                <span>Bring over existing records from a spreadsheet.</span>
+                <strong>Import from a CSV</strong>
+                <span>Bring over existing games from your spreadsheet if you already track them elsewhere.</span>
               </Link>
+              {mode === 'supabase' ? <p className="small">Prefer not to type games in? Switch back to the iCal feed option above.</p> : null}
             </div>
           )}
         </div>
       </section>
 
-      <section className="onboarding-layout three">
-        <Link className="onboarding-action" to="/games">
-          <strong>Add your first assignment</strong>
-          <span>Confirm pay, mileage, teams, and platform status.</span>
-        </Link>
+      <section className="onboarding-layout">
         <Link className="onboarding-action" to="/requirements">
           <strong>Track requirements</strong>
           <span>Set up meetings, tests, training, and evidence.</span>
