@@ -13,7 +13,7 @@ export function getOnboardingSteps(db: DB): OnboardingStep[] {
   const hasSports = (db.settings.trackedSports ?? []).length > 0
   const hasPlatforms = db.settings.assigningPlatforms.length > 0
   const hasAssignmentRecords = db.games.length > 0 || db.csvImports.length > 0
-  const hasRequirements = db.requirementInstances.length > 0 || db.requirementDefinitions.length > 0
+  const hasRequirements = db.requirementInstances.length > 0 || db.requirementActivities.length > 0
   const hasTaxBasics = db.games.some((g) => g.gameFee != null || g.roundtripMiles != null) || db.expenses.length > 0
 
   return [

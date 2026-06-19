@@ -135,7 +135,7 @@ export default function DataPrivacyPage() {
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error || res.statusText))
-      resetDB()
+      resetDB(activeSession.user.id)
       await signOut()
       location.href = '/'
     } catch (e: any) {

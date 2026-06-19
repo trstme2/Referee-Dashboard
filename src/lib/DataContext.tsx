@@ -1,6 +1,6 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { DB, Settings } from './types'
-import { loadDB, saveDB } from './storage'
+import { createFreshDB, loadDB, saveDB } from './storage'
 import { supabase, supabaseConfigured } from './supabaseClient'
 import type { Session } from '@supabase/supabase-js'
 import { migrateLegacyGameStatus } from './gameStatus'
@@ -128,7 +128,7 @@ async function fetchAll(userId: string): Promise<DB> {
     return [k, data ?? []] as const
   }))
 
-  const out = loadDB()
+  const out = createFreshDB()
   const byKey = Object.fromEntries(results) as any
 
   const settingsRow = (byKey.userSettings ?? [])[0]
@@ -143,6 +143,12 @@ async function fetchAll(userId: string): Promise<DB> {
   out.csvImports = (byKey.csvImports ?? []).map(rowToCsvImport)
   out.csvImportRows = (byKey.csvImportRows ?? []).map(rowToCsvImportRow)
   return out
+}
+
+function loadDbForScope(mode: DataMode, userId: string | null): DB {
+  if (mode !== 'supabase') return loadDB()
+  if (!userId) return createFreshDB()
+  return loadDB(userId)
 }
 
 async function replaceAll(userId: string, db: DB): Promise<void> {
@@ -343,7 +349,8 @@ async function syncIncremental(userId: string, prev: DB, next: DB): Promise<void
 }
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const [db, setDb] = useState<DB>(() => loadDB())
+  const initialMode: DataMode = supabaseConfigured ? 'supabase' : 'local'
+  const [db, setDb] = useState<DB>(() => loadDbForScope(initialMode, null))
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(!supabaseConfigured)
   const [loading, setLoading] = useState(false)
@@ -351,11 +358,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const mode: DataMode = supabaseConfigured ? 'supabase' : 'local'
   const userId = session?.user?.id ?? null
-  const settingsRef = useRef(db.settings)
-
-  useEffect(() => {
-    settingsRef.current = db.settings
-  }, [db.settings])
 
   useEffect(() => {
     if (!supabase) {
@@ -375,16 +377,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return () => { sub.subscription.unsubscribe() }
   }, [])
 
+  useEffect(() => {
+    let active = true
+    queueMicrotask(() => {
+      if (!active) return
+      setDb(loadDbForScope(mode, userId))
+      if (!userId) setError(null)
+    })
+    return () => {
+      active = false
+    }
+  }, [mode, userId])
+
   const refresh = useCallback(async () => {
     setError(null)
     if (mode !== 'supabase') return
     if (!userId) return
     setLoading(true)
     try {
-      await ensureUserSettingsRow(userId, settingsRef.current)
+      await ensureUserSettingsRow(userId, createFreshDB().settings)
       const remote = await fetchAll(userId)
       setDb(remote)
-      saveDB(remote)
+      saveDB(remote, userId)
     } catch (e: any) {
       setError(String(e?.message ?? e))
     } finally {
@@ -421,7 +435,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await syncIncremental(userId, db, next)
       }
       setDb(next)
-      saveDB(next)
+      saveDB(next, userId)
     } catch (e: any) {
       setError(String(e?.message ?? e))
       throw e
@@ -449,7 +463,7 @@ function rowToSettings(r: any): Settings {
     taxMileageRateCents: Number(r.tax_mileage_rate_cents ?? 72.5),
     weeklyGamesEmailEnabled: Boolean(r.weekly_games_email_enabled ?? false),
     onboardingCompletedAt: r.onboarding_completed_at ?? undefined,
-    trackedSports: Array.isArray(r.tracked_sports) ? r.tracked_sports : (r.tracked_sports ?? ['Soccer', 'Lacrosse']),
+    trackedSports: Array.isArray(r.tracked_sports) ? r.tracked_sports : [],
     showGamePlatformChips: r.show_game_platform_chips !== false,
     assigningPlatforms: Array.isArray(r.assigning_platforms) ? r.assigning_platforms : (r.assigning_platforms ?? []),
     leagues: Array.isArray(r.leagues) ? r.leagues : (r.leagues ?? []),
@@ -609,7 +623,7 @@ function settingsToRow(s: Settings, userId: string) {
     tax_mileage_rate_cents: s.taxMileageRateCents ?? 72.5,
     weekly_games_email_enabled: Boolean(s.weeklyGamesEmailEnabled),
     onboarding_completed_at: s.onboardingCompletedAt || null,
-    tracked_sports: s.trackedSports?.length ? s.trackedSports : ['Soccer', 'Lacrosse'],
+    tracked_sports: Array.isArray(s.trackedSports) ? s.trackedSports : [],
     show_game_platform_chips: s.showGamePlatformChips !== false,
     assigning_platforms: s.assigningPlatforms,
     leagues: s.leagues,
