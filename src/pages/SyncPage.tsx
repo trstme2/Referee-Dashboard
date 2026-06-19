@@ -317,7 +317,7 @@ export default function SyncPage() {
   }
 
   return (
-    <div className="grid cols2">
+    <div className="grid cols2 sync-page">
       <section className="card">
         <h2>Assignment Feeds</h2>
         <p className="sub">
@@ -337,7 +337,53 @@ export default function SyncPage() {
           <button className="btn" onClick={loadFeeds} disabled={loading}>Refresh feeds</button>
         </div>
 
-        <table className="table">
+        <div className="sync-feed-card-list">
+          {feeds.map(f => {
+            const health = feedHealth(f)
+            return (
+              <article key={f.id} className="sync-feed-card">
+                <div className="sync-feed-card-head">
+                  <div>
+                    <strong>{f.name}</strong>
+                    <span>{f.platform} | {f.sport || 'Any sport'}{f.defaultLeague ? ` | ${f.defaultLeague}` : ''}</span>
+                  </div>
+                  <span className={`pill ${health.cls}`}>{health.label}</span>
+                </div>
+                <div className="sync-feed-card-grid">
+                  <div>
+                    <span>Feed URL</span>
+                    <strong>{f.maskedFeedUrl || '(hidden)'}</strong>
+                  </div>
+                  <div>
+                    <span>Enabled</span>
+                    <strong>{f.enabled ? 'Yes' : 'No'}</strong>
+                  </div>
+                  <div>
+                    <span>Last synced</span>
+                    <strong>{f.lastSyncedAt ? new Date(f.lastSyncedAt).toLocaleString() : 'Never'}</strong>
+                  </div>
+                  <div>
+                    <span>Import start</span>
+                    <strong>{f.importStartDate || 'Any date'}</strong>
+                  </div>
+                </div>
+                <div className="btnbar sync-feed-card-actions">
+                  <button className="btn compact" onClick={() => editFeed(f)}>Edit</button>
+                  <button className="btn compact" onClick={() => syncNow(f.id)} disabled={syncing}>Sync Now</button>
+                  <button className="btn compact danger" onClick={() => deleteFeed(f.id)}>Delete</button>
+                </div>
+              </article>
+            )
+          })}
+          {feeds.length === 0 && (
+            <div className="empty-state centered">
+              <h3>No feeds configured</h3>
+              <p>Add your first assigning-platform calendar feed to start syncing assignments.</p>
+            </div>
+          )}
+        </div>
+
+        <table className="table sync-feed-table">
           <thead>
             <tr>
               <th>Name</th><th>Platform</th><th>Feed URL</th><th>Enabled</th><th>Sync health</th><th>Last synced</th><th></th>
@@ -442,33 +488,69 @@ export default function SyncPage() {
           </div>
           {syncHistoryNote ? <p className="small"><span className="pill warn">{syncHistoryNote}</span></p> : null}
           {syncHistory.length ? (
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Started</th><th>Feed</th><th>Type</th><th>Status</th><th>Changes</th><th>Duration</th><th>Errors</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {syncHistory.map((run) => (
-                    <tr key={run.id}>
-                      <td className="small">{new Date(run.startedAt).toLocaleString()}</td>
-                      <td>
-                        <div>{run.feedName}</div>
-                        <div className="small">{run.platform}</div>
-                      </td>
-                      <td className="small">{run.trigger}</td>
-                      <td><span className={`pill ${run.status === 'success' ? 'ok' : run.status === 'partial' ? 'warn' : 'bad'}`}>{run.status}</span></td>
-                      <td className="small">
-                        Games +{run.createdGames}/{run.updatedGames} | Events +{run.createdEvents}/{run.updatedEvents}
-                      </td>
-                      <td className="small">{formatDuration(run.durationMs)}{run.attempts ? ` | ${run.attempts} attempt${run.attempts === 1 ? '' : 's'}` : ''}</td>
-                      <td className="small">{run.errors?.length ? run.errors.slice(0, 2).join(' | ') : 'None'}</td>
+            <>
+              <div className="sync-history-card-list">
+                {syncHistory.map((run) => (
+                  <article key={run.id} className="sync-history-mobile-card">
+                    <div className="sync-feed-card-head">
+                      <div>
+                        <strong>{run.feedName}</strong>
+                        <span>{run.platform} | {new Date(run.startedAt).toLocaleString()}</span>
+                      </div>
+                      <span className={`pill ${run.status === 'success' ? 'ok' : run.status === 'partial' ? 'warn' : 'bad'}`}>{run.status}</span>
+                    </div>
+                    <div className="sync-feed-card-grid">
+                      <div>
+                        <span>Trigger</span>
+                        <strong>{run.trigger}</strong>
+                      </div>
+                      <div>
+                        <span>Games</span>
+                        <strong>+{run.createdGames}/{run.updatedGames}</strong>
+                      </div>
+                      <div>
+                        <span>Events</span>
+                        <strong>+{run.createdEvents}/{run.updatedEvents}</strong>
+                      </div>
+                      <div>
+                        <span>Duration</span>
+                        <strong>{formatDuration(run.durationMs)}{run.attempts ? ` | ${run.attempts} attempt${run.attempts === 1 ? '' : 's'}` : ''}</strong>
+                      </div>
+                    </div>
+                    {run.errors?.length ? (
+                      <p className="small"><span className="pill bad">{run.errors.slice(0, 2).join(' | ')}</span></p>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+              <div className="table-wrap sync-history-table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Started</th><th>Feed</th><th>Type</th><th>Status</th><th>Changes</th><th>Duration</th><th>Errors</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {syncHistory.map((run) => (
+                      <tr key={run.id}>
+                        <td className="small">{new Date(run.startedAt).toLocaleString()}</td>
+                        <td>
+                          <div>{run.feedName}</div>
+                          <div className="small">{run.platform}</div>
+                        </td>
+                        <td className="small">{run.trigger}</td>
+                        <td><span className={`pill ${run.status === 'success' ? 'ok' : run.status === 'partial' ? 'warn' : 'bad'}`}>{run.status}</span></td>
+                        <td className="small">
+                          Games +{run.createdGames}/{run.updatedGames} | Events +{run.createdEvents}/{run.updatedEvents}
+                        </td>
+                        <td className="small">{formatDuration(run.durationMs)}{run.attempts ? ` | ${run.attempts} attempt${run.attempts === 1 ? '' : 's'}` : ''}</td>
+                        <td className="small">{run.errors?.length ? run.errors.slice(0, 2).join(' | ') : 'None'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : (
             <div className="empty-state centered">
               <h3>No sync history yet</h3>

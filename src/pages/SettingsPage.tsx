@@ -184,13 +184,13 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="grid">
-      <section className="card">
+    <div className="grid settings-page">
+      <section className="card settings-shell-card">
         <h2>Settings</h2>
         <p className="sub">Set your defaults once so new records are faster and more consistent.</p>
 
-        <div className="row">
-          <div className="card" style={{flex:1}}>
+        <div className="settings-layout">
+          <section className="settings-panel">
             <h2>Preferences</h2>
 
             <div className="field">
@@ -267,7 +267,7 @@ export default function SettingsPage() {
             </div>
 
             {mode === 'supabase' && session ? (
-              <div className="card" style={{ marginTop: 16 }}>
+              <section className="settings-panel settings-calendar-panel">
                 <h2>Calendar Export</h2>
                 <div className="field">
                   <label>Subscription URL</label>
@@ -290,19 +290,19 @@ export default function SettingsPage() {
                 </div>
                 {calendarFeedError ? <p className="small"><span className="pill bad">{calendarFeedError}</span></p> : null}
                 {calendarDownloadUrl ? <p className="small">Authenticated download endpoint: <code>{calendarDownloadUrl}</code></p> : null}
-              </div>
+              </section>
             ) : null}
 
             <div className="footer-note">
               Mileage lookup is available when the Maps integration has been configured.
             </div>
-          </div>
+          </section>
 
-          <div className="card" style={{flex:1}}>
+          <aside className="settings-panel settings-cache-panel">
             <h2>Local cache</h2>
             <p className="small">Wiping local cache will not delete cloud data.</p>
             <button className="btn danger" onClick={wipeLocal}>Wipe local cache</button>
-          </div>
+          </aside>
         </div>
 
         <div className="footer-note">

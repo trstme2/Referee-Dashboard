@@ -1915,6 +1915,75 @@ body {
   margin-top: 8px;
 }
 
+.sync-feed-card-list,
+.sync-history-card-list {
+  display: none;
+}
+
+.sync-feed-card,
+.sync-history-mobile-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.24);
+}
+
+.sync-feed-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.sync-feed-card-head strong {
+  display: block;
+  color: #f8fafc;
+  overflow-wrap: anywhere;
+}
+
+.sync-feed-card-head span:not(.pill) {
+  display: block;
+  margin-top: 3px;
+  color: #97a7bc;
+  font-size: 12px;
+}
+
+.sync-feed-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sync-feed-card-grid > div {
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.sync-feed-card-grid span {
+  display: block;
+  margin-bottom: 3px;
+  color: #97a7bc;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sync-feed-card-grid strong {
+  display: block;
+  color: #e5eefb;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.sync-feed-card-actions {
+  justify-content: flex-start;
+}
+
 .feed-setup-guide {
   display: grid;
   gap: 10px;
@@ -2013,6 +2082,54 @@ body {
 
   .app-route-shell {
     padding-bottom: calc(102px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .sync-page {
+    grid-template-columns: 1fr;
+  }
+
+  .sync-page > .card {
+    min-width: 0;
+  }
+
+  .sync-page > .card:first-child > .btnbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sync-page > .card:first-child > .btnbar .btn {
+    width: 100%;
+  }
+
+  .sync-feed-card-list,
+  .sync-history-card-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .sync-feed-table {
+    display: none;
+  }
+
+  .sync-history-table-wrap {
+    display: none;
+  }
+
+  .sync-feed-card-head {
+    display: grid;
+  }
+
+  .sync-feed-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sync-feed-card-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sync-feed-card-actions .btn {
+    width: 100%;
   }
 }
 
@@ -2618,6 +2735,53 @@ body {
   line-height: 1.45;
 }
 
+.tax-review-mobile-list,
+.tax-recon-mobile-list,
+.tax-category-mobile-list {
+  display: none;
+}
+
+.tax-mobile-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.24);
+}
+
+.tax-mobile-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tax-mobile-card-head strong,
+.tax-mobile-card.is-compact strong {
+  display: block;
+  color: #f8fafc;
+  overflow-wrap: anywhere;
+}
+
+.tax-mobile-card-head span:not(.pill),
+.tax-mobile-card p {
+  margin: 0;
+  color: #97a7bc;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.tax-mobile-card.is-compact {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.tax-mobile-card.is-compact span {
+  color: #f8fafc;
+  font-weight: 800;
+}
+
 .account-lifecycle-card {
   border-color: rgba(96, 165, 250, 0.2);
 }
@@ -2641,6 +2805,40 @@ body {
   color: #aebcd0;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.settings-page {
+  margin-top: 14px;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.34fr);
+  gap: 14px;
+  align-items: start;
+  margin-top: 14px;
+}
+
+.settings-panel {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.22);
+}
+
+.settings-panel h2 {
+  margin-top: 0;
+}
+
+.settings-calendar-panel {
+  margin-top: 16px;
+  border-color: rgba(96, 165, 250, 0.22);
+}
+
+.settings-cache-panel {
+  position: sticky;
+  top: 14px;
 }
 
 .data-privacy-page {
@@ -2861,6 +3059,56 @@ body {
 
   .requirement-evidence-actions {
     justify-content: flex-start;
+  }
+
+  .tax-page .kpi {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tax-review-mobile-list,
+  .tax-recon-mobile-list,
+  .tax-category-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .tax-review-table-wrap,
+  .tax-recon-table,
+  .tax-category-table {
+    display: none;
+  }
+
+  .tax-secondary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tax-mobile-card-head {
+    display: grid;
+  }
+
+  .tax-mobile-card.is-compact {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-panel {
+    padding: 12px;
+  }
+
+  .settings-cache-panel {
+    position: static;
+  }
+
+  .settings-panel .btnbar {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .settings-panel .btn {
+    width: 100%;
   }
 }
 

@@ -379,7 +379,27 @@ export default function TaxPage() {
           </div>
           <span className={`pill ${reviewFlags.length === 0 ? 'ok' : 'warn'}`}>{reviewFlags.length} review item{reviewFlags.length === 1 ? '' : 's'}</span>
         </div>
-        <div className="table-wrap">
+        <div className="tax-review-mobile-list">
+          {reviewFlags.map((flag) => (
+            <article key={flag.id} className="tax-mobile-card">
+              <div className="tax-mobile-card-head">
+                <div>
+                  <strong>{flag.label}</strong>
+                  <span>{flag.expenseDate} | {flag.expenseCategory}</span>
+                </div>
+                <span className="pill warn">{formatMoney(flag.expenseAmount)}</span>
+              </div>
+              <p>{flag.detail}</p>
+            </article>
+          ))}
+          {reviewFlags.length === 0 ? (
+            <div className="empty-state centered">
+              <h3>No computed review items</h3>
+              <p>No expense review prompts were found for the selected year.</p>
+            </div>
+          ) : null}
+        </div>
+        <div className="table-wrap tax-review-table-wrap">
           <table className="table">
             <thead>
               <tr>
@@ -409,11 +429,39 @@ export default function TaxPage() {
         </div>
       </section>
 
-      <section className="grid cols2">
+      <section className="grid cols2 tax-secondary-grid">
         <div className="card">
           <h2>1099 Reconciliation</h2>
           <p className="sub">Enter the 1099 amount you received from each payor to spot differences against your game records.</p>
-          <table className="table">
+          <div className="tax-recon-mobile-list">
+            {reconRows.map((r) => (
+              <article key={r.payor} className="tax-mobile-card">
+                <div className="tax-mobile-card-head">
+                  <div>
+                    <strong>{r.payor}</strong>
+                    <span>Whistle Keeper: {formatMoney(r.dashboardIncome)}</span>
+                  </div>
+                  <span className={`pill ${r.variance === 0 ? 'ok' : r.variance > 0 ? 'warn' : 'bad'}`}>{formatMoney(r.variance)}</span>
+                </div>
+                <div className="field">
+                  <label>1099 entered</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={entered1099ByPayor[r.payor] ?? ''}
+                    onChange={(e) => setEntered1099ByPayor({ ...entered1099ByPayor, [r.payor]: e.target.value })}
+                  />
+                </div>
+              </article>
+            ))}
+            {reconRows.length === 0 ? (
+              <div className="empty-state">
+                <h3>No income rows</h3>
+                <p>No income rows match the selected year and basis.</p>
+              </div>
+            ) : null}
+          </div>
+          <table className="table tax-recon-table">
             <thead>
               <tr>
                 <th>Payor</th><th>Whistle Keeper</th><th>1099 entered</th><th>Variance</th>
@@ -452,7 +500,21 @@ export default function TaxPage() {
         <div className="card">
           <h2>Expense Categories</h2>
           <p className="sub">Totals include expenses you marked for deductible review. Use the Expenses page to change that marker.</p>
-          <table className="table">
+          <div className="tax-category-mobile-list">
+            {expensesByCategory.map((r) => (
+              <article key={r.category} className="tax-mobile-card is-compact">
+                <strong>{r.category}</strong>
+                <span>{formatMoney(r.amount)}</span>
+              </article>
+            ))}
+            {expensesByCategory.length === 0 ? (
+              <div className="empty-state">
+                <h3>No category totals</h3>
+                <p>No deductible expenses are marked for the selected year.</p>
+              </div>
+            ) : null}
+          </div>
+          <table className="table tax-category-table">
             <thead>
               <tr>
                 <th>Category</th><th>Total</th>
