@@ -4,6 +4,7 @@ import { createFreshDB, loadDB, saveDB } from './storage'
 import { supabase, supabaseConfigured } from './supabaseClient'
 import type { Session } from '@supabase/supabase-js'
 import { migrateLegacyGameStatus } from './gameStatus'
+import { isMissingColumnError, upsertUserSettingsCompat } from './userSettingsCompat'
 
 type DataMode = 'local' | 'supabase'
 type WriteOptions = { forceFullReplace?: boolean }
@@ -32,53 +33,6 @@ export function useData() {
 
 function nowISO(){ return new Date().toISOString() }
 
-function isMissingColumnError(error: any, table: string, column: string): boolean {
-  const message = String(error?.message ?? error ?? '')
-  return message.includes(`Could not find the '${column}' column of '${table}'`) ||
-    message.includes(`column "${column}" of relation "${table}" does not exist`)
-}
-
-const userSettingsCompatColumns = [
-  'home_address_place_id',
-  'home_address_latitude',
-  'home_address_longitude',
-  'other_work_address',
-  'other_work_address_place_id',
-  'other_work_address_latitude',
-  'other_work_address_longitude',
-  'default_timezone',
-  'tax_mileage_rate_cents',
-  'weekly_games_email_enabled',
-  'tracked_sports',
-  'show_game_platform_chips',
-  'onboarding_completed_at',
-] as const
-
-function missingCompatColumn(error: any, table: string, columns: readonly string[]): string | null {
-  return columns.find((column) => isMissingColumnError(error, table, column)) ?? null
-}
-
-async function upsertUserSettingsCompat(client: any, payload: any, options?: { ignoreDuplicates?: boolean }) {
-  let nextPayload = { ...payload }
-  let result: any = null
-
-  for (let attempt = 0; attempt <= userSettingsCompatColumns.length; attempt += 1) {
-    result = await client
-      .from('user_settings')
-      .upsert([nextPayload], { onConflict: 'user_id', ...(options ?? {}) })
-
-    if (!result.error) return result
-
-    const missingColumn = missingCompatColumn(result.error, 'user_settings', userSettingsCompatColumns)
-    if (!missingColumn || !(missingColumn in nextPayload)) return result
-
-    const { [missingColumn]: _missing, ...rest } = nextPayload
-    nextPayload = rest
-  }
-
-  return result
-}
-
 async function insertGamesCompat(client: any, rows: any[]) {
   let result = await client.from('games').insert(rows)
   if (result.error && (
@@ -103,10 +57,32 @@ async function upsertGamesCompat(client: any, rows: any[]) {
   return result
 }
 
-async function ensureUserSettingsRow(userId: string, settings: Settings): Promise<void> {
+async function saveUserSettingsViaApi(accessToken: string, payload: any, options?: { ensureOnly?: boolean }) {
+  const response = await fetch('/api/platform?action=user-settings', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      settings: payload,
+      ensureOnly: Boolean(options?.ensureOnly),
+    }),
+  })
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(String(result?.error || response.statusText || 'Could not save user settings'))
+  }
+}
+
+async function ensureUserSettingsRow(userId: string, settings: Settings, accessToken?: string | null): Promise<void> {
+  const payload = settingsToRow(settings, userId)
+  if (accessToken) {
+    await saveUserSettingsViaApi(accessToken, payload, { ensureOnly: true })
+    return
+  }
   if (!supabase) throw new Error('Supabase not configured')
   const client = supabase
-  const payload = settingsToRow(settings, userId)
   const { error } = await upsertUserSettingsCompat(client, payload, { ignoreDuplicates: true })
   if (error) throw new Error(`Ensure user_settings: ${error.message}`)
 }
@@ -158,7 +134,7 @@ function loadDbForScope(mode: DataMode, userId: string | null): DB {
   return loadDB(userId)
 }
 
-async function replaceAll(userId: string, db: DB): Promise<void> {
+async function replaceAll(userId: string, db: DB, accessToken?: string | null): Promise<void> {
   if (!supabase) throw new Error('Supabase not configured')
   const client = supabase
 
@@ -182,8 +158,12 @@ async function replaceAll(userId: string, db: DB): Promise<void> {
   }
 
   const settingsPayload = settingsToRow(db.settings, userId)
-  const { error: sErr } = await upsertUserSettingsCompat(client, settingsPayload)
-  if (sErr) throw new Error(`Insert user_settings: ${sErr.message}`)
+  if (accessToken) {
+    await saveUserSettingsViaApi(accessToken, settingsPayload)
+  } else {
+    const { error: sErr } = await upsertUserSettingsCompat(client, settingsPayload)
+    if (sErr) throw new Error(`Insert user_settings: ${sErr.message}`)
+  }
 
   // Break circular FK between games.calendar_event_id and calendar_events.linked_game_id:
   // insert both tables with link columns null, then backfill links once both sides exist.
@@ -258,7 +238,7 @@ function diffById<T extends { id: string }>(prev: T[], next: T[]): { upserts: T[
   return { upserts, deletes }
 }
 
-async function syncIncremental(userId: string, prev: DB, next: DB): Promise<void> {
+async function syncIncremental(userId: string, prev: DB, next: DB, accessToken?: string | null): Promise<void> {
   if (!supabase) throw new Error('Supabase not configured')
   const client = supabase
 
@@ -276,8 +256,12 @@ async function syncIncremental(userId: string, prev: DB, next: DB): Promise<void
 
   if (!jsonEqual(prev.settings, next.settings)) {
     const settingsPayload = settingsToRow(next.settings, userId)
-    const { error } = await upsertUserSettingsCompat(client, settingsPayload)
-    if (error) throw new Error(`Upsert ${map.userSettings}: ${error.message}`)
+    if (accessToken) {
+      await saveUserSettingsViaApi(accessToken, settingsPayload)
+    } else {
+      const { error } = await upsertUserSettingsCompat(client, settingsPayload)
+      if (error) throw new Error(`Upsert ${map.userSettings}: ${error.message}`)
+    }
   }
 
   const gamesDiff = diffById(prev.games, next.games)
@@ -366,6 +350,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const mode: DataMode = supabaseConfigured ? 'supabase' : 'local'
   const userId = session?.user?.id ?? null
+  const accessToken = session?.access_token ?? null
 
   useEffect(() => {
     if (!supabase) {
@@ -404,7 +389,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!userId) return
     setLoading(true)
     try {
-      await ensureUserSettingsRow(userId, createFreshDB().settings)
+      await ensureUserSettingsRow(userId, createFreshDB().settings, accessToken)
       const remote = await fetchAll(userId)
       setDb(remote)
       saveDB(remote, userId)
@@ -413,7 +398,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [mode, userId])
+  }, [mode, userId, accessToken])
 
   useEffect(() => {
     if (mode !== 'supabase') {
@@ -437,14 +422,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [authReady, mode, refresh, userId])
 
   useEffect(() => {
-    if (mode !== 'supabase' || !session?.access_token) return
+    if (mode !== 'supabase' || !accessToken) return
     void fetch('/api/platform?action=me', {
       headers: {
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
     }).catch(() => undefined)
-  }, [mode, session?.access_token])
+  }, [mode, accessToken])
 
   const write = useCallback(async (next: DB, options?: WriteOptions) => {
     setError(null)
@@ -455,11 +440,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
     setLoading(true)
     try {
-      await ensureUserSettingsRow(userId, createFreshDB().settings)
+      await ensureUserSettingsRow(userId, createFreshDB().settings, accessToken)
       if (options?.forceFullReplace) {
-        await replaceAll(userId, next)
+        await replaceAll(userId, next, accessToken)
       } else {
-        await syncIncremental(userId, db, next)
+        await syncIncremental(userId, db, next, accessToken)
       }
       setDb(next)
       saveDB(next, userId)
@@ -469,7 +454,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [mode, userId, db])
+  }, [mode, userId, db, accessToken])
 
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut()

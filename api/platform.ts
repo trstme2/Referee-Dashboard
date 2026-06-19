@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { checkRateLimit, createAuthedSupabase, createServiceSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
 import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
 import { ensurePlatformProfile, isAdminRole, isMissingPlatformTableError, recordAppEvent, requireAdminProfile, sanitizeEventMetadata } from '../src/server/platform-auth.js'
+import { upsertUserSettingsCompat } from '../src/lib/userSettingsCompat.js'
 
 const allowedEventTypes = new Set([
   'account_exported',
@@ -64,6 +65,30 @@ function average(rows: any[], key: string) {
   const values = rows.map((row) => Number(row[key])).filter((value) => Number.isFinite(value))
   if (!values.length) return 0
   return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
+}
+
+function sanitizeUserSettingsPayload(payload: any, userId: string) {
+  if (!payload || typeof payload !== 'object') throw new Error('Settings payload is required')
+  return {
+    user_id: userId,
+    home_address: String(payload.home_address ?? '').trim(),
+    home_address_place_id: payload.home_address_place_id ? String(payload.home_address_place_id) : null,
+    home_address_latitude: payload.home_address_latitude == null ? null : Number(payload.home_address_latitude),
+    home_address_longitude: payload.home_address_longitude == null ? null : Number(payload.home_address_longitude),
+    other_work_address: payload.other_work_address ? String(payload.other_work_address).trim() : null,
+    other_work_address_place_id: payload.other_work_address_place_id ? String(payload.other_work_address_place_id) : null,
+    other_work_address_latitude: payload.other_work_address_latitude == null ? null : Number(payload.other_work_address_latitude),
+    other_work_address_longitude: payload.other_work_address_longitude == null ? null : Number(payload.other_work_address_longitude),
+    default_timezone: String(payload.default_timezone || 'America/New_York').trim() || 'America/New_York',
+    tax_mileage_rate_cents: payload.tax_mileage_rate_cents == null ? null : Number(payload.tax_mileage_rate_cents),
+    weekly_games_email_enabled: Boolean(payload.weekly_games_email_enabled),
+    onboarding_completed_at: payload.onboarding_completed_at ? String(payload.onboarding_completed_at) : null,
+    tracked_sports: Array.isArray(payload.tracked_sports) ? payload.tracked_sports.map((value: unknown) => String(value)).filter(Boolean) : [],
+    show_game_platform_chips: payload.show_game_platform_chips !== false,
+    assigning_platforms: Array.isArray(payload.assigning_platforms) ? payload.assigning_platforms.map((value: unknown) => String(value)).filter(Boolean) : [],
+    leagues: Array.isArray(payload.leagues) ? payload.leagues.map((value: unknown) => String(value)).filter(Boolean) : [],
+    updated_at: payload.updated_at ? String(payload.updated_at) : new Date().toISOString(),
+  }
 }
 
 async function loadAdminMetrics(serviceClient: any) {
@@ -243,6 +268,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const metrics = await loadAdminMetrics(serviceClient)
       logApiDone(route, requestStartedAtMs, { status: 200, action: 'metrics' })
       return res.status(200).json({ profile, metrics })
+    }
+
+    if (req.method === 'POST' && action === 'user-settings') {
+      const body = toJsonBody(req)
+      const payload = sanitizeUserSettingsPayload(body.settings, authData.user.id)
+      const { error } = await upsertUserSettingsCompat(serviceClient, payload, body.ensureOnly ? { ignoreDuplicates: true } : undefined)
+      if (error) throw new Error(`user_settings: ${error.message}`)
+      logApiDone(route, requestStartedAtMs, { status: 200, action: 'user-settings' })
+      return res.status(200).json({ ok: true })
     }
 
     if (req.method === 'POST' && action === 'event') {
