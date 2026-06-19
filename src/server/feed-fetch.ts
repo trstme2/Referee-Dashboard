@@ -59,7 +59,10 @@ export function validateFeedUrl(raw: unknown): string {
   if (!value) throw new Error('feedUrl is required')
   if (value.length > 2048) throw new Error('feedUrl is too long')
 
-  const url = new URL(value)
+  const normalized = value.toLowerCase().startsWith('webcal://')
+    ? `https://${value.slice('webcal://'.length)}`
+    : value
+  const url = new URL(normalized)
   if (url.protocol !== 'https:') {
     if (url.protocol === 'http:' && process.env.ALLOW_INSECURE_FEED_URLS === 'true') return url.toString()
     throw new Error('feedUrl must use https')

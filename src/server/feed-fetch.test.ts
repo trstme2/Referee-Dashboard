@@ -6,6 +6,10 @@ describe('calendar feed fetch hardening', () => {
     expect(() => validateFeedUrl('http://example.com/calendar.ics')).toThrow(/https/i)
   })
 
+  it('accepts webcal feed URLs by normalizing them to https', () => {
+    expect(validateFeedUrl('webcal://example.com/calendar.ics')).toBe('https://example.com/calendar.ics')
+  })
+
   it('blocks loopback feed hosts before fetching', async () => {
     const fetchImpl = vi.fn()
 

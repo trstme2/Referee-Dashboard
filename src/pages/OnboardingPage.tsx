@@ -1,24 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import FeedSetupGuide from '../components/FeedSetupGuide'
+import CalendarFeedSetupForm, { type CalendarFeedSetupSubmitValue, type CalendarFeedSetupValue } from '../components/CalendarFeedSetupForm'
 import HelpTip from '../components/HelpTip'
 import { useData } from '../lib/DataContext'
+import { assigningPlatformConfidenceLabel, getAssigningPlatformGuide } from '../lib/assigningPlatformGuides'
 import { getOnboardingProgress } from '../lib/onboarding'
 import { trackedSportsFor } from '../lib/preferences'
 import { recordPlatformEvent } from '../lib/platformEvents'
 import { resolveVerifiedProfileAddresses } from '../lib/profileAddressValidation'
-import type { CalendarFeed, FeedPlatform, Sport } from '../lib/types'
-
-const platformSuggestions = [
-  'DragonFly',
-  'RefQuest',
-  'Arbiter',
-  'Assignr',
-  'HorizonWebRef',
-  'Stack Officials',
-  'GameOfficials',
-  'ZebraWeb',
-]
+import type { CalendarFeed } from '../lib/types'
 
 function parseList(value: string): string[] {
   return value.split(',').map((x) => x.trim()).filter(Boolean)
@@ -26,6 +16,17 @@ function parseList(value: string): string[] {
 
 function listString(values: string[]): string {
   return values.join(', ')
+}
+
+function createInitialFeedForm(): CalendarFeedSetupValue {
+  return {
+    guideId: 'dragonfly',
+    platform: 'DragonFly',
+    otherPlatformName: '',
+    name: 'DragonFly assignments',
+    feedUrl: '',
+    sport: '',
+  }
 }
 
 function stepStatusLabel(kind: 'required' | 'recommended' | 'optional', complete: boolean): string {
@@ -50,10 +51,7 @@ export default function OnboardingPage() {
   const [platforms, setPlatforms] = useState(listString(db.settings.assigningPlatforms))
   const [leagues, setLeagues] = useState(listString(db.settings.leagues))
   const [feeds, setFeeds] = useState<CalendarFeed[]>([])
-  const [feedPlatform, setFeedPlatform] = useState<FeedPlatform>('DragonFly')
-  const [feedName, setFeedName] = useState('')
-  const [feedUrl, setFeedUrl] = useState('')
-  const [feedSport, setFeedSport] = useState<'' | Sport>('')
+  const [feedForm, setFeedForm] = useState<CalendarFeedSetupValue>(() => createInitialFeedForm())
   const [feedSaving, setFeedSaving] = useState(false)
   const [assignmentPath, setAssignmentPath] = useState<'feed' | 'manual' | null>(null)
   const [defaultsSaving, setDefaultsSaving] = useState(false)
@@ -160,7 +158,27 @@ export default function OnboardingPage() {
     }
   }
 
-  async function addFeed() {
+  function switchAssignmentPath(nextPath: 'feed' | 'manual' | null) {
+    const baseline = createInitialFeedForm()
+    const hasDraft = Boolean(
+      feedForm.feedUrl.trim() ||
+      feedForm.otherPlatformName.trim() ||
+      feedForm.sport ||
+      feedForm.name.trim() !== baseline.name
+    )
+    if (assignmentPath === 'feed' && nextPath !== 'feed' && hasDraft) {
+      void recordPlatformEvent(session?.access_token, 'calendar_feed_add_cancelled', {
+        source: 'onboarding',
+        platformId: feedForm.guideId,
+        usedOther: feedForm.guideId === 'other',
+      })
+    }
+    setFeedMessage(null)
+    setFeedError(null)
+    setAssignmentPath(nextPath)
+  }
+
+  async function addFeed(submitted: CalendarFeedSetupSubmitValue) {
     setFeedError(null)
     setFeedMessage(null)
     setFeedSaving(true)
@@ -168,21 +186,35 @@ export default function OnboardingPage() {
       await feedApi('/api/calendar-feeds', {
         method: 'POST',
         body: JSON.stringify({
-          platform: feedPlatform,
-          name: feedName.trim() || String(feedPlatform),
-          feedUrl: feedUrl.trim(),
+          platform: submitted.resolvedPlatform,
+          name: submitted.name.trim(),
+          feedUrl: submitted.normalizedFeedUrl,
           enabled: true,
-          sport: feedSport || null,
+          sport: submitted.sport || null,
         }),
       })
-      setFeedName('')
-      setFeedUrl('')
-      setFeedSport('')
+      if (!db.settings.assigningPlatforms.some((platform) => platform.toLowerCase() === submitted.resolvedPlatform.toLowerCase())) {
+        await write({
+          ...db,
+          settings: {
+            ...db.settings,
+            assigningPlatforms: [...db.settings.assigningPlatforms, submitted.resolvedPlatform].sort((a, b) => a.localeCompare(b)),
+          },
+        })
+      }
+      setFeedForm(createInitialFeedForm())
       await loadFeeds()
       void recordPlatformEvent(session?.access_token, 'feed_created', {
-        platform: feedPlatform,
-        sport: feedSport || 'unspecified',
+        platform: submitted.resolvedPlatform,
+        sport: submitted.sport || 'unspecified',
         source: 'onboarding',
+      })
+      void recordPlatformEvent(session?.access_token, 'calendar_feed_added', {
+        source: 'onboarding',
+        platformId: submitted.guideId,
+        confidenceLabel: assigningPlatformConfidenceLabel(getAssigningPlatformGuide(submitted.guideId).confidence),
+        urlScheme: submitted.urlScheme ?? 'unknown',
+        usedOther: submitted.guideId === 'other',
       })
       setFeedMessage('Assignment feed added.')
     } catch (e: any) {
@@ -314,7 +346,7 @@ export default function OnboardingPage() {
               <button
                 type="button"
                 className={`onboarding-choice-card${assignmentPath === 'feed' ? ' selected' : ''}`}
-                onClick={() => setAssignmentPath('feed')}
+                onClick={() => switchAssignmentPath('feed')}
               >
                 <strong>Connect an iCal feed</strong>
                 <span>Best when DragonFly, RefQuest, Arbiter, or another assignor already has your schedule.</span>
@@ -323,7 +355,7 @@ export default function OnboardingPage() {
             <button
               type="button"
               className={`onboarding-choice-card${assignmentPath === 'manual' ? ' selected' : ''}`}
-              onClick={() => setAssignmentPath('manual')}
+              onClick={() => switchAssignmentPath('manual')}
             >
               <strong>Add games yourself</strong>
               <span>Best for trying one assignment now or importing from your own spreadsheet.</span>
@@ -340,54 +372,26 @@ export default function OnboardingPage() {
                   <p>Most assigning platforms provide iCal feeds as part of their application, and when the source calendar is updated, those changes can automatically sync to your calendar.</p>
                 </HelpTip>
               </div>
-              <HelpTip className="help-tip-inline" title="How to set up an iCal feed">
-                <p>Whistle Keeper ingests iCal feeds from your assignor. Most assigning platforms hide the calendar link inside profile, calendar, or export settings.</p>
-                <p>Common places to check: DragonFly calendar tools, RefQuest calendar export, Arbiter schedule export, and Assignr calendar sync settings.</p>
-                <p>Once you paste the feed URL here, sync pulls assignments into Whistle Keeper without changing anything in the assignor itself.</p>
-              </HelpTip>
-              <FeedSetupGuide compact />
-              <div className="row">
-                <div className="field">
-                  <label>Platform</label>
-                  <input list="onboarding-platforms" value={feedPlatform} onChange={(e) => setFeedPlatform(e.target.value as FeedPlatform)} />
-                  <datalist id="onboarding-platforms">
-                    {platformSuggestions.map((platform) => <option key={platform} value={platform} />)}
-                  </datalist>
-                </div>
-                <div className="field">
-                  <label>Sport</label>
-                  <select value={feedSport} onChange={(e) => setFeedSport(e.target.value as '' | Sport)}>
-                    <option value="">Auto-detect</option>
-                    {sportOptions.map((sport) => <option key={sport} value={sport}>{sport}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="field">
-                <label>Feed name</label>
-                <input value={feedName} onChange={(e) => setFeedName(e.target.value)} placeholder="DragonFly soccer" />
-              </div>
-              <div className="field">
-                <label>iCal feed URL</label>
-                <input value={feedUrl} onChange={(e) => setFeedUrl(e.target.value)} placeholder="https://..." />
-              </div>
-              <div className="onboarding-guidance">
-                <HelpTip label="What comes through?" title="What to expect from calendar feeds">
-                  <p>Most calendar feeds do not include everything you care about. Pay, precise location, mileage, and some league details are often missing or inconsistent.</p>
-                  <p>Add the missing pieces in game Edit after the sync. When the next sync matches the same assignment, Whistle Keeper keeps your manual details and merges the new feed data around them.</p>
-                </HelpTip>
-              </div>
-              <div className="btnbar">
-              <button className="btn primary" onClick={addFeed} disabled={feedSaving || !feedUrl.trim()}>
-                  {feedSaving ? 'Adding...' : 'Add feed'}
-                </button>
-                <Link className="btn" to="/sync">Manage feeds</Link>
-              </div>
-              {(feedMessage || feedError) ? (
-                <div className="onboarding-status" aria-live="polite">
-                  {feedMessage ? <span className="pill ok">{feedMessage}</span> : null}
-                  {feedError ? <span className="pill bad">{feedError}</span> : null}
-                </div>
-              ) : null}
+              <CalendarFeedSetupForm
+                accessToken={session?.access_token}
+                mode="compact"
+                source="onboarding"
+                value={feedForm}
+                sportOptions={sportOptions}
+                submitting={feedSaving}
+                submitLabel="Add feed"
+                inlineMessage={feedMessage}
+                inlineError={feedError}
+                onChange={setFeedForm}
+                onSubmit={addFeed}
+                footerLinks={(
+                  <HelpTip label="What comes through?" title="What to expect from calendar feeds">
+                    <p>Most calendar feeds do not include everything you care about. Pay, precise location, mileage, and some league details are often missing or inconsistent.</p>
+                    <p>Add the missing pieces in game Edit after the sync. When the next sync matches the same assignment, Whistle Keeper keeps your manual details and merges the new feed data around them.</p>
+                  </HelpTip>
+                )}
+                secondaryAction={<Link className="btn" to="/sync">Manage feeds</Link>}
+              />
               <div className="onboarding-feed-list">
                 {feeds.map((feed) => (
                   <div key={feed.id}>

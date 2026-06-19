@@ -1,38 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
-import FeedSetupGuide from '../components/FeedSetupGuide'
+import CalendarFeedSetupForm, { type CalendarFeedSetupSubmitValue, type CalendarFeedSetupValue } from '../components/CalendarFeedSetupForm'
 import HelpTip from '../components/HelpTip'
+import { assigningPlatformConfidenceLabel, assigningPlatformGuideIdForPlatformValue, getAssigningPlatformGuide } from '../lib/assigningPlatformGuides'
 import { useData } from '../lib/DataContext'
 import { recordPlatformEvent } from '../lib/platformEvents'
 import { trackedSportsFor } from '../lib/preferences'
-import type { CalendarFeed, CalendarFeedSyncRun, CalendarSyncJob, FeedPlatform, Sport, SyncIcsResult } from '../lib/types'
+import type { CalendarFeed, CalendarFeedSyncRun, CalendarSyncJob, Sport, SyncIcsResult } from '../lib/types'
 
-type FeedForm = {
+type FeedForm = CalendarFeedSetupValue & {
   id: string
-  platform: FeedPlatform
-  name: string
-  feedUrl: string
   enabled: boolean
-  sport: '' | Sport
   defaultLeague: string
   importStartDate: string
 }
 
-const platformSuggestions = [
-  'DragonFly',
-  'RefQuest',
-  'Arbiter',
-  'Assignr',
-  'HorizonWebRef',
-  'Stack Officials',
-  'GameOfficials',
-  'ZebraWeb',
-]
-
 function emptyForm(): FeedForm {
   return {
     id: '',
+    guideId: 'dragonfly',
     platform: 'DragonFly',
-    name: '',
+    otherPlatformName: '',
+    name: 'DragonFly assignments',
     feedUrl: '',
     enabled: true,
     sport: '',
@@ -55,6 +43,7 @@ export default function SyncPage() {
   const [syncHistoryNote, setSyncHistoryNote] = useState<string | null>(null)
   const [selectedCleanupKeys, setSelectedCleanupKeys] = useState<string[]>([])
   const [cleaning, setCleaning] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [healthNow, setHealthNow] = useState(Date.now)
 
@@ -172,9 +161,13 @@ export default function SyncPage() {
   }, [token])
 
   function editFeed(f: CalendarFeed) {
+    const guideId = assigningPlatformGuideIdForPlatformValue(f.platform)
+    setFormError(null)
     setForm({
       id: f.id,
+      guideId,
       platform: f.platform,
+      otherPlatformName: guideId === 'other' ? f.platform : '',
       name: f.name,
       feedUrl: '',
       enabled: Boolean(f.enabled),
@@ -184,14 +177,35 @@ export default function SyncPage() {
     })
   }
 
-  async function saveFeed() {
-    setErr(null)
+  function resetForm() {
+    const baseline = emptyForm()
+    const hasUnsavedDraft = Boolean(
+      form.id ||
+      form.feedUrl.trim() ||
+      form.otherPlatformName.trim() ||
+      form.sport ||
+      form.defaultLeague.trim() ||
+      form.importStartDate ||
+      form.enabled !== baseline.enabled ||
+      form.name.trim() !== baseline.name
+    )
+    if (hasUnsavedDraft && !saving) {
+      void recordPlatformEvent(session?.access_token, 'calendar_feed_add_cancelled', {
+        source: 'sync_page',
+        platformId: form.guideId,
+        usedOther: form.guideId === 'other',
+      })
+    }
+    setFormError(null)
+    setForm(emptyForm())
+  }
+
+  async function saveFeed(submitted: CalendarFeedSetupSubmitValue) {
+    setFormError(null)
     setSaving(true)
     try {
       const isNew = !form.id
-      if (!form.name.trim()) throw new Error('Name is required')
-      if (!form.id && !form.feedUrl.trim()) throw new Error('Feed URL is required')
-      const platform = form.platform.trim()
+      const platform = submitted.resolvedPlatform.trim()
       if (!platform) throw new Error('Platform is required')
 
       if (form.id) {
@@ -200,12 +214,12 @@ export default function SyncPage() {
           body: JSON.stringify({
             id: form.id,
             platform,
-            name: form.name.trim(),
-            feedUrl: form.feedUrl.trim() || undefined,
-            enabled: form.enabled,
-            sport: form.sport || null,
-            defaultLeague: form.defaultLeague.trim() || null,
-            importStartDate: form.importStartDate || null,
+            name: submitted.name.trim(),
+            feedUrl: submitted.normalizedFeedUrl || undefined,
+            enabled: submitted.enabled,
+            sport: submitted.sport || null,
+            defaultLeague: submitted.defaultLeague?.trim() || null,
+            importStartDate: submitted.importStartDate || null,
           }),
         })
       } else {
@@ -213,20 +227,27 @@ export default function SyncPage() {
           method: 'POST',
           body: JSON.stringify({
             platform,
-            name: form.name.trim(),
-            feedUrl: form.feedUrl.trim(),
-            enabled: form.enabled,
-            sport: form.sport || null,
-            defaultLeague: form.defaultLeague.trim() || null,
-            importStartDate: form.importStartDate || null,
+            name: submitted.name.trim(),
+            feedUrl: submitted.normalizedFeedUrl,
+            enabled: submitted.enabled,
+            sport: submitted.sport || null,
+            defaultLeague: submitted.defaultLeague?.trim() || null,
+            importStartDate: submitted.importStartDate || null,
           }),
         })
       }
       if (isNew) {
         void recordPlatformEvent(session?.access_token, 'feed_created', {
           platform,
-          sport: form.sport || 'unspecified',
+          sport: submitted.sport || 'unspecified',
           source: 'sync_page',
+        })
+        void recordPlatformEvent(session?.access_token, 'calendar_feed_added', {
+          source: 'sync_page',
+          platformId: submitted.guideId,
+          confidenceLabel: assigningPlatformConfidenceLabel(getAssigningPlatformGuide(submitted.guideId).confidence),
+          urlScheme: submitted.urlScheme ?? 'unknown',
+          usedOther: submitted.guideId === 'other',
         })
       }
       if (!db.settings.assigningPlatforms.some(p => p.toLowerCase() === platform.toLowerCase())) {
@@ -241,7 +262,7 @@ export default function SyncPage() {
       setForm(emptyForm())
       await loadFeeds()
     } catch (e: any) {
-      setErr(String(e?.message ?? e))
+      setFormError(String(e?.message ?? e))
     } finally {
       setSaving(false)
     }
@@ -699,75 +720,28 @@ export default function SyncPage() {
             <p>Add those details in the game editor after sync. When the same assignment syncs again, Whistle Keeper tries to preserve your manual fee, location, and mileage edits.</p>
           </HelpTip>
         </div>
-        <FeedSetupGuide />
-
-        <div className="field">
-          <label>Platform</label>
-          <input
-            list="platformSuggestions"
-            value={form.platform}
-            onChange={e => setForm({ ...form, platform: e.target.value as FeedPlatform })}
-            placeholder="DragonFly, RefQuest, Arbiter, Assignr..."
-          />
-          <datalist id="platformSuggestions">
-            {platformSuggestions.map((platform) => <option key={platform} value={platform} />)}
-          </datalist>
-          <div className="small">DragonFly and RefQuest keep their current feed limits. Other platforms can be added with any calendar feed name.</div>
-        </div>
-
-        <div className="field">
-          <label>Name</label>
-          <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g., RefQuest - Assignor A" />
-        </div>
-
-        <div className="field">
-          <label>{form.id ? 'Replace feed URL (optional)' : 'Feed URL'}</label>
-          <input
-            value={form.feedUrl}
-            onChange={e => setForm({ ...form, feedUrl: e.target.value })}
-            placeholder="https://.../calendar.ics"
-          />
-          <div className="small">If the feed does not include pay or location, that is normal. You can add those after sync in each game.</div>
-        </div>
-
-        <div className="row">
-          <div className="field">
-            <label>Sport (optional)</label>
-            <select value={form.sport} onChange={e => setForm({ ...form, sport: (e.target.value as '' | Sport) })}>
-              <option value="">Auto-detect</option>
-              {sportOptions.map((sport) => <option key={sport} value={sport}>{sport}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label>Default league (optional)</label>
-            <input value={form.defaultLeague} onChange={e => setForm({ ...form, defaultLeague: e.target.value })} />
-          </div>
-        </div>
-
-        <div className="field">
-          <label>Import events on/after (optional)</label>
-          <input
-            type="date"
-            value={form.importStartDate}
-            onChange={e => setForm({ ...form, importStartDate: e.target.value })}
-          />
-          <div className="small">Only assignments on or after this date will be imported from this feed.</div>
-        </div>
-
-        <div className="field">
-          <label>Enabled</label>
-          <select value={form.enabled ? 'Yes' : 'No'} onChange={e => setForm({ ...form, enabled: e.target.value === 'Yes' })}>
-            <option>Yes</option>
-            <option>No</option>
-          </select>
-        </div>
-
-        <div className="btnbar">
-          <button className="btn primary" onClick={saveFeed} disabled={saving}>
-            {saving ? 'Saving...' : (form.id ? 'Update feed' : 'Add feed')}
-          </button>
-          <button className="btn" onClick={() => setForm(emptyForm())} disabled={saving}>New</button>
-        </div>
+        <CalendarFeedSetupForm
+          accessToken={session?.access_token}
+          mode="full"
+          source="sync_page"
+          value={form}
+          sportOptions={sportOptions}
+          submitting={saving}
+          submitLabel={form.id ? 'Update feed' : 'Add feed'}
+          feedUrlOptional={Boolean(form.id)}
+          showAdvancedFields
+          inlineError={formError}
+          onChange={(next) => setForm((current) => ({
+            ...current,
+            ...next,
+            id: current.id,
+            enabled: next.enabled ?? current.enabled,
+            defaultLeague: next.defaultLeague ?? '',
+            importStartDate: next.importStartDate ?? '',
+          }))}
+          onSubmit={saveFeed}
+          secondaryAction={<button className="btn" onClick={resetForm} disabled={saving}>New</button>}
+        />
       </section>
     </div>
   )
