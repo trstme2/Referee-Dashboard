@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import FeedSetupGuide from '../components/FeedSetupGuide'
 import HelpTip from '../components/HelpTip'
@@ -43,6 +43,7 @@ export default function OnboardingPage() {
   const { db, write, loading, mode, session, refresh } = useData()
   const navigate = useNavigate()
   const progress = useMemo(() => getOnboardingProgress(db), [db])
+  const profilePanelRef = useRef<HTMLDivElement | null>(null)
   const [homeAddress, setHomeAddress] = useState(db.settings.homeAddress)
   const [timezone, setTimezone] = useState(db.settings.defaultTimezone || 'America/New_York')
   const [weeklyEmail, setWeeklyEmail] = useState(Boolean(db.settings.weeklyGamesEmailEnabled))
@@ -57,8 +58,10 @@ export default function OnboardingPage() {
   const [feedSaving, setFeedSaving] = useState(false)
   const [assignmentPath, setAssignmentPath] = useState<'feed' | 'manual' | null>(null)
   const [defaultsSaving, setDefaultsSaving] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [profileMessage, setProfileMessage] = useState<string | null>(null)
+  const [profileError, setProfileError] = useState<string | null>(null)
+  const [feedMessage, setFeedMessage] = useState<string | null>(null)
+  const [feedError, setFeedError] = useState<string | null>(null)
 
   const token = session?.access_token ?? null
   const sportOptions = useMemo(() => trackedSportsFor(parseList(trackedSports)), [trackedSports])
@@ -95,8 +98,8 @@ export default function OnboardingPage() {
   }, [mode, token])
 
   async function saveDefaults(options?: { complete?: boolean }) {
-    setError(null)
-    setMessage(null)
+    setProfileError(null)
+    setProfileMessage(null)
     setDefaultsSaving(true)
     try {
       const now = new Date().toISOString()
@@ -119,7 +122,7 @@ export default function OnboardingPage() {
         },
       }
       await write(next)
-      setMessage(options?.complete ? 'Setup marked complete. Mileage origin verified.' : 'Defaults saved. Mileage origin verified.')
+      setProfileMessage(options?.complete ? 'Setup marked complete. Mileage origin verified.' : 'Defaults saved. Mileage origin verified.')
       if (options?.complete) {
         void recordPlatformEvent(session?.access_token, 'onboarding_completed', {
           trackedSports: sportOptions.length,
@@ -130,15 +133,16 @@ export default function OnboardingPage() {
       }
       if (options?.complete) navigate('/')
     } catch (e: any) {
-      setError(String(e?.message ?? e))
+      setProfileError(String(e?.message ?? e))
+      profilePanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     } finally {
       setDefaultsSaving(false)
     }
   }
 
   async function addFeed() {
-    setError(null)
-    setMessage(null)
+    setFeedError(null)
+    setFeedMessage(null)
     setFeedSaving(true)
     try {
       await feedApi('/api/calendar-feeds', {
@@ -160,9 +164,9 @@ export default function OnboardingPage() {
         sport: feedSport || 'unspecified',
         source: 'onboarding',
       })
-      setMessage('Assignment feed added.')
+      setFeedMessage('Assignment feed added.')
     } catch (e: any) {
-      setError(String(e?.message ?? e))
+      setFeedError(String(e?.message ?? e))
     } finally {
       setFeedSaving(false)
     }
@@ -172,7 +176,8 @@ export default function OnboardingPage() {
     try {
       await saveDefaults({ complete: true })
     } catch (e: any) {
-      setError(String(e?.message ?? e))
+      setProfileError(String(e?.message ?? e))
+      profilePanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
   }
 
@@ -213,7 +218,7 @@ export default function OnboardingPage() {
       </section>
 
       <section className="onboarding-layout">
-        <div className="onboarding-panel">
+        <div ref={profilePanelRef} className="onboarding-panel">
           <div className="onboarding-panel-head">
             <span className="pill ok">1</span>
             <div>
@@ -267,6 +272,12 @@ export default function OnboardingPage() {
               ? <span className="small">Profile saved. You can head to the dashboard now and come back here any time.</span>
               : <span className="small">Save a verified home address so mileage and directions work correctly.</span>}
           </div>
+          {(profileMessage || profileError) ? (
+            <div className="onboarding-status" aria-live="polite">
+              {profileMessage ? <span className="pill ok">{profileMessage}</span> : null}
+              {profileError ? <span className="pill bad">{profileError}</span> : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="onboarding-panel">
@@ -351,6 +362,12 @@ export default function OnboardingPage() {
                 </button>
                 <Link className="btn" to="/sync">Manage feeds</Link>
               </div>
+              {(feedMessage || feedError) ? (
+                <div className="onboarding-status" aria-live="polite">
+                  {feedMessage ? <span className="pill ok">{feedMessage}</span> : null}
+                  {feedError ? <span className="pill bad">{feedError}</span> : null}
+                </div>
+              ) : null}
               <div className="onboarding-feed-list">
                 {feeds.map((feed) => (
                   <div key={feed.id}>
@@ -398,13 +415,6 @@ export default function OnboardingPage() {
           <span>Check income, mileage, expenses, and exports.</span>
         </Link>
       </section>
-
-      {(message || error) && (
-        <section className="onboarding-status">
-          {message ? <span className="pill ok">{message}</span> : null}
-          {error ? <span className="pill bad">{error}</span> : null}
-        </section>
-      )}
 
       <section className="onboarding-finish">
         <div>
