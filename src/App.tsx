@@ -24,15 +24,15 @@ import { errorMetadata, recordPlatformEvent, safeRoutePath } from './lib/platfor
 import logo from './assets/logo.png'
 
 export default function App() {
-  const { mode, session, authReady, error, db, loading } = useData()
+  const { mode, session, authReady, hydrating, error, db, loading } = useData()
   const requireAuth = mode === 'supabase'
   const location = useLocation()
   const authMissing = requireAuth && authReady && !session
-  const authRestoring = requireAuth && !authReady
+  const authRestoring = requireAuth && (!authReady || hydrating)
   const showLanding = authMissing && location.pathname === '/'
   const isAuthRoute = location.pathname === '/auth' || location.pathname === '/auth/callback'
   const showAppShell = !showLanding && !isAuthRoute
-  const onboardingRequired = !loading && authReady && Boolean(session) && shouldStartOnboarding(db)
+  const onboardingRequired = !hydrating && !loading && authReady && Boolean(session) && shouldStartOnboarding(db)
   const routeMeta = routeMetaForPath(location.pathname)
 
   useEffect(() => {

@@ -12,6 +12,7 @@ type DataContextValue = {
   mode: DataMode
   session: Session | null
   authReady: boolean
+  hydrating: boolean
   db: DB
   loading: boolean
   error: string | null
@@ -359,6 +360,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [db, setDb] = useState<DB>(() => loadDbForScope(initialMode, null))
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(!supabaseConfigured)
+  const [hydrating, setHydrating] = useState(supabaseConfigured)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -389,6 +391,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (!active) return
       setDb(loadDbForScope(mode, userId))
       if (!userId) setError(null)
+      if (mode !== 'supabase' || !userId) setHydrating(false)
     })
     return () => {
       active = false
@@ -413,8 +416,25 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [mode, userId])
 
   useEffect(() => {
-    refresh()
-  }, [refresh])
+    if (mode !== 'supabase') {
+      setHydrating(false)
+      return
+    }
+    if (!authReady) return
+    if (!userId) {
+      setHydrating(false)
+      return
+    }
+
+    let active = true
+    setHydrating(true)
+    void refresh().finally(() => {
+      if (active) setHydrating(false)
+    })
+    return () => {
+      active = false
+    }
+  }, [authReady, mode, refresh, userId])
 
   useEffect(() => {
     if (mode !== 'supabase' || !session?.access_token) return
@@ -455,8 +475,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ mode, session, authReady, db, loading, error, refresh, write, signOut }),
-    [mode, session, authReady, db, loading, error, refresh, write, signOut]
+    () => ({ mode, session, authReady, hydrating, db, loading, error, refresh, write, signOut }),
+    [mode, session, authReady, hydrating, db, loading, error, refresh, write, signOut]
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
