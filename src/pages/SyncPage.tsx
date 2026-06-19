@@ -208,6 +208,7 @@ export default function SyncPage() {
       const platform = submitted.resolvedPlatform.trim()
       if (!platform) throw new Error('Platform is required')
       let syncSummary: SyncIcsResult | null = null
+      const followUpNotes: string[] = []
 
       if (form.id) {
         await api('/api/calendar-feeds', {
@@ -237,11 +238,15 @@ export default function SyncPage() {
           }),
         })
         if (created?.feed?.id) {
-          syncSummary = await api('/api/sync-ics', {
-            method: 'POST',
-            body: JSON.stringify({ feedId: String(created.feed.id) }),
-          }) as SyncIcsResult
-          setResult(syncSummary)
+          try {
+            syncSummary = await api('/api/sync-ics', {
+              method: 'POST',
+              body: JSON.stringify({ feedId: String(created.feed.id) }),
+            }) as SyncIcsResult
+            setResult(syncSummary)
+          } catch (e: any) {
+            followUpNotes.push(`Immediate sync needs review: ${String(e?.message ?? e)}`)
+          }
         }
       }
       if (isNew) {
@@ -259,17 +264,28 @@ export default function SyncPage() {
         })
       }
       if (!db.settings.assigningPlatforms.some(p => p.toLowerCase() === platform.toLowerCase())) {
-        await write({
-          ...db,
-          settings: {
-            ...db.settings,
-            assigningPlatforms: [...db.settings.assigningPlatforms, platform].sort((a, b) => a.localeCompare(b)),
-          },
-        })
+        try {
+          await write({
+            ...db,
+            settings: {
+              ...db.settings,
+              assigningPlatforms: [...db.settings.assigningPlatforms, platform].sort((a, b) => a.localeCompare(b)),
+            },
+          })
+        } catch (e: any) {
+          followUpNotes.push(`Platform list update needs review: ${String(e?.message ?? e)}`)
+        }
       }
       setForm(emptyForm())
-      await refresh()
-      await loadFeeds()
+      try {
+        await refresh()
+        await loadFeeds()
+      } catch (e: any) {
+        followUpNotes.push(`Refresh needs review: ${String(e?.message ?? e)}`)
+      }
+      if (followUpNotes.length) {
+        setFormError(followUpNotes.join(' '))
+      }
     } catch (e: any) {
       setFormError(String(e?.message ?? e))
     } finally {

@@ -455,6 +455,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
     setLoading(true)
     try {
+      await ensureUserSettingsRow(userId, createFreshDB().settings)
       if (options?.forceFullReplace) {
         await replaceAll(userId, next)
       } else {

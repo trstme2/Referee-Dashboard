@@ -193,6 +193,7 @@ export default function OnboardingPage() {
     setFeedSyncSummary(null)
     setFeedSaving(true)
     try {
+      const followUpNotes: string[] = []
       const created = await feedApi('/api/calendar-feeds', {
         method: 'POST',
         body: JSON.stringify({
@@ -203,20 +204,35 @@ export default function OnboardingPage() {
           sport: submitted.sport || null,
         }),
       })
-      const syncSummary = created?.feed?.id ? await syncFeedNow(String(created.feed.id)) : null
+      let syncSummary: SyncIcsResult | null = null
+      if (created?.feed?.id) {
+        try {
+          syncSummary = await syncFeedNow(String(created.feed.id))
+        } catch (e: any) {
+          followUpNotes.push(`Immediate sync needs review: ${String(e?.message ?? e)}`)
+        }
+      }
       if (!db.settings.assigningPlatforms.some((platform) => platform.toLowerCase() === submitted.resolvedPlatform.toLowerCase())) {
-        await write({
-          ...db,
-          settings: {
-            ...db.settings,
-            assigningPlatforms: [...db.settings.assigningPlatforms, submitted.resolvedPlatform].sort((a, b) => a.localeCompare(b)),
-          },
-        })
+        try {
+          await write({
+            ...db,
+            settings: {
+              ...db.settings,
+              assigningPlatforms: [...db.settings.assigningPlatforms, submitted.resolvedPlatform].sort((a, b) => a.localeCompare(b)),
+            },
+          })
+        } catch (e: any) {
+          followUpNotes.push(`Platform list update needs review: ${String(e?.message ?? e)}`)
+        }
       }
       setFeedForm(createInitialFeedForm())
       setFeedSyncSummary(syncSummary)
-      await refresh()
-      await loadFeeds()
+      try {
+        await refresh()
+        await loadFeeds()
+      } catch (e: any) {
+        followUpNotes.push(`Refresh needs review: ${String(e?.message ?? e)}`)
+      }
       void recordPlatformEvent(session?.access_token, 'feed_created', {
         platform: submitted.resolvedPlatform,
         sport: submitted.sport || 'unspecified',
@@ -244,6 +260,9 @@ export default function OnboardingPage() {
       }
       if (mileageHydrated > 0) {
         setFeedMessage((current) => `${current ?? 'Feed added and synced.'} Auto-filled mileage for ${mileageHydrated} game${mileageHydrated === 1 ? '' : 's'} with mappable addresses.`)
+      }
+      if (followUpNotes.length) {
+        setFeedMessage((current) => `${current ?? 'Feed added.'} ${followUpNotes.join(' ')}`)
       }
     } catch (e: any) {
       setFeedSyncSummary(null)
