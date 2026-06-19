@@ -190,6 +190,13 @@ export interface SyncIcsResult {
   createdGames: number
   updatedGames: number
   errors: string[]
+  jobsQueued?: number
+  jobsClaimed?: number
+  jobsCompleted?: number
+  jobsRequeued?: number
+  jobsFailed?: number
+  queueErrors?: string[]
+  queueUnavailable?: string
   feedResults?: Array<{
     feedId: string
     feedName: string
@@ -237,6 +244,26 @@ export interface CalendarFeedSyncRun {
   createdGames: number
   updatedGames: number
   errors: string[]
+}
+
+export interface CalendarSyncJob {
+  id: string
+  userId: string
+  feedId: string
+  feedName: string
+  platform: string
+  trigger: 'manual' | 'scheduled' | string
+  status: 'queued' | 'running' | 'succeeded' | 'partial' | 'failed' | string
+  attempts: number
+  maxAttempts: number
+  runAfter: string
+  leaseExpiresAt?: string
+  startedAt?: string
+  finishedAt?: string
+  lastError?: string
+  result?: unknown
+  createdAt: string
+  updatedAt: string
 }
 
 export interface DB {

@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
 import { fetchCalendarFeedTextWithRetry } from '../src/server/feed-fetch.js'
 import { revealFeedUrl } from '../src/server/personal-data-security.js'
+import { enqueueFeedSyncJobs, loadSyncJobsForUser, processDueSyncJobs, type SyncJobResult } from '../src/server/sync-jobs.js'
 import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks } from '../src/server/sync-ics-utils.js'
 
 export type Feed = {
@@ -796,6 +797,90 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
   return await finish(errors.length ? 'partial' : 'success')
 }
 
+async function runFeedsDirect(client: any, feeds: Feed[], trigger: SyncTrigger) {
+  const startedAtMs = Date.now()
+  const startedAt = new Date(startedAtMs).toISOString()
+  let createdEvents = 0
+  let updatedEvents = 0
+  let createdGames = 0
+  let updatedGames = 0
+  const errors: string[] = []
+  const feedResults: SyncFeedResult[] = []
+  const diagnostics = {
+    existingRefMatches: 0,
+    manualMatches: 0,
+    createdFromFeed: 0,
+    ambiguousCandidates: 0,
+    samples: [] as SyncDiagnostic[],
+  }
+
+  for (const feed of feeds) {
+    try {
+      const result = await syncFeed(client, feed, { trigger })
+      feedResults.push(result)
+      createdEvents += result.createdEvents
+      updatedEvents += result.updatedEvents
+      createdGames += result.createdGames
+      updatedGames += result.updatedGames
+      errors.push(...result.errors)
+      diagnostics.existingRefMatches += result.diagnostics?.existingRefMatches ?? 0
+      diagnostics.manualMatches += result.diagnostics?.manualMatches ?? 0
+      diagnostics.createdFromFeed += result.diagnostics?.createdFromFeed ?? 0
+      diagnostics.ambiguousCandidates += result.diagnostics?.ambiguousCandidates ?? 0
+      diagnostics.samples.push(...(result.diagnostics?.samples ?? []))
+    } catch (e: any) {
+      const result = await recordSyncFailure(client, feed, trigger, e)
+      errors.push(...result.errors)
+      feedResults.push(result)
+    }
+  }
+
+  const finishedAtMs = Date.now()
+  return {
+    startedAt,
+    finishedAt: new Date(finishedAtMs).toISOString(),
+    durationMs: finishedAtMs - startedAtMs,
+    feedsSynced: feedResults.length,
+    createdEvents,
+    updatedEvents,
+    createdGames,
+    updatedGames,
+    errors,
+    feedResults,
+    diagnostics: {
+      ...diagnostics,
+      samples: diagnostics.samples.slice(0, 20),
+    },
+  }
+}
+
+function summarizeFeedResults(startedAtMs: number, feedResults: Array<SyncFeedResult | SyncJobResult>, queueInfo: Record<string, unknown> = {}) {
+  const finishedAtMs = Date.now()
+  const errors = feedResults.flatMap(result => result.errors)
+  const diagnostics = {
+    existingRefMatches: feedResults.reduce((sum, result) => sum + ((result.diagnostics as any)?.existingRefMatches ?? 0), 0),
+    manualMatches: feedResults.reduce((sum, result) => sum + ((result.diagnostics as any)?.manualMatches ?? 0), 0),
+    createdFromFeed: feedResults.reduce((sum, result) => sum + ((result.diagnostics as any)?.createdFromFeed ?? 0), 0),
+    ambiguousCandidates: feedResults.reduce((sum, result) => sum + ((result.diagnostics as any)?.ambiguousCandidates ?? 0), 0),
+    samples: feedResults.flatMap(result => (result.diagnostics as any)?.samples ?? []).slice(0, 20),
+  }
+
+  return {
+    startedAt: new Date(startedAtMs).toISOString(),
+    finishedAt: new Date(finishedAtMs).toISOString(),
+    durationMs: finishedAtMs - startedAtMs,
+    feedsSynced: feedResults.length,
+    createdEvents: feedResults.reduce((sum, result) => sum + result.createdEvents, 0),
+    updatedEvents: feedResults.reduce((sum, result) => sum + result.updatedEvents, 0),
+    createdGames: feedResults.reduce((sum, result) => sum + result.createdGames, 0),
+    updatedGames: feedResults.reduce((sum, result) => sum + result.updatedGames, 0),
+    errors,
+    feedResults,
+    diagnostics,
+    ...queueInfo,
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setApiSecurityHeaders(res)
 
@@ -827,6 +912,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: error.message })
       }
 
+      const jobsResult = await loadSyncJobsForUser(client, userId, limit).catch((jobError: any) => {
+        if (String(jobError?.message ?? jobError).includes('calendar_sync_jobs')) {
+          return { jobs: [], queueUnavailable: 'Durable sync job table has not been added yet.' }
+        }
+        throw jobError
+      })
+
       return res.status(200).json({
         history: (data ?? []).map((row: any) => ({
           id: row.id,
@@ -845,6 +937,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           updatedGames: row.updated_games,
           errors: Array.isArray(row.errors) ? row.errors : [],
         })),
+        jobs: jobsResult.jobs,
+        queueUnavailable: jobsResult.queueUnavailable,
       })
     }
 
@@ -873,59 +967,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const startedAtMs = Date.now()
-    const startedAt = new Date(startedAtMs).toISOString()
-    let createdEvents = 0
-    let updatedEvents = 0
-    let createdGames = 0
-    let updatedGames = 0
-    const errors: string[] = []
-    const feedResults: Array<Awaited<ReturnType<typeof syncFeed>>> = []
-    const diagnostics = {
-      existingRefMatches: 0,
-      manualMatches: 0,
-      createdFromFeed: 0,
-      ambiguousCandidates: 0,
-      samples: [] as SyncDiagnostic[],
+    const enqueued = await enqueueFeedSyncJobs(client, feeds as Feed[], 'manual')
+    if (enqueued.queueUnavailable) {
+      const direct = await runFeedsDirect(client, feeds as Feed[], 'manual')
+      return res.status(direct.errors.length ? 207 : 200).json({
+        ...direct,
+        queueUnavailable: enqueued.queueUnavailable,
+      })
     }
 
-    for (const feed of feeds as Feed[]) {
-      try {
-        const result = await syncFeed(client, feed, { trigger: 'manual' })
-        feedResults.push(result)
-        createdEvents += result.createdEvents
-        updatedEvents += result.updatedEvents
-        createdGames += result.createdGames
-        updatedGames += result.updatedGames
-        errors.push(...result.errors)
-        diagnostics.existingRefMatches += result.diagnostics?.existingRefMatches ?? 0
-        diagnostics.manualMatches += result.diagnostics?.manualMatches ?? 0
-        diagnostics.createdFromFeed += result.diagnostics?.createdFromFeed ?? 0
-        diagnostics.ambiguousCandidates += result.diagnostics?.ambiguousCandidates ?? 0
-        diagnostics.samples.push(...(result.diagnostics?.samples ?? []))
-      } catch (e: any) {
-        const result = await recordSyncFailure(client, feed, 'manual', e)
-        errors.push(...result.errors)
-        feedResults.push(result)
-      }
-    }
-
-    const finishedAtMs = Date.now()
-    return res.status(errors.length ? 207 : 200).json({
-      startedAt,
-      finishedAt: new Date(finishedAtMs).toISOString(),
-      durationMs: finishedAtMs - startedAtMs,
-      feedsSynced: feedResults.length,
-      createdEvents,
-      updatedEvents,
-      createdGames,
-      updatedGames,
-      errors,
-      feedResults,
-      diagnostics: {
-        ...diagnostics,
-        samples: diagnostics.samples.slice(0, 20),
+    const processed = await processDueSyncJobs(
+      client,
+      async (feed, trigger) => {
+        try {
+          return await syncFeed(client, feed as Feed, { trigger })
+        } catch (e: any) {
+          return await recordSyncFailure(client, feed as Feed, trigger, e)
+        }
       },
+      {
+        userId,
+        maxJobs: feedId ? 1 : 5,
+        maxRuntimeMs: 25_000,
+        leaseOwner: `manual:${userId}`,
+      }
+    )
+
+    const response = summarizeFeedResults(startedAtMs, processed.feedResults, {
+      jobsQueued: enqueued.jobs.length,
+      jobsClaimed: processed.jobsClaimed,
+      jobsCompleted: processed.jobsCompleted,
+      jobsRequeued: processed.jobsRequeued,
+      jobsFailed: processed.jobsFailed,
+      queueErrors: processed.errors,
     })
+    return res.status(response.errors.length || processed.errors.length ? 207 : 200).json(response)
   } catch (e: any) {
     return res.status(500).json({ error: String(e?.message || e || 'Unknown error') })
   }

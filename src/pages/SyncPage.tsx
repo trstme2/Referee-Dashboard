@@ -3,7 +3,7 @@ import FeedSetupGuide from '../components/FeedSetupGuide'
 import HelpTip from '../components/HelpTip'
 import { useData } from '../lib/DataContext'
 import { trackedSportsFor } from '../lib/preferences'
-import type { CalendarFeed, CalendarFeedSyncRun, FeedPlatform, Sport, SyncIcsResult } from '../lib/types'
+import type { CalendarFeed, CalendarFeedSyncRun, CalendarSyncJob, FeedPlatform, Sport, SyncIcsResult } from '../lib/types'
 
 type FeedForm = {
   id: string
@@ -50,6 +50,7 @@ export default function SyncPage() {
   const [result, setResult] = useState<SyncIcsResult | null>(null)
   const [cleanupResult, setCleanupResult] = useState<any>(null)
   const [syncHistory, setSyncHistory] = useState<CalendarFeedSyncRun[]>([])
+  const [syncJobs, setSyncJobs] = useState<CalendarSyncJob[]>([])
   const [syncHistoryNote, setSyncHistoryNote] = useState<string | null>(null)
   const [selectedCleanupKeys, setSelectedCleanupKeys] = useState<string[]>([])
   const [cleaning, setCleaning] = useState(false)
@@ -155,9 +156,11 @@ export default function SyncPage() {
     try {
       const json = await api('/api/sync-ics?history=1&limit=25')
       setSyncHistory((json.history ?? []) as CalendarFeedSyncRun[])
-      setSyncHistoryNote(json.historyUnavailable ? String(json.historyUnavailable) : null)
+      setSyncJobs((json.jobs ?? []) as CalendarSyncJob[])
+      setSyncHistoryNote(json.historyUnavailable || json.queueUnavailable ? String(json.historyUnavailable || json.queueUnavailable) : null)
     } catch (e: any) {
       setSyncHistory([])
+      setSyncJobs([])
       setSyncHistoryNote(`Could not load sync history: ${String(e?.message ?? e)}`)
     }
   }
@@ -427,7 +430,14 @@ export default function SyncPage() {
             <p className="small">
               {result.feedsSynced != null ? `${result.feedsSynced} feed${result.feedsSynced === 1 ? '' : 's'} checked` : 'Sync complete'}
               {result.durationMs != null ? ` in ${formatDuration(result.durationMs)}` : ''}. Events: +{result.createdEvents} created, {result.updatedEvents} updated | Games: +{result.createdGames} created, {result.updatedGames} updated
+              {result.jobsQueued != null ? ` | Jobs: ${result.jobsCompleted ?? 0} done, ${result.jobsRequeued ?? 0} retrying, ${result.jobsFailed ?? 0} failed` : ''}
             </p>
+            {result.queueUnavailable ? <p className="small"><span className="pill warn">{result.queueUnavailable}</span></p> : null}
+            {result.queueErrors?.length ? (
+              <div>
+                {result.queueErrors.map((x, i) => <p key={i} className="small"><span className="pill bad">{x}</span></p>)}
+              </div>
+            ) : null}
             {result.feedResults?.length ? (
               <div style={{ marginTop: 8 }}>
                 {result.feedResults.map((feedResult) => (
@@ -487,6 +497,24 @@ export default function SyncPage() {
             <button className="btn" onClick={loadSyncHistory} disabled={loading || syncing}>Refresh history</button>
           </div>
           {syncHistoryNote ? <p className="small"><span className="pill warn">{syncHistoryNote}</span></p> : null}
+          {syncJobs.length ? (
+            <div className="sync-job-list">
+              {syncJobs.slice(0, 8).map((job) => (
+                <article key={job.id} className="sync-job-card">
+                  <div>
+                    <strong>{job.feedName}</strong>
+                    <span>{job.platform} | {job.trigger} | {job.attempts}/{job.maxAttempts} attempts</span>
+                  </div>
+                  <span className={`pill ${
+                    job.status === 'succeeded' ? 'ok' :
+                      job.status === 'partial' || job.status === 'queued' ? 'warn' :
+                        job.status === 'failed' ? 'bad' : 'info'
+                  }`}>{job.status}</span>
+                  {job.lastError ? <p className="small">{job.lastError}</p> : null}
+                </article>
+              ))}
+            </div>
+          ) : null}
           {syncHistory.length ? (
             <>
               <div className="sync-history-card-list">

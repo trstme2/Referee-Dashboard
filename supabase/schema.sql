@@ -146,6 +146,30 @@ begin
     end if;
   end if;
 
+  if not exists (select 1 from information_schema.tables where table_schema='public' and table_name='calendar_sync_jobs') then
+    create table public.calendar_sync_jobs (
+      id uuid primary key default gen_random_uuid(),
+      user_id uuid not null,
+      feed_id uuid not null,
+      feed_name text not null,
+      platform text not null,
+      trigger text not null,
+      status text not null default 'queued',
+      priority int not null default 10,
+      run_after timestamptz not null default now(),
+      attempts int not null default 0,
+      max_attempts int not null default 3,
+      lease_owner text null,
+      lease_expires_at timestamptz null,
+      started_at timestamptz null,
+      finished_at timestamptz null,
+      last_error text null,
+      result jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+  end if;
+
   if exists (select 1 from information_schema.tables where table_schema='public' and table_name='requirement_activities') then
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='requirement_activities' and column_name='evidence_storage_path') then
       alter table public.requirement_activities add column evidence_storage_path text null;
@@ -304,6 +328,28 @@ create table if not exists public.calendar_feed_sync_runs (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.calendar_sync_jobs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  feed_id uuid not null,
+  feed_name text not null,
+  platform text not null,
+  trigger text not null,
+  status text not null default 'queued' check (status in ('queued','running','succeeded','partial','failed')),
+  priority int not null default 10,
+  run_after timestamptz not null default now(),
+  attempts int not null default 0,
+  max_attempts int not null default 3,
+  lease_owner text null,
+  lease_expires_at timestamptz null,
+  started_at timestamptz null,
+  finished_at timestamptz null,
+  last_error text null,
+  result jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 do $$
 begin
   if not exists (
@@ -429,6 +475,7 @@ alter table public.games enable row level security;
 alter table public.calendar_events enable row level security;
 alter table public.calendar_feeds enable row level security;
 alter table public.calendar_feed_sync_runs enable row level security;
+alter table public.calendar_sync_jobs enable row level security;
 alter table public.expenses enable row level security;
 alter table public.requirement_definitions enable row level security;
 alter table public.requirement_instances enable row level security;
@@ -444,7 +491,7 @@ begin
     'user_settings',
     'games','calendar_events','expenses','requirement_definitions',
     'requirement_instances','requirement_activities','csv_imports','csv_import_rows',
-    'calendar_feeds','calendar_feed_sync_runs'
+    'calendar_feeds','calendar_feed_sync_runs','calendar_sync_jobs'
   ]
   loop
     execute format('drop policy if exists "select_own_%1$s" on public.%1$s;', t);
@@ -489,6 +536,12 @@ create unique index if not exists idx_calendar_events_user_external_ref on publi
 create index if not exists idx_calendar_feeds_user_platform on public.calendar_feeds(user_id, platform);
 create index if not exists idx_calendar_feed_sync_runs_user_started on public.calendar_feed_sync_runs(user_id, started_at desc);
 create index if not exists idx_calendar_feed_sync_runs_feed_started on public.calendar_feed_sync_runs(feed_id, started_at desc);
+create index if not exists idx_calendar_sync_jobs_due on public.calendar_sync_jobs(status, run_after, priority desc);
+create index if not exists idx_calendar_sync_jobs_user_created on public.calendar_sync_jobs(user_id, created_at desc);
+create index if not exists idx_calendar_sync_jobs_feed_status on public.calendar_sync_jobs(feed_id, status);
+create unique index if not exists idx_calendar_sync_jobs_one_active_per_feed
+on public.calendar_sync_jobs(feed_id)
+where status in ('queued','running');
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (

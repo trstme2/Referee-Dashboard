@@ -12,12 +12,13 @@ export const ACCOUNT_TABLE_DELETE_ORDER = [
   'expenses',
   'calendar_events',
   'games',
+  'calendar_sync_jobs',
   'calendar_feed_sync_runs',
   'calendar_feeds',
   'user_settings',
 ] as const
 
-const OPTIONAL_ACCOUNT_TABLES = new Set<string>(['calendar_feed_sync_runs'])
+const OPTIONAL_ACCOUNT_TABLES = new Set<string>(['calendar_feed_sync_runs', 'calendar_sync_jobs'])
 
 export function downloadJson(filename: string, value: unknown) {
   const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' })
@@ -73,6 +74,19 @@ export async function syncHistoryForExport(accessToken?: string) {
   return json.history ?? []
 }
 
+export async function syncJobsForExport(accessToken?: string) {
+  if (!accessToken) return []
+  const res = await fetch('/api/sync-ics?history=1&limit=50', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  })
+  if (!res.ok) return []
+  const json = await res.json().catch(() => ({}))
+  return json.jobs ?? []
+}
+
 export async function platformProfileForExport(userId: string) {
   if (!supabase) return null
   const { data, error } = await supabase
@@ -112,6 +126,7 @@ export async function exportAccountData(db: DB, user: { id: string; email?: stri
     appEvents: await appEventsForExport(user.id),
     calendarFeeds: await calendarFeedsForExport(accessToken),
     syncHistory: await syncHistoryForExport(accessToken),
+    syncJobs: await syncJobsForExport(accessToken),
     fileReferences: evidencePaths(db),
   }
   downloadJson(`whistle-keeper-account-data-${new Date().toISOString().slice(0, 10)}.json`, exportData)
@@ -141,6 +156,10 @@ export async function removeStorageFiles(db: DB) {
 
 export async function deleteSyncHistory(userId: string) {
   if (!supabase) throw new Error('Supabase client missing')
+  const { error: jobsError } = await supabase.from('calendar_sync_jobs').delete().eq('user_id', userId)
+  if (jobsError && !isMissingOptionalTableError(jobsError, 'calendar_sync_jobs')) {
+    throw new Error(`Delete sync jobs: ${jobsError.message}`)
+  }
   const { error } = await supabase.from('calendar_feed_sync_runs').delete().eq('user_id', userId)
   if (error && !isMissingOptionalTableError(error, 'calendar_feed_sync_runs')) {
     throw new Error(`Delete sync history: ${error.message}`)

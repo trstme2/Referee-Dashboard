@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createServiceSupabase, cronAuthorized, setApiSecurityHeaders } from '../src/server/auth-utils.js'
+import { enqueueFeedSyncJobs, processDueSyncJobs } from '../src/server/sync-jobs.js'
 import { recordSyncFailure, syncFeed, type Feed } from './sync-ics.js'
 
 type FeedSummary = {
@@ -40,20 +41,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (error) return res.status(400).json({ error: error.message })
 
+    const feedRows = (feeds ?? []) as Feed[]
+    const enqueued = await enqueueFeedSyncJobs(client, feedRows, 'scheduled')
+
     const summaries: FeedSummary[] = []
-    for (const feed of (feeds ?? []) as Feed[]) {
-      try {
-        const result = await syncFeed(client, feed, { trigger: 'scheduled' })
+    let queueUnavailable = enqueued.queueUnavailable
+
+    if (queueUnavailable) {
+      for (const feed of feedRows) {
+        try {
+          const result = await syncFeed(client, feed, { trigger: 'scheduled' })
+          summaries.push({
+            userId: feed.user_id,
+            name: result.feedName,
+            ...result,
+          })
+        } catch (e: any) {
+          const result = await recordSyncFailure(client, feed, 'scheduled', e)
+          summaries.push({
+            userId: feed.user_id,
+            name: feed.name,
+            ...result,
+          })
+        }
+      }
+    } else {
+      const processed = await processDueSyncJobs(
+        client,
+        async (feed, trigger) => {
+          try {
+            return await syncFeed(client, feed as Feed, { trigger })
+          } catch (e: any) {
+            return await recordSyncFailure(client, feed as Feed, trigger, e)
+          }
+        },
+        {
+          maxJobs: 10,
+          maxRuntimeMs: 45_000,
+          leaseOwner: 'scheduled-sync',
+        }
+      )
+      queueUnavailable = processed.queueUnavailable
+      for (const result of processed.feedResults) {
         summaries.push({
-          userId: feed.user_id,
+          userId: '',
           name: result.feedName,
-          ...result,
-        })
-      } catch (e: any) {
-        const result = await recordSyncFailure(client, feed, 'scheduled', e)
-        summaries.push({
-          userId: feed.user_id,
-          name: feed.name,
           ...result,
         })
       }
@@ -73,6 +105,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       updatedEvents: summaries.reduce((sum, s) => sum + s.updatedEvents, 0),
       createdGames: summaries.reduce((sum, s) => sum + s.createdGames, 0),
       updatedGames: summaries.reduce((sum, s) => sum + s.updatedGames, 0),
+      jobsQueued: enqueued.jobs.length,
+      jobsProcessed: summaries.length,
+      queueUnavailable,
       errors,
       summaries,
     })

@@ -26,7 +26,7 @@ const dataInventory = [
   },
   {
     label: 'Sync configuration and history',
-    examples: 'Saved feed metadata, masked feed URLs, sync status, attempts, duration, and recent errors.',
+    examples: 'Saved feed metadata, masked feed URLs, queued sync jobs, sync status, attempts, duration, and recent errors.',
     location: 'Server API plus Supabase tables protected by user ownership rules.',
     control: 'Disable/delete feeds from Sync; export, reset, and delete include sync history.',
   },
