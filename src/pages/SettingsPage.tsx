@@ -237,7 +237,7 @@ export default function SettingsPage() {
             <div className="field">
               <label>Standard mileage rate (cents per mile)</label>
               <input type="number" min={0} step="0.1" value={taxMileageRateCents} onChange={e => setTaxMileageRateCents(e.target.value)} />
-              <div className="small">Used on the Tax page to estimate a mileage amount for exports. Confirm the right rate for the tax year you are preparing.</div>
+              <div className="small">Used on the Tax page to estimate a mileage amount for exports. Save this once to confirm the rate for tax readiness.</div>
             </div>
 
             <div className="field">

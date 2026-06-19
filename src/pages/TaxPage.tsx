@@ -177,6 +177,7 @@ export default function TaxPage() {
 
   const parsedMileageRateCents = Number(mileageRateCents)
   const mileageRateIsValid = Number.isFinite(parsedMileageRateCents) && parsedMileageRateCents >= 0
+  const mileageRateConfirmed = db.settings.taxMileageRateCents != null
   const mileageEstimate = mileageRateIsValid ? (totals.miles * parsedMileageRateCents) / 100 : 0
 
   const mileageExportRows = useMemo(() => {
@@ -298,6 +299,11 @@ export default function TaxPage() {
             <div className="small">
               2026 IRS business rate: 72.5 cents per mile. <a href="https://www.irs.gov/newsroom/irs-sets-2026-business-standard-mileage-rate-at-725-cents-per-mile-up-25-cents" target="_blank" rel="noreferrer">View IRS source</a>.
             </div>
+            <div className="small">
+              {mileageRateConfirmed
+                ? 'Mileage rate confirmed for onboarding readiness.'
+                : 'Review this rate and save it once to mark tax readiness complete.'}
+            </div>
           </div>
         </div>
 
@@ -325,7 +331,7 @@ export default function TaxPage() {
         </div>
 
         <div className="btnbar" style={{ marginTop: 10 }}>
-          <button className="btn" onClick={saveMileageRate} disabled={loading || !mileageRateIsValid}>Save Mileage Rate</button>
+          <button className="btn" onClick={saveMileageRate} disabled={loading || !mileageRateIsValid}>{mileageRateConfirmed ? 'Update Mileage Rate' : 'Confirm Mileage Rate'}</button>
           <button className="btn primary" onClick={exportIncomeCsv}>Export Income CSV</button>
           <button className="btn" onClick={exportMileageCsv}>Export Mileage CSV</button>
           <button className="btn" onClick={exportExpensesCsv}>Export Expenses CSV</button>
@@ -336,6 +342,9 @@ export default function TaxPage() {
         <div className="footer-note">
           Exports are record summaries for review. Keep receipts, assignment records, payment records, and any notes your preparer asks for.
         </div>
+        {!mileageRateConfirmed ? (
+          <p className="small"><span className="pill warn">Tax readiness stays incomplete until you confirm the mileage rate for the year you are preparing.</span></p>
+        ) : null}
       </section>
 
       <section className="card tax-confidence-card">

@@ -92,10 +92,35 @@ describe('onboarding progress', () => {
         updatedAt: '2026-06-19T00:00:00.000Z',
       },
     ]
+    db.settings.taxMileageRateCents = 72.5
 
     const taxStep = getOnboardingSteps(db).find((step) => step.id === 'tax')
 
     expect(taxStep?.complete).toBe(true)
+  })
+
+  it('keeps tax readiness incomplete until the mileage rate is explicitly confirmed', () => {
+    const db = createFreshDB()
+    db.games = [
+      {
+        id: 'game-1',
+        sport: 'Soccer',
+        competitionLevel: 'High School',
+        gameDate: '2026-06-20',
+        startTime: '19:00',
+        locationAddress: 'Central Stadium',
+        status: 'Played',
+        paidConfirmed: false,
+        roundtripMiles: 24,
+        platformConfirmations: {},
+        createdAt: '2026-06-19T00:00:00.000Z',
+        updatedAt: '2026-06-19T00:00:00.000Z',
+      },
+    ]
+
+    const taxStep = getOnboardingSteps(db).find((step) => step.id === 'tax')
+
+    expect(taxStep?.complete).toBe(false)
   })
 
   it('requires a verified profile even when onboarding was previously marked complete', () => {

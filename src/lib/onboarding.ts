@@ -20,16 +20,21 @@ export function hasRequiredProfileSetup(settings: Pick<Settings, 'homeAddress' |
     Boolean(settings.defaultTimezone?.trim())
 }
 
+function hasConfirmedTaxMileageRate(settings: Pick<Settings, 'taxMileageRateCents'>): boolean {
+  return typeof settings.taxMileageRateCents === 'number' && Number.isFinite(settings.taxMileageRateCents) && settings.taxMileageRateCents >= 0
+}
+
 export function getOnboardingSteps(db: DB, options?: OnboardingProgressOptions): OnboardingStep[] {
   const hasProfile = hasRequiredProfileSetup(db.settings)
   const hasAssignmentRecords = db.games.length > 0 || db.csvImports.length > 0 || Number(options?.savedFeedCount ?? 0) > 0
   const hasRequirements = db.requirementInstances.length > 0 || db.requirementActivities.length > 0
-  const hasTaxBasics = db.expenses.length > 0 || db.games.some((g) =>
+  const hasTaxRecords = db.expenses.length > 0 || db.games.some((g) =>
     g.roundtripMiles != null ||
     g.distanceMiles != null ||
     g.paidConfirmed ||
     g.status === 'Paid / Complete'
   )
+  const hasTaxBasics = hasTaxRecords && hasConfirmedTaxMileageRate(db.settings)
 
   return [
     { id: 'profile', label: 'Profile', complete: hasProfile, kind: 'required' },

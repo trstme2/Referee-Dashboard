@@ -57,7 +57,7 @@ export function createFreshDB(): DB {
       otherWorkAddressLatitude: undefined,
       otherWorkAddressLongitude: undefined,
       defaultTimezone: 'America/New_York',
-      taxMileageRateCents: 72.5,
+      taxMileageRateCents: undefined,
       weeklyGamesEmailEnabled: false,
       onboardingCompletedAt: undefined,
       trackedSports: [],
