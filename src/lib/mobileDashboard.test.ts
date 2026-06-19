@@ -184,4 +184,22 @@ describe('mobile dashboard helpers', () => {
     expect(failed.tone).toBe('bad')
     expect(mapsHrefForAddress('123 Main St, Columbus, OH')).toContain('google.com/maps/search')
   })
+
+  it('treats never-synced feeds as informational instead of a warning', () => {
+    const feeds: CalendarFeed[] = [
+      {
+        id: 'feed-1',
+        platform: 'DragonFly',
+        name: 'DragonFly soccer',
+        enabled: true,
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+      },
+    ]
+
+    const summary = getSyncHealthSummary(feeds, [], new Date('2026-06-16T12:00:00.000Z'))
+
+    expect(summary.tone).toBe('info')
+    expect(summary.title).toMatch(/ready for first sync/i)
+  })
 })

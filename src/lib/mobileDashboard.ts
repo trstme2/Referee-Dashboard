@@ -304,6 +304,9 @@ export function getSyncHealthSummary(
     }
   }
 
+  const neverSyncedFeeds = enabledFeeds.filter(feed => !feed.lastSyncedAt)
+  const feedsWithHistory = enabledFeeds.filter((feed): feed is CalendarFeed & { lastSyncedAt: string } => Boolean(feed.lastSyncedAt))
+
   const latestFailed = syncHistory.find(run => run.status === 'failed')
   if (latestFailed) {
     return {
@@ -322,8 +325,15 @@ export function getSyncHealthSummary(
     }
   }
 
-  const staleFeeds = enabledFeeds.filter(feed => {
-    if (!feed.lastSyncedAt) return true
+  if (feedsWithHistory.length === 0 && neverSyncedFeeds.length > 0) {
+    return {
+      tone: 'info',
+      title: neverSyncedFeeds.length === 1 ? '1 feed is ready for first sync' : `${neverSyncedFeeds.length} feeds are ready for first sync`,
+      detail: 'Run your first sync when you want Whistle Keeper to pull assignments in automatically.',
+    }
+  }
+
+  const staleFeeds = feedsWithHistory.filter(feed => {
     return now.getTime() - new Date(feed.lastSyncedAt).getTime() > 48 * 60 * 60 * 1000
   })
 
@@ -334,6 +344,14 @@ export function getSyncHealthSummary(
       detail: staleFeeds.length === 1
         ? `${staleFeeds[0].name} has not synced recently.`
         : 'One or more feeds have not synced recently.',
+    }
+  }
+
+  if (neverSyncedFeeds.length > 0) {
+    return {
+      tone: 'ok',
+      title: 'Sync looks healthy',
+      detail: `${feedsWithHistory.length} active feed${feedsWithHistory.length === 1 ? '' : 's'} have synced recently, and ${neverSyncedFeeds.length} ${neverSyncedFeeds.length === 1 ? 'is' : 'are'} ready for first sync.`,
     }
   }
 

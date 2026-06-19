@@ -16,7 +16,12 @@ export function getOnboardingSteps(db: DB): OnboardingStep[] {
     Boolean(db.settings.defaultTimezone?.trim())
   const hasAssignmentRecords = db.games.length > 0 || db.csvImports.length > 0
   const hasRequirements = db.requirementInstances.length > 0 || db.requirementActivities.length > 0
-  const hasTaxBasics = db.games.some((g) => g.gameFee != null || g.roundtripMiles != null) || db.expenses.length > 0
+  const hasTaxBasics = db.expenses.length > 0 || db.games.some((g) =>
+    g.roundtripMiles != null ||
+    g.distanceMiles != null ||
+    g.paidConfirmed ||
+    g.status === 'Paid / Complete'
+  )
 
   return [
     { id: 'profile', label: 'Profile', complete: hasProfile, kind: 'required' },

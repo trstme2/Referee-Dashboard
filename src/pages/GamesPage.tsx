@@ -14,8 +14,31 @@ const statuses: GameStatus[] = ['Scheduled', 'Played', 'Paid / Complete', 'Cance
 
 const soccerRoles: SoccerRole[] = ['Center', 'AR', '4th', 'Dual', 'Mentor']
 const lacrosseRoles: LacrosseRole[] = ['Lead', 'Field Judge', 'Alternate', 'Mentor']
+const DEFAULT_GAME_START_TIME = '19:00'
 
 type Meridiem = 'AM' | 'PM'
+type GameFormState = {
+  id: string
+  sport: string
+  competitionLevel: CompetitionLevel
+  league: string
+  levelDetail: string
+  gameDate: string
+  startTime: string
+  locationAddress: string
+  role: Role | ''
+  mileageOrigin: MileageOrigin
+  status: GameStatus
+  gameFee: string
+  paidConfirmed: boolean
+  paidDate: string
+  homeTeam: string
+  awayTeam: string
+  notes: string
+  platformConfirmations: Record<string, boolean>
+  distanceMiles: string
+  roundtripMiles: string
+}
 
 function clearDerivedMileage<T extends { distanceMiles: string; roundtripMiles: string }>(value: T): T {
   const oneWay = Number(value.distanceMiles)
@@ -82,6 +105,31 @@ function uniquePlatforms(platforms: string[], games: Array<{ platformConfirmatio
   ])).sort((a, b) => a.localeCompare(b))
 }
 
+function createGameForm(sport: string, startTime = DEFAULT_GAME_START_TIME): GameFormState {
+  return {
+    id: '',
+    sport,
+    competitionLevel: 'High School',
+    league: '',
+    levelDetail: '',
+    gameDate: '',
+    startTime,
+    locationAddress: '',
+    role: '',
+    mileageOrigin: 'home',
+    status: 'Scheduled',
+    gameFee: '',
+    paidConfirmed: false,
+    paidDate: '',
+    homeTeam: '',
+    awayTeam: '',
+    notes: '',
+    platformConfirmations: {},
+    distanceMiles: '',
+    roundtripMiles: '',
+  }
+}
+
 export default function GamesPage() {
   const { db, write, loading, session } = useData()
   const navigate = useNavigate()
@@ -92,28 +140,7 @@ export default function GamesPage() {
   const [expandedGameId, setExpandedGameId] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
 
-  const [form, setForm] = useState({
-    id: '',
-    sport: initialSport,
-    competitionLevel: 'High School' as CompetitionLevel,
-    league: '',
-    levelDetail: '',
-    gameDate: '',
-    startTime: '',
-    locationAddress: '',
-    role: '' as Role | '',
-    mileageOrigin: 'home' as MileageOrigin,
-    status: 'Scheduled' as GameStatus,
-    gameFee: '',
-    paidConfirmed: false,
-    paidDate: '',
-    homeTeam: '',
-    awayTeam: '',
-    notes: '',
-    platformConfirmations: {} as Record<string, boolean>,
-    distanceMiles: '' as string,
-    roundtripMiles: '' as string,
-  })
+  const [form, setForm] = useState<GameFormState>(() => createGameForm(initialSport))
 
   const sports = useMemo(
     () => trackedSportsFor(db.settings.trackedSports, db.games.map(g => g.sport)),
@@ -204,28 +231,7 @@ export default function GamesPage() {
   }
 
   function resetForm() {
-    setForm({
-      id: '',
-      sport: sports[0] ?? 'Soccer',
-      competitionLevel: 'High School',
-      league: '',
-      levelDetail: '',
-      gameDate: '',
-      startTime: '',
-      locationAddress: '',
-      role: '',
-      mileageOrigin: 'home',
-      status: 'Scheduled',
-      gameFee: '',
-      paidConfirmed: false,
-      paidDate: '',
-      homeTeam: '',
-      awayTeam: '',
-      notes: '',
-      platformConfirmations: {},
-      distanceMiles: '',
-      roundtripMiles: '',
-    })
+    setForm(createGameForm(sports[0] ?? 'Soccer'))
   }
 
   function startNew() {
