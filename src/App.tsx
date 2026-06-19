@@ -18,6 +18,7 @@ import DataPrivacyPage from './pages/DataPrivacyPage'
 import AdminPage from './pages/AdminPage'
 import { useData } from './lib/DataContext'
 import { shouldStartOnboarding } from './lib/onboarding'
+import { routeMetaForPath } from './lib/navigation'
 import logo from './assets/logo.png'
 
 export default function App() {
@@ -27,7 +28,10 @@ export default function App() {
   const authMissing = requireAuth && authReady && !session
   const authRestoring = requireAuth && !authReady
   const showLanding = authMissing && location.pathname === '/'
+  const isAuthRoute = location.pathname === '/auth' || location.pathname === '/auth/callback'
+  const showAppShell = !showLanding && !isAuthRoute
   const startOnboarding = !loading && authReady && Boolean(session) && shouldStartOnboarding(db)
+  const routeMeta = routeMetaForPath(location.pathname)
   const protectedElement = (element: ReactNode) => {
     if (authRestoring) {
       return (
@@ -43,18 +47,31 @@ export default function App() {
   }
 
   return (
-    <div className={showLanding ? 'landing-container' : 'container'}>
-      {!showLanding && (
-        <header className="topbar accent-frame">
-          <div className="brand-wrap">
-            <img src={logo} alt="Whistle Keeper logo" className="brand-logo" />
-            <div className="brand">
-              <h1>Whistle Keeper</h1>
-              <p>Keep assignments, pay, mileage, and requirements in one place.</p>
+    <div className={showLanding ? 'landing-container' : 'container app-shell'}>
+      {showAppShell && (
+        <>
+          <header className="topbar accent-frame app-desktop-topbar">
+            <div className="brand-wrap">
+              <img src={logo} alt="Whistle Keeper logo" className="brand-logo" />
+              <div className="brand">
+                <h1>Whistle Keeper</h1>
+                <p>Keep assignments, pay, mileage, and requirements in one place.</p>
+              </div>
             </div>
-          </div>
-          <Nav />
-        </header>
+            <Nav variant="desktop" />
+          </header>
+
+          <header className="mobile-topbar">
+            <div className="mobile-topbar-brand">
+              <img src={logo} alt="Whistle Keeper logo" className="mobile-topbar-logo" />
+              <div>
+                <strong>{routeMeta.label}</strong>
+                <span>{routeMeta.subtitle}</span>
+              </div>
+            </div>
+            {loading ? <span className="pill warn">Syncing</span> : null}
+          </header>
+        </>
       )}
 
       {error && (
@@ -64,7 +81,7 @@ export default function App() {
         </div>
       )}
 
-      <div key={location.pathname} className="route-shell">
+      <div key={location.pathname} className={`route-shell${showAppShell ? ' app-route-shell' : ''}`}>
         <Routes>
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
@@ -86,6 +103,8 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </div>
+
+      {showAppShell ? <Nav key={`mobile-${location.pathname}`} variant="mobile" /> : null}
     </div>
   )
 }
