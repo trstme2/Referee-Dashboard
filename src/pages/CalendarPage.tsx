@@ -118,6 +118,16 @@ function sortPlatformLabels(a: string, b: string): number {
   return a.localeCompare(b)
 }
 
+function shiftDayIntoMonth(day: string, monthOffset: number): string {
+  const [year, month, date] = day.split('-').map(Number)
+  const targetMonth = new Date(year, month - 1 + monthOffset, 1)
+  const targetYear = targetMonth.getFullYear()
+  const targetMonthIndex = targetMonth.getMonth()
+  const lastDayOfTargetMonth = new Date(targetYear, targetMonthIndex + 1, 0).getDate()
+  const nextDate = new Date(targetYear, targetMonthIndex, Math.min(date, lastDayOfTargetMonth))
+  return yyyyMmDd(nextDate)
+}
+
 export default function CalendarPage() {
   const { db, write, loading } = useData()
   const navigate = useNavigate()
@@ -307,7 +317,7 @@ export default function CalendarPage() {
       platformConfirmations: form.platformConfirmations,
     })
     await write(next)
-    setSelectedDay(form.startDate)
+    focusDay(form.startDate)
     startNew(form.startDate)
   }
 
@@ -316,13 +326,13 @@ export default function CalendarPage() {
     if (!event) return
     if (event.eventType === 'Game' || event.linkedGameId) {
       setNotice('Game events are managed on the Games page.')
-      setSelectedDay(calendarDateKey(event.start, event.timezone))
+      focusDay(calendarDateKey(event.start, event.timezone))
       return
     }
     setNotice(null)
     const startDate = calendarDateKey(event.start, event.timezone)
     const endDate = calendarDateKey(event.end, event.timezone)
-    setSelectedDay(startDate)
+    focusDay(startDate)
     setForm({
       id: event.id,
       eventType: event.eventType,
@@ -347,20 +357,20 @@ export default function CalendarPage() {
   }
 
   function moveMonth(offset: number) {
-    const next = new Date(cursor.getFullYear(), cursor.getMonth() + offset, 1)
-    setCursor(next)
+    focusDay(shiftDayIntoMonth(selectedDay, offset))
   }
 
   function jumpToday() {
-    const today = new Date()
-    setCursor(today)
-    setSelectedDay(yyyyMmDd(today))
+    focusDay(yyyyMmDd(new Date()))
+  }
+
+  function focusDay(day: string) {
+    setSelectedDay(day)
+    setCursor(new Date(`${day}T00:00:00`))
   }
 
   function selectDay(day: string) {
-    setSelectedDay(day)
-    const next = new Date(`${day}T00:00:00`)
-    setCursor(next)
+    focusDay(day)
   }
 
   function renderAgendaCard(className = 'calendar-agenda', compact = false) {
