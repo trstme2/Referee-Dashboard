@@ -333,8 +333,8 @@ export default function OnboardingPage() {
             <input value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)} placeholder="Street address used for route estimates" />
             <div className="small">Use a real street address. Whistle Keeper verifies it against Google Maps before saving so route estimates work.</div>
             <HelpTip label="Mileage note" title="Mileage origin is not a tax decision">
-              <p>Whistle Keeper uses this address for route estimates and recordkeeping. IRS rules may treat travel from home differently from travel from a qualifying business location, and commuting rules may apply.</p>
-              <p>Review IRS guidance or ask your preparer before relying on mileage from any origin.</p>
+              <p>Whistle Keeper uses saved origins for route estimates and recordkeeping. IRS rules may limit or disallow some home-to-work mileage, and business use of home has specific requirements.</p>
+              <p>Review IRS guidance or ask your preparer before relying on mileage from any saved origin.</p>
               <div className="tax-review-links">
                 {IRS_MILEAGE_ORIGIN_LINKS.map(link => (
                   <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label}</a>

@@ -32,19 +32,20 @@ export default function App() {
   const authRestoring = requireAuth && (!authReady || hydrating)
   const isPublicMarketingRoute = location.pathname === '/' || location.pathname === '/request-access'
   const showLanding = authMissing && isPublicMarketingRoute
-  const isAuthRoute = location.pathname === '/auth' || location.pathname === '/auth/callback'
-  const showAppShell = !showLanding && !isAuthRoute
+  const isAuthSignInRoute = location.pathname === '/auth'
+  const isAuthCallbackRoute = location.pathname === '/auth/callback'
+  const showAppShell = !showLanding && !isAuthCallbackRoute && (!isAuthSignInRoute || Boolean(session))
   const onboardingRequired = !hydrating && !loading && authReady && Boolean(session) && shouldStartOnboarding(db)
   const onboardingBypassRoute = location.pathname === '/admin'
   const routeMeta = routeMetaForPath(location.pathname)
 
   useEffect(() => {
-    if (!session?.access_token || authMissing || isAuthRoute) return
+    if (!session?.access_token || authMissing || isAuthCallbackRoute) return
     void recordPlatformEvent(session.access_token, 'page_view', {
       route: safeRoutePath(location.pathname),
       mode,
     })
-  }, [authMissing, isAuthRoute, location.pathname, mode, session?.access_token])
+  }, [authMissing, isAuthCallbackRoute, location.pathname, mode, session?.access_token])
 
   useEffect(() => {
     if (!session?.access_token || authMissing) return undefined

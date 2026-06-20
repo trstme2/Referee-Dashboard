@@ -37,6 +37,7 @@ export const mobileSecondaryNavItems: NavItem[] = [
 ]
 
 export function routeMetaForPath(pathname: string): NavItem {
+  if (pathname === '/auth') return { path: '/auth', label: 'Account', subtitle: 'Sign-in and data controls' }
   const all = [...desktopNavItems, ...mobileSecondaryNavItems]
   return all.find(item => item.path === pathname) ?? { path: pathname, label: 'Whistle Keeper', subtitle: 'Referee operations' }
 }
