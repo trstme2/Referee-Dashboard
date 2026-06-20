@@ -690,7 +690,7 @@ export default function RequirementsPage() {
         <div className="page-section-head">
           <div>
             <h2>Season Readiness</h2>
-            <p className="sub">Each group answers the practical question: am I cleared for this sport, level, body, and season?</p>
+            <p className="sub">Each group shows whether you are cleared for this sport, level, governing body, and season.</p>
           </div>
           <span className={`pill ${readinessStats.blocked ? 'bad' : readinessStats.needsAttention ? 'warn' : 'ok'}`}>
             {readinessStats.blocked ? `${readinessStats.blocked} blocked` : readinessStats.needsAttention ? `${readinessStats.needsAttention} not ready` : 'Ready'}
@@ -802,13 +802,13 @@ export default function RequirementsPage() {
 
       <section className="grid cols2 requirement-setup-grid">
         <div className="card">
-          <h2>Add to a readiness group</h2>
+          <h2>Add requirement tracker</h2>
           <p className="sub">Apply a reusable requirement to a specific sport season, certification year, or governing body.</p>
 
           {hasDefinitions ? (
             <>
               <div className="field">
-                <label>Definition</label>
+                <label>Requirement template</label>
                 <select value={selectedDef} onChange={e => setSelectedDef(e.target.value)}>
                   {defs.map(d => <option key={d.id} value={d.id}>{d.name}{d.governingBody ? ` (${d.governingBody})` : ''}</option>)}
                 </select>
@@ -831,9 +831,9 @@ export default function RequirementsPage() {
             </>
           ) : (
             <div className="empty-state">
-              <h3>No definitions yet</h3>
-              <p>Create a reusable requirement first, then turn it into a season or annual tracker.</p>
-              <button className="btn primary" onClick={jumpToDefinitionForm}>Create definition</button>
+              <h3>No requirement templates yet</h3>
+              <p>Create a reusable requirement template first, then turn it into a season or annual tracker.</p>
+              <button className="btn primary" onClick={jumpToDefinitionForm}>Create template</button>
             </div>
           )}
         </div>
@@ -907,7 +907,7 @@ export default function RequirementsPage() {
             <label>Notes</label>
             <input value={newDef.notes} onChange={e => setNewDef({ ...newDef, notes: e.target.value })} placeholder="Anything you want to remember about this requirement" />
           </div>
-          <button className="btn primary" onClick={createDefinition} disabled={!newDef.name.trim()}>Create requirement</button>
+          <button className="btn primary" onClick={createDefinition} disabled={!newDef.name.trim()}>Create requirement template</button>
         </div>
       </section>
 
@@ -1059,13 +1059,13 @@ export default function RequirementsPage() {
               <h3>{selectedReadinessGroup ? 'No requirements in this group' : 'No tracked requirements yet'}</h3>
               <p>
                 {hasDefinitions
-                  ? 'Pick a definition above and create your first tracked season so activities and document evidence have a place to live.'
-                  : 'Start by creating a reusable requirement definition, then turn it into a tracked season or annual instance.'}
+                  ? 'Pick a requirement template above and create your first tracked season so activities and document evidence have a place to live.'
+                  : 'Start by creating a reusable requirement template, then turn it into a tracked season or annual item.'}
               </p>
               {hasDefinitions ? (
                 <button className="btn primary" onClick={createInstance} disabled={loading || !selectedDef}>Create first tracker</button>
               ) : (
-                <button className="btn primary" onClick={jumpToDefinitionForm}>Create a definition first</button>
+                <button className="btn primary" onClick={jumpToDefinitionForm}>Create a template first</button>
               )}
             </div>
           )}

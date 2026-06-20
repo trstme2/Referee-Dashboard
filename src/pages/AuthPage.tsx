@@ -37,7 +37,7 @@ export default function AuthPage() {
     return (
       <div className="grid">
         <section className="card">
-          <h2>Offline mode</h2>
+          <h2>Sign-in unavailable</h2>
           <p className="small">Cloud sign-in is not available in this environment.</p>
         </section>
       </div>
@@ -49,7 +49,7 @@ export default function AuthPage() {
       <div className="grid">
         <section className="card">
           <h2>Cloud sign-in unavailable</h2>
-          <p className="small">Complete the Whistle Keeper cloud configuration to enable sign-in.</p>
+          <p className="small">Sign-in is temporarily unavailable. Please try again later or contact support.</p>
         </section>
       </div>
     )
@@ -73,7 +73,7 @@ export default function AuthPage() {
     }
 
     async function resetAppData() {
-      const ok = prompt('This will delete your games, expenses, feeds, requirements, imports, receipts, and evidence files, then reset Whistle Keeper to a fresh account. Type RESET to continue.')
+      const ok = prompt('This will delete your games, expenses, feeds, requirements, imports, receipts, and evidence files, then reset your Whistle Keeper workspace. Type RESET to continue.')
       if (ok !== 'RESET') return
       setErr(null)
       setMsg(null)
@@ -93,7 +93,7 @@ export default function AuthPage() {
     }
 
     async function deleteAccount() {
-      const ok = prompt(`This permanently deletes your Whistle Keeper app data and then deletes the signed-in account ${activeSession.user.email}. Type DELETE ACCOUNT to continue.`)
+      const ok = prompt(`This permanently deletes your Whistle Keeper app data and sign-in account ${activeSession.user.email}. Type DELETE ACCOUNT to continue.`)
       if (ok !== 'DELETE ACCOUNT') return
       setErr(null)
       setMsg(null)
@@ -138,7 +138,7 @@ export default function AuthPage() {
         </section>
 
         <section className="card account-lifecycle-card">
-          <h2>Data Lifecycle</h2>
+          <h2>Account & Data Controls</h2>
           <p className="sub">Know what is stored, export it, and remove it when needed.</p>
           <div className="account-lifecycle-grid">
             <div>
@@ -147,20 +147,20 @@ export default function AuthPage() {
             </div>
             <div>
               <div className="expanded-label">Private files</div>
-              <p>Receipt and requirement evidence uploads live in private Supabase Storage under your user id. Reset and delete flows remove those saved files.</p>
+              <p>Receipt and requirement evidence uploads live in private cloud storage under your account. Reset and delete flows remove those saved files.</p>
             </div>
             <div>
               <div className="expanded-label">Calendar/feed secrets</div>
-              <p>Saved feed URLs are masked in the app and encrypted at rest when the deployment has `FEED_URL_ENCRYPTION_KEY` configured.</p>
+              <p>Saved feed URLs are masked in the app and protected when stored.</p>
             </div>
           </div>
           <div className="btnbar" style={{ marginTop: 14 }}>
             <button className="btn danger" onClick={resetAppData} disabled={loading || accountBusy}>Reset app data</button>
             <button className="btn danger" onClick={deleteAccount} disabled={loading || accountBusy}>Delete account</button>
           </div>
-          {accountBusy ? <p className="small">Working on account data...</p> : null}
+          {accountBusy ? <p className="small">Updating account data...</p> : null}
           <div className="footer-note">
-            Reset keeps your sign-in account and returns the app to a fresh state. Delete account removes app data first, then deletes the Supabase auth user.
+            Reset keeps your sign-in account and returns the app to a fresh state. Delete account removes app data first, then deletes your Whistle Keeper sign-in account.
           </div>
         </section>
       </div>
@@ -505,7 +505,7 @@ export default function AuthPage() {
         {err && <p className="small"><span className="pill bad">{err}</span></p>}
 
         <div className="footer-note">
-          Whistle Keeper uses Supabase Auth passwordless email login. No password is stored or required.
+          Whistle Keeper uses secure passwordless email login. No password is stored or required.
         </div>
       </section>
     </div>

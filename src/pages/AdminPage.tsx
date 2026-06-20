@@ -77,7 +77,7 @@ type BetaAccessRequest = {
 function MiniBarList({ values }: { values: Record<string, number> }) {
   const entries = Object.entries(values).sort((a, b) => b[1] - a[1])
   const max = Math.max(1, ...entries.map(([, value]) => value))
-  if (!entries.length) return <p className="small">No data yet.</p>
+  if (!entries.length) return <p className="small">No metrics available yet.</p>
   return (
     <div className="admin-bar-list">
       {entries.map(([label, value]) => (
@@ -202,7 +202,7 @@ export default function AdminPage() {
         <div className="page-section-head">
           <div>
             <h2>Beta Access Requests</h2>
-            <p className="sub">Review curated beta applicants and send Whistle Keeper Supabase Auth invites from the server.</p>
+            <p className="sub">Review curated beta applicants and send Whistle Keeper invitation emails.</p>
           </div>
           <span className="pill info">{betaRequests.length} requests</span>
         </div>
@@ -231,7 +231,7 @@ export default function AdminPage() {
                 {request.notes ? <p className="small">{request.notes}</p> : null}
                 <div className="btnbar">
                   <button className="btn primary" onClick={() => void reviewBetaRequest(request.id, 'invite')} disabled={Boolean(reviewingId)}>
-                    {reviewingId === request.id ? 'Working...' : 'Invite'}
+                    {reviewingId === request.id ? 'Updating...' : 'Invite'}
                   </button>
                   <button className="btn" onClick={() => void reviewBetaRequest(request.id, 'waitlist')} disabled={Boolean(reviewingId)}>Waitlist</button>
                   <button className="btn danger" onClick={() => void reviewBetaRequest(request.id, 'reject')} disabled={Boolean(reviewingId)}>Reject</button>
@@ -293,7 +293,7 @@ export default function AdminPage() {
             <div className="card">
               <h2>Sync Jobs</h2>
               {metrics.syncJobs.unavailable ? (
-                <p className="small">Sync job table is not installed in this environment yet.</p>
+                <p className="small">Sync job history is not available in this environment yet.</p>
               ) : (
                 <>
                   <div className="admin-health-list">

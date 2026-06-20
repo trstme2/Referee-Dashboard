@@ -429,7 +429,7 @@ export function getAttentionNeeded(args: {
   if (missingBackfillCount) {
     items.push({
       id: 'missing-backfill',
-      title: 'Completed assignments need cleanup',
+      title: 'Completed assignments need review',
       detail: missingBackfillCount === 1
         ? '1 completed assignment is still missing mileage or earnings details.'
         : `${missingBackfillCount} completed assignments are still missing mileage or earnings details.`,

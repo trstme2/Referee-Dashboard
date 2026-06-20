@@ -62,7 +62,7 @@ export default function AuthCallbackPage() {
           status: 'success',
           title: 'You are signed in',
           detail: destination === '/onboarding'
-            ? 'We will take you to setup so you can finish your Whistle Keeper foundation.'
+            ? 'We will take you to setup so you can finish setting up your account.'
             : 'We will take you to your Whistle Keeper dashboard.',
           destination,
         })

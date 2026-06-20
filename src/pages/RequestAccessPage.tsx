@@ -104,7 +104,7 @@ export default function RequestAccessPage() {
         </header>
         <section className="card beta-access-card beta-access-success">
           <span className="pill ok">Request received</span>
-          <h1>Thanks for raising your hand.</h1>
+          <h1>Your beta request has been submitted.</h1>
           <p>
             Your beta request is in the queue. If it is a fit for this test round,
             Whistle Keeper will send access to <strong>{form.email}</strong>.
@@ -141,7 +141,7 @@ export default function RequestAccessPage() {
           </p>
           <div className="landing-proof-row">
             <span>Curated beta</span>
-            <span>No public self-serve signup yet</span>
+            <span>Invitation-only access during beta</span>
             <span>Built for solo officials</span>
           </div>
         </div>
@@ -198,7 +198,7 @@ export default function RequestAccessPage() {
           ) : null}
 
           <div className="field">
-            <label>Anything we should know?</label>
+            <label>Additional context</label>
             <textarea
               value={form.notes}
               onChange={(event) => setForm({ ...form, notes: event.target.value })}

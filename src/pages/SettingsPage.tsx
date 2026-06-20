@@ -40,14 +40,14 @@ export default function SettingsPage() {
   }, [db.settings.weeklyGamesEmailEnabled])
 
   async function wipeLocal() {
-    if (!confirm('Wipe local cache?')) return
+    if (!confirm('Clear device data? Cloud data will not be deleted.')) return
     resetDB()
     location.reload()
   }
 
   async function pushLocalToCloud() {
     if (mode !== 'supabase') return
-    if (!confirm('Overwrite cloud snapshot with your current local cache?')) return
+    if (!confirm('Replace cloud data with the records currently saved on this device?')) return
     await write(db, { forceFullReplace: true })
   }
 
@@ -224,7 +224,7 @@ export default function SettingsPage() {
             <div className="field">
               <label>Secondary work location (optional)</label>
               <input value={otherWork} onChange={e => setOtherWork(e.target.value)} placeholder="Office, school, or other work address" />
-              <div className="small">Use this for another IRS work location you sometimes travel from. If you add it, Whistle Keeper verifies it before saving.</div>
+              <div className="small">Use this for another saved mileage origin you sometimes travel from. If you add it, Whistle Keeper verifies it before saving.</div>
               {db.settings.otherWorkAddressPlaceId && otherWork.trim() === (db.settings.otherWorkAddress ?? '').trim() ? <div className="small">Verified Google Maps origin saved.</div> : null}
             </div>
 
@@ -313,7 +313,7 @@ export default function SettingsPage() {
                   </button>
                 </div>
                 {calendarFeedError ? <p className="small"><span className="pill bad">{calendarFeedError}</span></p> : null}
-                {calendarDownloadUrl ? <p className="small">Authenticated download endpoint: <code>{calendarDownloadUrl}</code></p> : null}
+                {calendarDownloadUrl ? <p className="small">Download a one-time calendar export: <code>{calendarDownloadUrl}</code></p> : null}
               </section>
             ) : null}
 
@@ -323,14 +323,14 @@ export default function SettingsPage() {
           </section>
 
           <aside className="settings-panel settings-cache-panel">
-            <h2>Local cache</h2>
-            <p className="small">Wiping local cache will not delete cloud data.</p>
-            <button className="btn danger" onClick={wipeLocal}>Wipe local cache</button>
+            <h2>Device data</h2>
+            <p className="small">Clearing device data will not delete cloud data.</p>
+            <button className="btn danger" onClick={wipeLocal}>Clear device data</button>
           </aside>
         </div>
 
         <div className="footer-note">
-          Replacing cloud data is a full overwrite and should be used only when you want local data to become the source of truth.
+          Replacing cloud data overwrites the cloud copy with records currently saved on this device. Use only when this device has the records you want to keep.
         </div>
       </section>
     </div>

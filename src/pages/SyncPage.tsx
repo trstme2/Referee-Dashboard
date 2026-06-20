@@ -99,9 +99,9 @@ export default function SyncPage() {
   function feedHealth(feed: CalendarFeed) {
     const latest = feedResultById.get(feed.id)
     if (latest) {
-      if (latest.status === 'success') return { label: `Synced just now (${latest.attempts} attempt${latest.attempts === 1 ? '' : 's'})`, cls: 'ok' }
+      if (latest.status === 'success') return { label: `Synced recently (${latest.attempts} attempt${latest.attempts === 1 ? '' : 's'})`, cls: 'ok' }
       if (latest.status === 'partial') return { label: 'Synced with warnings', cls: 'warn' }
-      return { label: `Failed just now (${latest.attempts || 1} attempt${latest.attempts === 1 ? '' : 's'})`, cls: 'bad' }
+      return { label: `Failed recently (${latest.attempts || 1} attempt${latest.attempts === 1 ? '' : 's'})`, cls: 'bad' }
     }
     if (!feed.enabled) return { label: 'Paused', cls: '' }
     if (!feed.lastSyncedAt) return { label: 'Needs first sync', cls: 'warn' }
@@ -294,7 +294,7 @@ export default function SyncPage() {
   }
 
   async function deleteFeed(id: string) {
-    if (!confirm('Delete this feed?')) return
+    if (!confirm('Delete this assignment feed? Future syncs from this feed will stop.')) return
     setErr(null)
     try {
       await api(`/api/calendar-feeds?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
@@ -347,9 +347,9 @@ export default function SyncPage() {
     setCleaning(true)
     try {
       if (apply && !selectedCleanupKeys.length) {
-        throw new Error('Select at least one duplicate group to apply cleanup.')
+        throw new Error('Select at least one duplicate group before applying duplicate review changes.')
       }
-      if (apply && !confirm('Apply cleanup to the selected duplicate groups? This will permanently delete only the selected games/events.')) {
+      if (apply && !confirm('Apply duplicate review changes? Whistle Keeper will delete only the selected duplicate records.')) {
         setCleaning(false)
         return
       }
@@ -369,7 +369,7 @@ export default function SyncPage() {
   }
 
   function describeGame(game: any) {
-    if (!game) return 'Game details unavailable'
+    if (!game) return 'Assignment details unavailable'
     const teams = game.homeTeam || game.awayTeam ? `${game.homeTeam || 'TBD'} vs ${game.awayTeam || 'TBD'}` : null
     const detail = game.levelDetail || game.competitionLevel || game.sport || 'Assignment'
     const place = game.locationAddress || 'No location saved'
@@ -405,10 +405,10 @@ export default function SyncPage() {
             {syncing ? 'Syncing...' : 'Sync All'}
           </button>
           <button className="btn" onClick={() => runCleanup(false)} disabled={cleaning || syncing || loading}>
-            {cleaning ? 'Working...' : 'Preview Cleanup'}
+            {cleaning ? 'Reviewing...' : 'Preview duplicates'}
           </button>
           <button className="btn danger" onClick={() => runCleanup(true)} disabled={cleaning || syncing || loading || !selectedCleanupKeys.length}>
-            Apply Selected Cleanup
+            Apply selected review
           </button>
           <button className="btn" onClick={loadFeeds} disabled={loading}>Refresh feeds</button>
         </div>
@@ -428,7 +428,7 @@ export default function SyncPage() {
                 <div className="sync-feed-card-grid">
                   <div>
                     <span>Feed URL</span>
-                    <strong>{f.maskedFeedUrl || '(hidden)'}</strong>
+                    <strong>{f.maskedFeedUrl || 'Protected'}</strong>
                   </div>
                   <div>
                     <span>Enabled</span>
@@ -440,7 +440,7 @@ export default function SyncPage() {
                   </div>
                   <div>
                     <span>Import start</span>
-                    <strong>{f.importStartDate || 'Any date'}</strong>
+                    <strong>{f.importStartDate || 'No start date'}</strong>
                   </div>
                 </div>
                 <div className="btnbar sync-feed-card-actions">
@@ -453,7 +453,7 @@ export default function SyncPage() {
           })}
           {feeds.length === 0 && (
             <div className="empty-state centered">
-              <h3>No feeds configured</h3>
+              <h3>No assignment feeds yet</h3>
               <p>Add your first assigning-platform calendar feed to start syncing assignments.</p>
             </div>
           )}
@@ -479,7 +479,7 @@ export default function SyncPage() {
                     </div>
                   </td>
                   <td>{f.platform}</td>
-                  <td className="small">{f.maskedFeedUrl || '(hidden)'}</td>
+                  <td className="small">{f.maskedFeedUrl || 'Protected'}</td>
                   <td>{f.enabled ? <span className="pill ok">Yes</span> : <span className="pill">No</span>}</td>
                   <td className="small"><span className={`pill ${health.cls}`}>{health.label}</span></td>
                   <td className="small">{f.lastSyncedAt ? new Date(f.lastSyncedAt).toLocaleString() : 'Never'}</td>
@@ -493,7 +493,7 @@ export default function SyncPage() {
                 </tr>
               )
             })}
-            {feeds.length === 0 && <tr><td colSpan={7} className="small">No feeds configured.</td></tr>}
+            {feeds.length === 0 && <tr><td colSpan={7} className="small">No assignment feeds yet.</td></tr>}
           </tbody>
         </table>
 
@@ -658,14 +658,14 @@ export default function SyncPage() {
           ) : (
             <div className="empty-state centered">
               <h3>No sync history yet</h3>
-              <p>Run a manual sync or wait for scheduled sync after the history table is added in Supabase.</p>
+              <p>Run a manual sync or wait for scheduled sync after sync history is enabled for your account.</p>
             </div>
           )}
         </div>
 
         {cleanupResult && (
           <div className="card" style={{ marginTop: 10 }}>
-            <h2>Cleanup Result ({cleanupResult.mode})</h2>
+            <h2>Duplicate Review Result ({cleanupResult.mode === 'dry-run' ? 'preview' : 'applied'})</h2>
             <p className="small">
               Duplicate groups: {cleanupResult.duplicateGroups} | Delete games: {cleanupResult.deleteGames?.length ?? 0} | Delete events: {cleanupResult.deleteEvents?.length ?? 0}
             </p>
@@ -684,7 +684,7 @@ export default function SyncPage() {
                 </button>
               </div>
             ) : null}
-            {cleanupResult.relinks?.length ? <p className="small">Relinks: {cleanupResult.relinks.length}</p> : null}
+            {cleanupResult.relinks?.length ? <p className="small">Events relinked: {cleanupResult.relinks.length}</p> : null}
             {cleanupReview.length > 0 && (
               <div>
                 {cleanupReview.map((entry: any, i: number) => (
@@ -701,7 +701,7 @@ export default function SyncPage() {
                           )}
                           style={{ marginRight: 8 }}
                         />
-                        Include this duplicate group in cleanup
+                        Include this duplicate group
                       </label>
                     ) : null}
                     <p className="small">
@@ -717,7 +717,7 @@ export default function SyncPage() {
                     ))}
                     {entry.relinks.map((r: any) => (
                       <p key={r.eventId} className="small">
-                        <span className="pill warn">Relink</span> Event {r.eventId} will be attached to the kept game.
+                        <span className="pill warn">Relink</span> Event {r.eventId} will stay attached to the kept game.
                       </p>
                     ))}
                   </div>
@@ -737,7 +737,7 @@ export default function SyncPage() {
 
       <section className="card">
         <h2>{form.id ? 'Edit feed' : 'Add feed'}</h2>
-        <p className="small">Feed URLs are stored securely and hidden after they are saved.</p>
+        <p className="small">Feed URLs are protected after they are saved.</p>
         <div className="sync-help-row">
           <HelpTip title="How to get a feed from your assignor">
             <p>Whistle Keeper reads iCal feeds from your assigning platform. Look for calendar export, schedule sync, or subscribe options in DragonFly, RefQuest, Arbiter, Assignr, and similar tools.</p>

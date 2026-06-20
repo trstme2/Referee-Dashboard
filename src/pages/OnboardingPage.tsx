@@ -289,7 +289,7 @@ export default function OnboardingPage() {
       <section className="onboarding-hero accent-frame">
         <div>
           <span className="landing-eyebrow">First-run setup</span>
-          <h2>Let's get started!</h2>
+          <h2>Set up your account.</h2>
           <p>
             Your profile is the only required setup. Adding assignments is the best next step. Requirements and tax review can wait until you are ready for them.
           </p>
@@ -323,7 +323,7 @@ export default function OnboardingPage() {
             <span className="pill ok">1</span>
             <div>
               <h2>Referee Profile</h2>
-              <p className="small">This is the only part you need before using the app. The rest of these defaults can be filled in later.</p>
+              <p className="small">This is the only part you need before using the app. Additional preferences can be completed later.</p>
             </div>
           </div>
 
@@ -434,7 +434,7 @@ export default function OnboardingPage() {
                 onSubmit={addFeed}
                 footerLinks={(
                   <HelpTip label="What comes through?" title="What to expect from calendar feeds">
-                    <p>Most calendar feeds do not include everything you care about. Pay, precise location, mileage, and some league details are often missing or inconsistent.</p>
+                    <p>Most calendar feeds do not include all assignment details. Pay, precise location, mileage, and some league details are often missing or inconsistent.</p>
                     <p>Add the missing pieces in game Edit after the sync. When the next sync matches the same assignment, Whistle Keeper keeps your manual details and merges the new feed data around them.</p>
                   </HelpTip>
                 )}
@@ -455,7 +455,7 @@ export default function OnboardingPage() {
                   <strong>What to review next</strong>
                   <ul className="guided-platform-list is-bulleted">
                     <li>Open Games and review imported assignments.</li>
-                    <li>Calendar feeds usually bring only partial information. Exact field address, pay, teams, and level details often still need manual cleanup.</li>
+                    <li>Calendar feeds usually bring only partial information. Exact field address, pay, teams, and level details often still need manual review.</li>
                     <li>Use Calculate mileage on any game that still does not show mileage.</li>
                     {Number(feedSyncSummary.autoMileageUpdatedGames ?? 0) > 0 ? (
                       <li>Whistle Keeper already auto-filled mileage for {Number(feedSyncSummary.autoMileageUpdatedGames)} game{Number(feedSyncSummary.autoMileageUpdatedGames) === 1 ? '' : 's'} where the address was clear enough to map.</li>

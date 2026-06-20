@@ -455,7 +455,7 @@ export default function HomePage() {
             <h2>{upcomingAssignments.length ? 'Upcoming Assignments' : 'Recent Assignments'}</h2>
             <p className="sub">
               {upcomingAssignments.length
-                ? 'A short list instead of a giant dashboard table.'
+                ? 'A focused list of the most relevant assignments.'
                 : 'Your latest played or completed games.'}
             </p>
           </div>

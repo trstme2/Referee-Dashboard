@@ -5,7 +5,7 @@ const platformGuides = [
   },
   {
     name: 'RefQuest',
-    hint: 'Check schedule, then click "export games" and then find the iCal tab. You need to create a calendar for each assigner using this platform.',
+    hint: 'Open Schedule, choose Export Games, then select the iCal tab. You need to create a calendar for each assigner using this platform.',
   },
   {
     name: 'Arbiter',

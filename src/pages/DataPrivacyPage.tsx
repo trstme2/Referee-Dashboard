@@ -21,14 +21,14 @@ const dataInventory = [
   },
   {
     label: 'Requirements',
-    examples: 'Requirement definitions, due dates, status, completion notes, and evidence file references.',
+    examples: 'Requirement templates, due dates, status, completion notes, and evidence file references.',
     location: 'Database rows plus private evidence files when uploaded.',
     control: 'Export record metadata; reset/delete removes saved evidence files tracked by the app.',
   },
   {
     label: 'Sync configuration and history',
     examples: 'Saved feed metadata, masked feed URLs, queued sync jobs, sync status, attempts, duration, and recent errors.',
-    location: 'Server API plus Supabase tables protected by user ownership rules.',
+    location: 'Private cloud records protected by account ownership rules.',
     control: 'Disable/delete feeds from Sync; export, reset, and delete include sync history.',
   },
   {
@@ -88,7 +88,7 @@ export default function DataPrivacyPage() {
   }
 
   async function handleReset() {
-    const ok = prompt('This will delete app records, saved feeds, requirements, imports, receipts, and evidence files, then return Whistle Keeper to a fresh state. Type RESET to continue.')
+    const ok = prompt('This will delete app records, saved feeds, requirements, imports, receipts, and evidence files, then reset your Whistle Keeper workspace. Type RESET to continue.')
     if (ok !== 'RESET') return
     setErr(null)
     setMsg(null)
@@ -118,7 +118,7 @@ export default function DataPrivacyPage() {
 
   async function handleDeleteAccount() {
     if (!isCloud || !activeSession) return
-    const ok = prompt(`This permanently deletes your Whistle Keeper app data and then deletes the signed-in account ${activeSession.user.email}. Type DELETE ACCOUNT to continue.`)
+    const ok = prompt(`This permanently deletes your Whistle Keeper app data and sign-in account ${activeSession.user.email}. Type DELETE ACCOUNT to continue.`)
     if (ok !== 'DELETE ACCOUNT') return
     setErr(null)
     setMsg(null)
@@ -172,12 +172,12 @@ export default function DataPrivacyPage() {
         <div className="card privacy-stat-card">
           <span>Saved file references</span>
           <strong>{savedFileCount}</strong>
-          <p>Receipt and evidence files tracked by the app for reset/delete cleanup.</p>
+          <p>Receipt and evidence files tracked by the app for reset/delete processing.</p>
         </div>
         <div className="card privacy-stat-card">
           <span>Saved feeds</span>
           <strong>{isCloud ? 'Private' : 'Local only'}</strong>
-          <p>Feed URLs are masked in the app and encrypted at rest when the deployment key is configured.</p>
+          <p>Feed URLs are masked in the app and protected when stored.</p>
         </div>
       </section>
 
@@ -203,13 +203,13 @@ export default function DataPrivacyPage() {
           </div>
           <div>
             <div className="expanded-label">Delete account</div>
-            <p>Cloud mode only. Removes app data first, then deletes the Supabase auth user used to sign in.</p>
+            <p>Cloud mode only. Removes app data first, then deletes your Whistle Keeper sign-in account.</p>
           </div>
         </div>
         <div className="btnbar" style={{ marginTop: 14 }}>
           <button className="btn danger" onClick={handleReset} disabled={loading || busy}>Reset app data</button>
           {isCloud && activeSession ? <button className="btn danger" onClick={handleDeleteAccount} disabled={loading || busy}>Delete account</button> : null}
-          {busy ? <span className="small">Working on data controls...</span> : null}
+          {busy ? <span className="small">Updating data controls...</span> : null}
         </div>
         {msg ? <p className="small"><span className="pill ok">{msg}</span></p> : null}
         {err ? <p className="small"><span className="pill bad">{err}</span></p> : null}
@@ -246,10 +246,10 @@ export default function DataPrivacyPage() {
         <div className="card">
           <h2>Protection Model</h2>
           <div className="privacy-list">
-            <p><strong>User isolation:</strong> cloud records are tied to your Supabase auth user id and protected by row-level access rules.</p>
+            <p><strong>User isolation:</strong> cloud records are tied to your account and protected so other users cannot access them.</p>
             <p><strong>Private uploads:</strong> receipt and requirement evidence files are stored in private buckets under user-scoped paths.</p>
-            <p><strong>Feed secrecy:</strong> saved feed URLs are masked in API responses and encrypted at rest when `FEED_URL_ENCRYPTION_KEY` is configured.</p>
-            <p><strong>Admin access:</strong> roles and subscription tiers are checked server-side. The browser cannot promote itself or read global metrics directly.</p>
+            <p><strong>Feed secrecy:</strong> saved feed URLs are masked in the app and protected when stored.</p>
+            <p><strong>Admin access:</strong> roles and subscription tiers are verified on the server.</p>
             <p><strong>Subscription URLs:</strong> outbound calendar feed links should be treated like passwords. You can regenerate the token in <Link to="/settings">Settings</Link>.</p>
           </div>
         </div>
@@ -259,7 +259,7 @@ export default function DataPrivacyPage() {
           <div className="privacy-list">
             <p><strong>No tax advice:</strong> tax features organize records and review flags. They do not determine deductibility or replace a tax professional.</p>
             <p><strong>No assignor tools:</strong> this app is built for a solo referee coordinating across platforms, not for managing officials.</p>
-            <p><strong>Deletion scope:</strong> reset/delete removes data the app knows about. If a file path was manually changed outside the app, it may need separate storage cleanup.</p>
+            <p><strong>Deletion scope:</strong> reset/delete removes records and files managed by Whistle Keeper. Files changed outside the app may require separate removal.</p>
             <p><strong>Email preference:</strong> weekly game email opt-in is stored in Settings and can be turned off there at any time.</p>
           </div>
         </div>

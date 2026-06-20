@@ -485,7 +485,7 @@ export default function ImportPage() {
             )}
             <div className="btnbar" style={{ marginBottom: 10 }}>
               <button className="btn primary" onClick={applyPreviewImport} disabled={loading || preview.readyRows.length === 0}>
-                {loading ? 'Importing...' : 'Import Reviewed File'}
+                {loading ? 'Importing...' : 'Import reviewed rows'}
               </button>
               <button className="btn" onClick={() => setPreview(null)} disabled={loading}>Clear Review</button>
             </div>
@@ -516,7 +516,7 @@ export default function ImportPage() {
           <h2>Templates</h2>
           <p className="small"><b>Blocks CSV:</b> title,start_datetime,end_datetime,all_day,notes</p>
           <p className="small"><b>Games CSV (template):</b> sport,competition_level,league,level_detail,game_date,start_time,location_address,home_team,away_team,role,game_fee,paid_confirmed,paid_date,roundtrip_miles,status,notes</p>
-          <p className="small"><b>Referee report headers also accepted (sport honored if present):</b> Date, League, Level, Position, Location, Roundtrip Mi, Pay</p>
+          <p className="small"><b>Referee report headers also accepted (sport used when present):</b> Date, League, Level, Position, Location, Roundtrip Mi, Pay</p>
           <p className="small">Dates: <code>YYYY-MM-DD</code> | Times: <code>HH:mm</code> (15-min increments)</p>
         </div>
       </section>

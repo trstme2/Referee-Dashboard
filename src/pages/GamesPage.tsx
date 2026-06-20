@@ -675,19 +675,19 @@ export default function GamesPage() {
             <div className="modal-titlebar">
               <div>
                 <h2>{form.id ? 'Edit game' : 'Add game'}</h2>
-                <p className="sub">Saving a game also creates/updates a linked calendar entry (2-hour default).</p>
+                <p className="sub">Saving a game also creates or updates a linked calendar entry using a default event duration that you can adjust from the calendar.</p>
               </div>
               <button className="btn compact" onClick={() => setFormOpen(false)}>Close</button>
             </div>
 
             <div className="editor-guidance-row">
               <HelpTip title="Why am I filling this in manually?">
-                <p>Most assignor calendar feeds only send part of the story. Pay, exact field address, roundtrip mileage, and some level details often need a quick cleanup here.</p>
+                <p>Most assignor calendar feeds provide only partial assignment details. Pay, exact field address, roundtrip mileage, and some level details often need a quick review here.</p>
                 <p>This is the place to turn a synced assignment into a record you can actually use for taxes, mileage, and end-of-season reporting.</p>
               </HelpTip>
               <HelpTip label="Will sync wipe this out?" title="How manual edits and sync work together">
                 <p>No. Once Whistle Keeper matches a synced assignment to this game, later syncs are designed to merge around your manual edits instead of wiping fee, location, and mileage fields.</p>
-                <p>If a sync ever creates a duplicate, use Sync cleanup to review it instead of re-entering everything.</p>
+                <p>If a sync ever creates a duplicate, use Sync duplicate review instead of re-entering everything.</p>
               </HelpTip>
             </div>
 
@@ -875,7 +875,7 @@ export default function GamesPage() {
 
         <div className="field">
           <label>Assigning platforms confirmation</label>
-          <div className="small" style={{marginBottom: 6}}>Make these green once the game date is blocked or entered on that platform. Sync can also mark a platform when its iCal feed contains a block for this date.</div>
+          <div className="small" style={{marginBottom: 6}}>Mark a platform once this date is blocked or entered there. Sync can also mark a platform when its iCal feed contains a block for this date.</div>
           <div className="btnbar">
             {assigningPlatforms.map(p => (
               <label key={p} className={'platform-chip ' + (form.platformConfirmations?.[p] ? 'on' : 'off')} style={{cursor:'pointer'}}>

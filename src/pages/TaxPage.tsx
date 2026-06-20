@@ -255,9 +255,9 @@ export default function TaxPage() {
   const exportReadiness = useMemo(() => {
     const blockers = qualityChecks.paidMissingDate + qualityChecks.expenseMissingFields
     const reviewItems = reviewFlags.length + qualityChecks.gamesMissingFee + qualityChecks.mileageMissing
-    if (blockers > 0) return { tone: 'bad', label: 'Needs cleanup before export', detail: `${blockers} blocker${blockers === 1 ? '' : 's'} and ${reviewItems} review item${reviewItems === 1 ? '' : 's'} found.` }
+    if (blockers > 0) return { tone: 'bad', label: 'Needs review before export', detail: `${blockers} blocker${blockers === 1 ? '' : 's'} and ${reviewItems} review item${reviewItems === 1 ? '' : 's'} found.` }
     if (reviewItems > 0) return { tone: 'warn', label: 'Ready with review notes', detail: `${reviewItems} review item${reviewItems === 1 ? '' : 's'} should be checked or discussed with your preparer.` }
-    return { tone: 'ok', label: 'Clean export set', detail: 'No missing paid dates, expense field issues, mileage gaps, fee gaps, or tax review prompts found for this year.' }
+    return { tone: 'ok', label: 'Ready to export', detail: 'No missing paid dates, expense field issues, mileage gaps, fee gaps, or tax review prompts found for this year.' }
   }, [qualityChecks, reviewFlags.length])
 
   return (
@@ -301,7 +301,7 @@ export default function TaxPage() {
             </div>
             <div className="small">
               {mileageRateConfirmed
-                ? 'Mileage rate confirmed for onboarding readiness.'
+                ? 'Mileage rate confirmed for this tax year.'
                 : 'Review this rate and save it once to mark tax readiness complete.'}
             </div>
           </div>
@@ -409,7 +409,7 @@ export default function TaxPage() {
           ))}
           {reviewFlags.length === 0 ? (
             <div className="empty-state centered">
-              <h3>No computed review items</h3>
+              <h3>No review items found</h3>
               <p>No expense review prompts were found for the selected year.</p>
             </div>
           ) : null}
@@ -525,7 +525,7 @@ export default function TaxPage() {
             {expensesByCategory.length === 0 ? (
               <div className="empty-state">
                 <h3>No category totals</h3>
-                <p>No deductible expenses are marked for the selected year.</p>
+                <p>No expenses are marked for deductible review for the selected year.</p>
               </div>
             ) : null}
           </div>
@@ -543,7 +543,7 @@ export default function TaxPage() {
                 </tr>
               ))}
               {expensesByCategory.length === 0 && (
-                <tr><td colSpan={2} className="small">No deductible expenses marked for selected year.</td></tr>
+                <tr><td colSpan={2} className="small">No expenses marked for deductible review for the selected year.</td></tr>
               )}
             </tbody>
           </table>

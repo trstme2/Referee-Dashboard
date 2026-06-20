@@ -28,7 +28,7 @@ export const mobilePrimaryNavItems: NavItem[] = [
 
 export const mobileSecondaryNavItems: NavItem[] = [
   { path: '/onboarding', label: 'Setup', subtitle: 'Foundation' },
-  { path: '/sync', label: 'Sync', subtitle: 'Feeds and cleanup' },
+  { path: '/sync', label: 'Sync', subtitle: 'Feeds and duplicate review' },
   { path: '/expenses', label: 'Expenses', subtitle: 'Mileage and receipts' },
   { path: '/tax', label: 'Tax', subtitle: 'Review and export' },
   { path: '/import', label: 'CSV Import', subtitle: 'Bring in records' },

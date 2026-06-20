@@ -94,10 +94,10 @@ export default function LandingPage() {
       <section className="landing-band" id="platform">
         <div className="landing-section-heading">
           <span>Built around the official</span>
-          <h2>Not an assigning platform. Your personal assignment intelligence layer.</h2>
+          <h2>Not an assigning platform. Your personal officiating command center.</h2>
           <p>
-            Keep the systems you already use. Whistle Keeper helps reconcile the mess
-            after assignments arrive from different places.
+            Keep the systems you already use. Whistle Keeper helps reconcile assignments
+            and details from multiple systems.
           </p>
         </div>
         <div className="platform-strip" aria-label="Supported assigning platforms">
@@ -112,7 +112,7 @@ export default function LandingPage() {
           <h3>Sync without surrendering control</h3>
           <p>
             Import calendar feeds, detect likely matches, and preserve the details
-            you already cleaned up by hand.
+            you have already reviewed or updated.
           </p>
         </article>
         <article className="landing-feature">
@@ -135,7 +135,7 @@ export default function LandingPage() {
 
       <section className="landing-records" id="records">
         <div>
-          <span className="landing-eyebrow">Clean records, less cleanup</span>
+          <span className="landing-eyebrow">Cleaner records, less year-end work</span>
           <h2>Designed for the parts assigning systems do not manage for you.</h2>
         </div>
         <div className="records-grid">

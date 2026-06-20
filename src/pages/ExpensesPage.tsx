@@ -310,7 +310,7 @@ export default function ExpensesPage() {
           {rows.length === 0 && (
             <div className="empty-state centered expense-empty-state">
               <h3>No expenses yet</h3>
-              <p>Add your first expense to start tracking deductions, mileage, and receipt storage across devices.</p>
+              <p>Add your first expense to start tracking expenses, mileage, and receipts across devices.</p>
               <button className="btn primary" onClick={startNew}>Add your first expense</button>
             </div>
           )}
@@ -352,7 +352,7 @@ export default function ExpensesPage() {
                   <td colSpan={8} className="empty-cell">
                     <div className="empty-state centered">
                       <h3>No expenses yet</h3>
-                      <p>Add your first expense to start tracking deductions, mileage, and receipt storage across devices.</p>
+                      <p>Add your first expense to start tracking expenses, mileage, and receipts across devices.</p>
                       <button className="btn primary" onClick={startNew}>Add your first expense</button>
                     </div>
                   </td>

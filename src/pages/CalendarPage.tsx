@@ -402,7 +402,7 @@ export default function CalendarPage() {
           ))}
           {selectedEvents.length === 0 ? (
             <div className="empty-state calendar-empty-day">
-              <h3>Open day</h3>
+              <h3>No events scheduled</h3>
               <p>Add blocked time, travel, or admin work here.</p>
             </div>
           ) : null}
@@ -494,7 +494,7 @@ export default function CalendarPage() {
             </div>
           ) : null}
 
-          <div className="calendar-mobile-day-strip" aria-label="Quick day picker">
+          <div className="calendar-mobile-day-strip" aria-label="Day picker">
             {mobileQuickDays.map(day => {
               const dayKey = yyyyMmDd(day)
               const isSelected = dayKey === selectedDay
@@ -521,7 +521,7 @@ export default function CalendarPage() {
                 <div className="page-section-head">
                   <div>
                     <h2>Coming up</h2>
-                    <p className="sub">A phone-friendly view of your next scheduled items.</p>
+                    <p className="sub">A mobile-friendly view of your next scheduled items.</p>
                   </div>
                 </div>
                 <div className="calendar-mobile-groups">
@@ -629,7 +629,7 @@ export default function CalendarPage() {
                             <span>{eventSourceLabel(event)} | {calendarEventTimeRangeLabel(event)}</span>
                           </button>
                         ))}
-                        {layout.hiddenCount ? <span className="calendar-more-spans">+{layout.hiddenCount} more spanning</span> : null}
+                        {layout.hiddenCount ? <span className="calendar-more-spans">+{layout.hiddenCount} more multi-day</span> : null}
                       </div>
                     ) : null}
                   </div>

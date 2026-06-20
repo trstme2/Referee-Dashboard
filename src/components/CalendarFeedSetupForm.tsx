@@ -227,7 +227,7 @@ export default function CalendarFeedSetupForm({
               })
             }}
             onBlur={handleOtherPlatformBlur}
-            placeholder="Tell us what platform you use"
+            placeholder="Enter the platform name"
           />
         </div>
       ) : null}
@@ -299,7 +299,7 @@ export default function CalendarFeedSetupForm({
         ) : null}
 
         <div className="guided-platform-callout">
-          <strong>Heads up</strong>
+          <strong>Important note</strong>
           <p>{guide.caveat}</p>
         </div>
 
