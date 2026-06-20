@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createServiceSupabase, cronAuthorized, setApiSecurityHeaders } from '../src/server/auth-utils.js'
+import { appUrl, escapeEmailHtml, sendTransactionalEmail } from '../src/server/email.js'
 
 type GameRow = {
   id: string
@@ -28,7 +29,6 @@ type EnabledSetting = {
 }
 
 const DEFAULT_TIMEZONE = 'America/New_York'
-const RESEND_URL = 'https://api.resend.com/emails'
 
 function addDays(d: Date, days: number): Date {
   const next = new Date(d)
@@ -77,15 +77,6 @@ function matchup(g: GameRow): string {
   return `${g.sport} (${g.competition_level})`
 }
 
-function escapeHtml(value: unknown): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
 function gamesText(games: GameRow[], timeZone: string): string {
   if (!games.length) return 'No scheduled games in the next 7 days.'
   return games.map((g) => [
@@ -99,16 +90,16 @@ function gamesHtml(games: GameRow[], timeZone: string, appUrl?: string): string 
   const rows = games.length
     ? games.map((g) => `
       <tr>
-        <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${escapeHtml(formatDate(g.game_date, timeZone))}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${escapeHtml(formatTime(g.start_time))}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(matchup(g))}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(g.location_address)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${escapeEmailHtml(formatDate(g.game_date, timeZone))}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${escapeEmailHtml(formatTime(g.start_time))}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">${escapeEmailHtml(matchup(g))}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">${escapeEmailHtml(g.location_address)}</td>
       </tr>
     `).join('')
     : '<tr><td colspan="4" style="padding:14px 8px;color:#64748b;">No scheduled games in the next 7 days.</td></tr>'
 
   const dashboardLink = appUrl
-    ? `<p style="margin:20px 0 0;"><a href="${escapeHtml(appUrl)}" style="color:#2563eb;">Open Whistle Keeper</a></p>`
+    ? `<p style="margin:20px 0 0;"><a href="${escapeEmailHtml(appUrl)}" style="color:#2563eb;">Open Whistle Keeper</a></p>`
     : ''
 
   return `<!doctype html>
@@ -132,43 +123,6 @@ function gamesHtml(games: GameRow[], timeZone: string, appUrl?: string): string 
     </div>
   </body>
 </html>`
-}
-
-function appUrl(): string | undefined {
-  const raw = process.env.APP_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL
-  if (!raw) return undefined
-  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
-}
-
-async function sendEmail(input: { to: string; subject: string; text: string; html: string; idempotencyKey: string }) {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) throw new Error('Missing RESEND_API_KEY')
-
-  const from = process.env.WEEKLY_EMAIL_FROM || 'Whistle Keeper <onboarding@resend.dev>'
-  const replyTo = process.env.WEEKLY_EMAIL_REPLY_TO
-  const body = {
-    from,
-    to: input.to,
-    subject: input.subject,
-    text: input.text,
-    html: input.html,
-    ...(replyTo ? { reply_to: replyTo } : {}),
-  }
-
-  const response = await fetch(RESEND_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'Idempotency-Key': input.idempotencyKey,
-    },
-    body: JSON.stringify(body),
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Resend ${response.status}: ${text}`)
-  }
 }
 
 async function loadUsers(client: any): Promise<Array<{ id: string; email: string }>> {
@@ -239,7 +193,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? '1 game in the next 7 days'
         : `${games.length} games in the next 7 days`
 
-      await sendEmail({
+      await sendTransactionalEmail({
         to: user.email,
         subject,
         text: `Games Next 7 Days\n\n${gamesText(games, timeZone)}`,

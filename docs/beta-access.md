@@ -12,9 +12,11 @@ The beta request flow lets prospective testers ask for access without requiring 
 2. Visitor clicks **Request beta access**.
 3. Visitor submits name, email, region, sports, assigning platforms, primary device, and optional notes.
 4. The request is saved through `/api/platform?action=beta-request`.
-5. The visitor sees a confirmation message.
+5. If `BETA_REQUEST_NOTIFY_TO` is configured, Whistle Keeper sends a best-effort owner notification email.
+6. The visitor sees a confirmation message.
 
 The public browser never writes directly to the `beta_access_requests` table.
+Notification emails are sent server-side through Resend. Store `RESEND_API_KEY`, `EMAIL_FROM`, and `BETA_REQUEST_NOTIFY_TO` in Vercel environment variables; do not put email credentials in client code.
 
 ## Admin Flow
 
@@ -41,6 +43,7 @@ The table has RLS enabled and intentionally has no public row policies. App acce
 - Submit an incomplete form and confirm inline validation appears.
 - Submit a complete form and confirm the success state appears.
 - Confirm the request appears in Supabase `beta_access_requests`.
+- If `BETA_REQUEST_NOTIFY_TO` is configured, confirm the owner/admin inbox receives a "New Whistle Keeper beta request" email.
 - Sign in as an admin and open `/admin`.
 - Confirm the request appears in **Beta Access Requests**.
 - Click **Waitlist** and confirm the status updates.

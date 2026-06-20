@@ -77,14 +77,20 @@ Serverless:
 - `GOOGLE_MAPS_API_KEY` (optional, only needed if you want distance-from-home)
 - `CRON_SECRET` (used by Vercel Cron to authorize scheduled requests)
 - `FEED_URL_ENCRYPTION_KEY` (recommended; 32-byte base64 or 64-character hex key used to encrypt saved iCal feed URLs at rest)
-- `RESEND_API_KEY` (needed for weekly schedule emails)
-- `WEEKLY_EMAIL_FROM` (optional, defaults to Resend's test sender)
-- `WEEKLY_EMAIL_REPLY_TO` (optional)
+- `RESEND_API_KEY` (needed for weekly schedule emails and beta-request owner notifications)
+- `EMAIL_FROM` (recommended, for general transactional emails such as beta-request notifications)
+- `EMAIL_REPLY_TO` (optional, defaults to `SUPPORT_EMAIL` when available)
+- `SUPPORT_EMAIL` (optional, defaults to `support@whistlekeeper.com`)
+- `BETA_REQUEST_NOTIFY_TO` (optional; set this to the owner/admin inbox that should receive new beta access request alerts)
+- `WEEKLY_EMAIL_FROM` (optional fallback for weekly schedule emails when `EMAIL_FROM` is not set)
+- `WEEKLY_EMAIL_REPLY_TO` (optional fallback for weekly schedule emails when `EMAIL_REPLY_TO` is not set)
 - `APP_URL` (optional, used for the dashboard link in emails)
 
 The weekly schedule email runs from `/api/weekly-games-email` every Sunday at `13:00 UTC`.
 It sends opted-in users a "Games Next 7 Days" email using the same Scheduled-game date window as the Home page.
 Users opt in or out from Settings with the Weekly Sunday game email checkbox.
+
+Beta access notifications are sent after `/request-access` saves a request. They are best-effort: a notification failure does not block the request from being stored in Supabase. To enable alerts, configure `RESEND_API_KEY`, `EMAIL_FROM`, and `BETA_REQUEST_NOTIFY_TO` in Vercel.
 
 ## 5) Deploy
 Push to GitHub, import into Vercel, deploy.

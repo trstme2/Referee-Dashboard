@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/support'
 import logo from '../assets/logo.png'
 
 const platformNames = ['DragonFly', 'RefQuest', 'Arbiter', 'Assignr', 'HorizonWebRef']
@@ -156,6 +157,7 @@ export default function LandingPage() {
       <section className="landing-final">
         <h2>Bring the season into focus.</h2>
         <p>Whistle Keeper gives referees a professional home for the work around the match.</p>
+        <p className="small">Questions? Email <a href={SUPPORT_MAILTO}>{SUPPORT_EMAIL}</a>.</p>
         <div className="landing-actions landing-final-actions">
           <Link to="/request-access" className="landing-cta primary">Request beta access</Link>
           <Link to="/auth" className="landing-cta secondary">Already invited? Sign in</Link>

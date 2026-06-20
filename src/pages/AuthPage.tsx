@@ -5,6 +5,7 @@ import { useData } from '../lib/DataContext'
 import { createFreshDB, resetDB } from '../lib/storage'
 import { deleteCalendarFeeds, deleteOwnAppEvents, deleteSyncHistory, exportAccountData as downloadAccountExport, purgeCloudRows, removeStorageFiles } from '../lib/accountLifecycle'
 import { AuthDelivery, destinationForUser, friendlyAuthError, normalizeOtpToken } from '../lib/authFlow'
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/support'
 import logo from '../assets/logo.png'
 
 type AuthStep = 'form' | 'verify-code' | 'check-email' | 'success'
@@ -506,6 +507,7 @@ export default function AuthPage() {
 
         <div className="footer-note">
           Whistle Keeper uses secure passwordless email login. No password is stored or required.
+          Need help? Email <a href={SUPPORT_MAILTO}>{SUPPORT_EMAIL}</a>.
         </div>
       </section>
     </div>

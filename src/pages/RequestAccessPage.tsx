@@ -7,6 +7,7 @@ import {
   BetaAccessRequestInput,
   validateBetaAccessRequest,
 } from '../lib/betaAccess'
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/support'
 import logo from '../assets/logo.png'
 
 const initialForm: BetaAccessRequestInput = {
@@ -108,6 +109,9 @@ export default function RequestAccessPage() {
           <p>
             Your beta request is in the queue. If it is a fit for this test round,
             Whistle Keeper will send access to <strong>{form.email}</strong>.
+          </p>
+          <p className="small">
+            Questions or trouble with the request? Email <a href={SUPPORT_MAILTO}>{SUPPORT_EMAIL}</a>.
           </p>
           <div className="btnbar">
             <Link to="/" className="btn primary">Back to overview</Link>
@@ -211,6 +215,9 @@ export default function RequestAccessPage() {
               {errors.map((error) => <span className="pill bad" key={error}>{error}</span>)}
             </div>
           ) : null}
+          <p className="small">
+            Need help before submitting? Email <a href={SUPPORT_MAILTO}>{SUPPORT_EMAIL}</a>.
+          </p>
 
           <div className="btnbar">
             <button className="btn primary" onClick={() => void submitRequest()} disabled={busy}>

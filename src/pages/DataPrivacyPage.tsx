@@ -5,6 +5,7 @@ import { createFreshDB, resetDB } from '../lib/storage'
 import { supabaseConfigured } from '../lib/supabaseClient'
 import { deleteCalendarFeeds, deleteOwnAppEvents, deleteSyncHistory, evidencePaths, exportAccountData, purgeCloudRows, removeStorageFiles } from '../lib/accountLifecycle'
 import { recordPlatformEvent } from '../lib/platformEvents'
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/support'
 
 const dataInventory = [
   {
@@ -261,6 +262,7 @@ export default function DataPrivacyPage() {
             <p><strong>No assignor tools:</strong> this app is built for a solo referee coordinating across platforms, not for managing officials.</p>
             <p><strong>Deletion scope:</strong> reset/delete removes records and files managed by Whistle Keeper. Files changed outside the app may require separate removal.</p>
             <p><strong>Email preference:</strong> weekly game email opt-in is stored in Settings and can be turned off there at any time.</p>
+            <p><strong>Support:</strong> email <a href={SUPPORT_MAILTO}>{SUPPORT_EMAIL}</a> for account, privacy, or data questions.</p>
           </div>
         </div>
       </section>

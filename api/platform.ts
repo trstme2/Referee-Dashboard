@@ -2,8 +2,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { checkRateLimit, createAuthedSupabase, createServiceSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
 import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
 import { ensurePlatformProfile, isAdminRole, isMissingPlatformTableError, recordAppEvent, requireAdminProfile, sanitizeEventMetadata } from '../src/server/platform-auth.js'
+import { appUrl, escapeEmailHtml, sendTransactionalEmail, supportEmail } from '../src/server/email.js'
 import { upsertUserSettingsCompat } from '../src/lib/userSettingsCompat.js'
-import { validateBetaAccessRequest } from '../src/lib/betaAccess.js'
+import { BetaAccessRequestInput, validateBetaAccessRequest } from '../src/lib/betaAccess.js'
 
 const allowedEventTypes = new Set([
   'account_exported',
@@ -125,6 +126,69 @@ function rowToBetaAccessRequest(row: any) {
   }
 }
 
+function betaRequestAdminUrl(): string {
+  const origin = appUrl()
+  return origin ? `${origin}/admin` : '/admin'
+}
+
+function betaRequestEmailText(value: BetaAccessRequestInput, requestId: string): string {
+  return [
+    'New Whistle Keeper beta access request',
+    '',
+    `Name: ${value.fullName}`,
+    `Email: ${value.email}`,
+    `Region: ${value.region}`,
+    `Primary device: ${value.devicePreference}`,
+    `Sports: ${value.sports.join(', ') || '-'}`,
+    `Platforms: ${value.platforms.join(', ') || '-'}`,
+    '',
+    'Additional context:',
+    value.notes || '-',
+    '',
+    `Request id: ${requestId}`,
+    `Review: ${betaRequestAdminUrl()}`,
+  ].join('\n')
+}
+
+function betaRequestEmailHtml(value: BetaAccessRequestInput, requestId: string): string {
+  const reviewUrl = betaRequestAdminUrl()
+  return `<!doctype html>
+<html>
+  <body style="margin:0;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a;">
+    <div style="max-width:680px;margin:0 auto;padding:28px 18px;">
+      <h1 style="font-size:22px;line-height:1.25;margin:0 0 6px;">New beta access request</h1>
+      <p style="margin:0 0 18px;color:#475569;">A prospective tester requested access to Whistle Keeper.</p>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;border-collapse:collapse;border:1px solid #e5e7eb;">
+        <tbody>
+          <tr><th align="left" style="padding:10px 8px;border-bottom:1px solid #e5e7eb;width:150px;">Name</th><td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">${escapeEmailHtml(value.fullName)}</td></tr>
+          <tr><th align="left" style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">Email</th><td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">${escapeEmailHtml(value.email)}</td></tr>
+          <tr><th align="left" style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">Region</th><td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">${escapeEmailHtml(value.region)}</td></tr>
+          <tr><th align="left" style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">Device</th><td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">${escapeEmailHtml(value.devicePreference)}</td></tr>
+          <tr><th align="left" style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">Sports</th><td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">${escapeEmailHtml(value.sports.join(', ') || '-')}</td></tr>
+          <tr><th align="left" style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">Platforms</th><td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">${escapeEmailHtml(value.platforms.join(', ') || '-')}</td></tr>
+          <tr><th align="left" style="padding:10px 8px;vertical-align:top;">Context</th><td style="padding:10px 8px;white-space:pre-wrap;">${escapeEmailHtml(value.notes || '-')}</td></tr>
+        </tbody>
+      </table>
+      <p style="margin:18px 0 0;color:#64748b;">Request id: ${escapeEmailHtml(requestId)}</p>
+      <p style="margin:18px 0 0;"><a href="${escapeEmailHtml(reviewUrl)}" style="color:#2563eb;">Review request in Whistle Keeper Admin</a></p>
+    </div>
+  </body>
+</html>`
+}
+
+async function notifyBetaAccessRequest(value: BetaAccessRequestInput, requestId: string) {
+  const to = process.env.BETA_REQUEST_NOTIFY_TO
+  if (!to) return
+  await sendTransactionalEmail({
+    to,
+    subject: `New Whistle Keeper beta request: ${value.fullName}`,
+    text: betaRequestEmailText(value, requestId),
+    html: betaRequestEmailHtml(value, requestId),
+    idempotencyKey: `beta-request-${requestId}`,
+    replyTo: value.email || supportEmail(),
+  })
+}
+
 async function submitBetaAccessRequest(serviceClient: any, input: any) {
   const validation = validateBetaAccessRequest(input)
   if (!validation.ok) {
@@ -152,6 +216,11 @@ async function submitBetaAccessRequest(serviceClient: any, input: any) {
     .single()
 
   if (error) throw error
+  try {
+    await notifyBetaAccessRequest(value, data.id)
+  } catch (e) {
+    console.warn('Beta request notification failed', e)
+  }
   return data
 }
 

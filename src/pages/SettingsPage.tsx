@@ -5,6 +5,7 @@ import { resolveVerifiedProfileAddresses } from '../lib/profileAddressValidation
 import { resetDB } from '../lib/storage'
 import { recordPlatformEvent } from '../lib/platformEvents'
 import { IRS_MILEAGE_ORIGIN_LINKS } from '../lib/taxReview'
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/support'
 
 function parseList(s: string): string[] {
   return s.split(',').map(x => x.trim()).filter(Boolean)
@@ -342,6 +343,7 @@ export default function SettingsPage() {
 
         <div className="footer-note">
           Replacing cloud data overwrites the cloud copy with records currently saved on this device. Use only when this device has the records you want to keep.
+          For help, email <a href={SUPPORT_MAILTO}>{SUPPORT_EMAIL}</a>.
         </div>
       </section>
     </div>
