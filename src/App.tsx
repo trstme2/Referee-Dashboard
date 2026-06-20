@@ -35,6 +35,7 @@ export default function App() {
   const isAuthRoute = location.pathname === '/auth' || location.pathname === '/auth/callback'
   const showAppShell = !showLanding && !isAuthRoute
   const onboardingRequired = !hydrating && !loading && authReady && Boolean(session) && shouldStartOnboarding(db)
+  const onboardingBypassRoute = location.pathname === '/admin'
   const routeMeta = routeMetaForPath(location.pathname)
 
   useEffect(() => {
@@ -79,7 +80,7 @@ export default function App() {
         </div>
       )
     }
-    if (onboardingRequired && location.pathname !== '/onboarding') {
+    if (onboardingRequired && location.pathname !== '/onboarding' && !onboardingBypassRoute) {
       return <Navigate to="/onboarding" replace />
     }
     return authMissing ? <Navigate to="/auth" replace /> : element
