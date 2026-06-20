@@ -274,6 +274,25 @@ create table if not exists public.app_events (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.beta_access_requests (
+  id uuid primary key default gen_random_uuid(),
+  email text not null,
+  email_normalized text not null unique,
+  full_name text not null,
+  region text not null,
+  sports jsonb not null default '[]'::jsonb,
+  platforms jsonb not null default '[]'::jsonb,
+  device_preference text not null,
+  notes text null,
+  status text not null default 'new' check (status in ('new','waitlisted','invited','rejected')),
+  admin_notes text null,
+  reviewed_by uuid null,
+  reviewed_at timestamptz null,
+  invited_at timestamptz null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.games (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
@@ -502,6 +521,7 @@ create table if not exists public.csv_import_rows (
 alter table public.user_settings enable row level security;
 alter table public.user_profiles enable row level security;
 alter table public.app_events enable row level security;
+alter table public.beta_access_requests enable row level security;
 alter table public.games enable row level security;
 alter table public.calendar_events enable row level security;
 alter table public.calendar_feeds enable row level security;
@@ -561,6 +581,8 @@ create index if not exists idx_user_profiles_subscription_tier on public.user_pr
 create index if not exists idx_user_profiles_last_seen on public.user_profiles(last_seen_at desc);
 create index if not exists idx_app_events_user_created on public.app_events(user_id, created_at desc);
 create index if not exists idx_app_events_type_created on public.app_events(event_type, created_at desc);
+create index if not exists idx_beta_access_requests_status_created on public.beta_access_requests(status, created_at desc);
+create index if not exists idx_beta_access_requests_created on public.beta_access_requests(created_at desc);
 create index if not exists idx_expenses_user_date on public.expenses(user_id, expense_date);
 create index if not exists idx_calendar_user_start on public.calendar_events(user_id, start_ts);
 create unique index if not exists idx_calendar_events_user_external_ref on public.calendar_events(user_id, external_ref) where external_ref is not null;

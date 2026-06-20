@@ -14,6 +14,7 @@ import AuthCallbackPage from './pages/AuthCallbackPage'
 import SyncPage from './pages/SyncPage'
 import TaxPage from './pages/TaxPage'
 import LandingPage from './pages/LandingPage'
+import RequestAccessPage from './pages/RequestAccessPage'
 import OnboardingPage from './pages/OnboardingPage'
 import DataPrivacyPage from './pages/DataPrivacyPage'
 import AdminPage from './pages/AdminPage'
@@ -29,7 +30,8 @@ export default function App() {
   const location = useLocation()
   const authMissing = requireAuth && authReady && !session
   const authRestoring = requireAuth && (!authReady || hydrating)
-  const showLanding = authMissing && location.pathname === '/'
+  const isPublicMarketingRoute = location.pathname === '/' || location.pathname === '/request-access'
+  const showLanding = authMissing && isPublicMarketingRoute
   const isAuthRoute = location.pathname === '/auth' || location.pathname === '/auth/callback'
   const showAppShell = !showLanding && !isAuthRoute
   const onboardingRequired = !hydrating && !loading && authReady && Boolean(session) && shouldStartOnboarding(db)
@@ -122,6 +124,7 @@ export default function App() {
         <Routes>
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
+          <Route path="/request-access" element={<RequestAccessPage />} />
 
           {/* Guard routes when in supabase mode */}
           <Route path="/" element={authMissing ? <LandingPage /> : onboardingRequired ? <Navigate to="/onboarding" replace /> : <HomePage />} />

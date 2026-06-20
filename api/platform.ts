@@ -3,6 +3,7 @@ import { checkRateLimit, createAuthedSupabase, createServiceSupabase, getBearerT
 import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
 import { ensurePlatformProfile, isAdminRole, isMissingPlatformTableError, recordAppEvent, requireAdminProfile, sanitizeEventMetadata } from '../src/server/platform-auth.js'
 import { upsertUserSettingsCompat } from '../src/lib/userSettingsCompat.js'
+import { validateBetaAccessRequest } from '../src/lib/betaAccess.js'
 
 const allowedEventTypes = new Set([
   'account_exported',
@@ -89,6 +90,135 @@ function sanitizeUserSettingsPayload(payload: any, userId: string) {
     leagues: Array.isArray(payload.leagues) ? payload.leagues.map((value: unknown) => String(value)).filter(Boolean) : [],
     updated_at: payload.updated_at ? String(payload.updated_at) : new Date().toISOString(),
   }
+}
+
+function requestOrigin(req: VercelRequest) {
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim()
+  const proto = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim()
+  if (!host) return process.env.SITE_URL || process.env.VERCEL_URL || ''
+  return `${proto}://${host}`
+}
+
+function isMissingBetaAccessTableError(error: any): boolean {
+  const code = String(error?.code ?? '')
+  const message = String(error?.message ?? error ?? '')
+  return code === '42P01' || code === 'PGRST205' || message.includes('beta_access_requests')
+}
+
+function rowToBetaAccessRequest(row: any) {
+  return {
+    id: row.id,
+    fullName: row.full_name,
+    email: row.email,
+    region: row.region,
+    sports: Array.isArray(row.sports) ? row.sports : [],
+    platforms: Array.isArray(row.platforms) ? row.platforms : [],
+    devicePreference: row.device_preference,
+    notes: row.notes ?? '',
+    status: row.status,
+    adminNotes: row.admin_notes ?? '',
+    reviewedBy: row.reviewed_by ?? null,
+    reviewedAt: row.reviewed_at ?? null,
+    invitedAt: row.invited_at ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+async function submitBetaAccessRequest(serviceClient: any, input: any) {
+  const validation = validateBetaAccessRequest(input)
+  if (!validation.ok) {
+    const err = new Error(validation.errors.join(' '))
+    ;(err as any).statusCode = 400
+    throw err
+  }
+
+  const value = validation.value
+  const now = new Date().toISOString()
+  const { data, error } = await serviceClient
+    .from('beta_access_requests')
+    .upsert({
+      email: value.email,
+      email_normalized: value.emailNormalized,
+      full_name: value.fullName,
+      region: value.region,
+      sports: value.sports,
+      platforms: value.platforms,
+      device_preference: value.devicePreference,
+      notes: value.notes,
+      updated_at: now,
+    }, { onConflict: 'email_normalized' })
+    .select('id,status,created_at,updated_at')
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+async function listBetaAccessRequests(serviceClient: any) {
+  const { data, error } = await serviceClient
+    .from('beta_access_requests')
+    .select('id,full_name,email,region,sports,platforms,device_preference,notes,status,admin_notes,reviewed_by,reviewed_at,invited_at,created_at,updated_at')
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  if (error) throw error
+  return (data ?? []).map(rowToBetaAccessRequest)
+}
+
+async function reviewBetaAccessRequest(serviceClient: any, reviewerId: string, body: any, req: VercelRequest) {
+  const id = String(body.requestId || '').trim()
+  const decision = String(body.decision || '').trim()
+  const adminNotes = String(body.adminNotes || '').trim().slice(0, 800)
+  if (!id) {
+    const err = new Error('Request id is required')
+    ;(err as any).statusCode = 400
+    throw err
+  }
+  if (!['invite', 'waitlist', 'reject'].includes(decision)) {
+    const err = new Error('Decision must be invite, waitlist, or reject')
+    ;(err as any).statusCode = 400
+    throw err
+  }
+
+  const { data: existing, error: loadError } = await serviceClient
+    .from('beta_access_requests')
+    .select('id,email,status')
+    .eq('id', id)
+    .single()
+  if (loadError) throw loadError
+
+  const now = new Date().toISOString()
+  const updatePayload: Record<string, unknown> = {
+    admin_notes: adminNotes,
+    reviewed_by: reviewerId,
+    reviewed_at: now,
+    updated_at: now,
+  }
+
+  if (decision === 'invite') {
+    const origin = requestOrigin(req)
+    const redirectTo = origin ? `${origin}/auth/callback` : undefined
+    const { error: inviteError } = await serviceClient.auth.admin.inviteUserByEmail(
+      existing.email,
+      redirectTo ? { redirectTo } : undefined
+    )
+    if (inviteError) throw inviteError
+    updatePayload.status = 'invited'
+    updatePayload.invited_at = now
+  } else {
+    updatePayload.status = decision === 'waitlist' ? 'waitlisted' : 'rejected'
+  }
+
+  const { data, error } = await serviceClient
+    .from('beta_access_requests')
+    .update(updatePayload)
+    .eq('id', id)
+    .select('id,full_name,email,region,sports,platforms,device_preference,notes,status,admin_notes,reviewed_by,reviewed_at,invited_at,created_at,updated_at')
+    .single()
+
+  if (error) throw error
+  return rowToBetaAccessRequest(data)
 }
 
 async function loadAdminMetrics(serviceClient: any) {
@@ -235,6 +365,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return sendRateLimited(res, rate.retryAfterSeconds)
     }
 
+    const action = String(req.query.action || (req.method === 'GET' ? 'me' : 'event'))
+
+    if (req.method === 'POST' && action === 'beta-request') {
+      const betaRate = checkRateLimit(req, 'beta-access-request', { limit: 8, windowMs: 60 * 60 * 1000 })
+      if (!betaRate.allowed) {
+        logApiDone(route, requestStartedAtMs, { status: 429, action: 'beta-request' })
+        return sendRateLimited(res, betaRate.retryAfterSeconds)
+      }
+      const serviceClient = createServiceSupabase()
+      const body = toJsonBody(req)
+      const request = await submitBetaAccessRequest(serviceClient, body.request)
+      logApiDone(route, requestStartedAtMs, { status: 200, action: 'beta-request' })
+      return res.status(200).json({ ok: true, request: { id: request.id, status: request.status } })
+    }
+
     const token = getBearerToken(req)
     if (!token) {
       logApiDone(route, requestStartedAtMs, { status: 401 })
@@ -249,7 +394,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const serviceClient = createServiceSupabase()
-    const action = String(req.query.action || (req.method === 'GET' ? 'me' : 'event'))
 
     if (req.method === 'GET' && action === 'me') {
       const profile = await ensurePlatformProfile(serviceClient, authData.user)
@@ -268,6 +412,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const metrics = await loadAdminMetrics(serviceClient)
       logApiDone(route, requestStartedAtMs, { status: 200, action: 'metrics' })
       return res.status(200).json({ profile, metrics })
+    }
+
+    if (req.method === 'GET' && action === 'beta-requests') {
+      await requireAdminProfile(serviceClient, authData.user)
+      const requests = await listBetaAccessRequests(serviceClient)
+      logApiDone(route, requestStartedAtMs, { status: 200, action: 'beta-requests' })
+      return res.status(200).json({ requests })
+    }
+
+    if (req.method === 'POST' && action === 'beta-request-review') {
+      const profile = await requireAdminProfile(serviceClient, authData.user)
+      const request = await reviewBetaAccessRequest(serviceClient, profile.userId, toJsonBody(req), req)
+      logApiDone(route, requestStartedAtMs, { status: 200, action: 'beta-request-review' })
+      return res.status(200).json({ request })
     }
 
     if (req.method === 'POST' && action === 'user-settings') {
@@ -305,6 +463,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (isMissingPlatformTableError(e)) {
       logApiError(route, requestStartedAtMs, e, { status: 503 })
       return res.status(503).json({ error: 'Platform role tables are not installed. Run supabase/schema.sql or the user profiles/app events manual patch.' })
+    }
+    if (isMissingBetaAccessTableError(e)) {
+      logApiError(route, requestStartedAtMs, e, { status: 503 })
+      return res.status(503).json({ error: 'Beta access table is not installed. Run the beta access manual patch in Supabase.' })
     }
     const status = Number(e?.statusCode || 500)
     logApiError(route, requestStartedAtMs, e, { status })

@@ -1465,6 +1465,75 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Libe
   margin: 8px 0 0;
 }
 
+.landing-final-actions {
+  justify-content: flex-end;
+}
+
+.beta-access-page {
+  padding-bottom: 56px;
+}
+
+.beta-access-hero {
+  align-items: flex-start;
+}
+
+.beta-access-card {
+  width: min(100%, 680px);
+  padding: 22px;
+}
+
+.beta-access-card h1 {
+  margin: 12px 0;
+  font-size: clamp(32px, 6vw, 54px);
+  line-height: 1.02;
+}
+
+.beta-access-success {
+  margin: 80px auto;
+}
+
+.beta-checkbox-group {
+  margin: 16px 0;
+  padding: 0;
+  border: 0;
+}
+
+.beta-checkbox-group legend {
+  margin-bottom: 8px;
+  color: #cfe3ff;
+  font-weight: 700;
+}
+
+.beta-checkbox-group > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.beta-checkbox-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.035);
+  color: #cbd8ea;
+  cursor: pointer;
+}
+
+.beta-checkbox-group input {
+  accent-color: var(--accent);
+}
+
+.beta-error-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
 @media (max-width: 980px) {
   .landing-hero,
   .landing-section-heading,
@@ -1528,6 +1597,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Libe
   .landing-records,
   .landing-final {
     padding: 22px;
+  }
+  .landing-final-actions {
+    justify-content: flex-start;
   }
 }
 
@@ -3265,6 +3337,53 @@ body {
   text-align: right;
 }
 
+.admin-beta-card {
+  overflow: visible;
+}
+
+.admin-beta-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.admin-beta-request {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.24);
+}
+
+.admin-beta-request-head,
+.admin-beta-meta,
+.admin-beta-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.admin-beta-request-head {
+  justify-content: space-between;
+}
+
+.admin-beta-request-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-beta-request-head span,
+.admin-beta-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.admin-beta-tags {
+  gap: 6px;
+}
+
 @media (max-width: 720px) {
   .requirement-card-head,
   .requirement-progress-row,
@@ -3339,6 +3458,15 @@ body {
 
   .settings-panel .btn {
     width: 100%;
+  }
+
+  .beta-access-card {
+    padding: 16px;
+  }
+
+  .beta-checkbox-group label {
+    width: 100%;
+    border-radius: 12px;
   }
 }
 

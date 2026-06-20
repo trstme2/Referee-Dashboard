@@ -57,6 +57,23 @@ type AdminMetrics = {
   }
 }
 
+type BetaAccessRequest = {
+  id: string
+  fullName: string
+  email: string
+  region: string
+  sports: string[]
+  platforms: string[]
+  devicePreference: string
+  notes: string
+  status: 'new' | 'waitlisted' | 'invited' | 'rejected'
+  adminNotes: string
+  reviewedAt: string | null
+  invitedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 function MiniBarList({ values }: { values: Record<string, number> }) {
   const entries = Object.entries(values).sort((a, b) => b[1] - a[1])
   const max = Math.max(1, ...entries.map(([, value]) => value))
@@ -87,28 +104,64 @@ function HealthRow({ label, value, detail }: { label: string; value: string | nu
 export default function AdminPage() {
   const { mode, session } = useData()
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null)
+  const [betaRequests, setBetaRequests] = useState<BetaAccessRequest[]>([])
   const [loading, setLoading] = useState(false)
+  const [reviewingId, setReviewingId] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [betaErr, setBetaErr] = useState<string | null>(null)
+
+  async function authedJson(path: string, options: RequestInit = {}) {
+    if (mode !== 'supabase' || !session?.access_token) return
+    const res = await fetch(path, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(String(json?.error || res.statusText))
+    return json
+  }
 
   async function loadMetrics() {
     if (mode !== 'supabase' || !session?.access_token) return
     setLoading(true)
     setErr(null)
+    setBetaErr(null)
     try {
-      const res = await fetch('/api/platform?action=metrics', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(String(json?.error || res.statusText))
+      const json = await authedJson('/api/platform?action=metrics')
       setMetrics(json.metrics as AdminMetrics)
     } catch (e: any) {
       setMetrics(null)
       setErr(String(e?.message ?? e))
+    }
+
+    try {
+      const json = await authedJson('/api/platform?action=beta-requests')
+      setBetaRequests((json.requests ?? []) as BetaAccessRequest[])
+    } catch (e: any) {
+      setBetaRequests([])
+      setBetaErr(String(e?.message ?? e))
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function reviewBetaRequest(requestId: string, decision: 'invite' | 'waitlist' | 'reject') {
+    setReviewingId(requestId)
+    setBetaErr(null)
+    try {
+      const json = await authedJson('/api/platform?action=beta-request-review', {
+        method: 'POST',
+        body: JSON.stringify({ requestId, decision }),
+      })
+      const updated = json.request as BetaAccessRequest
+      setBetaRequests((requests) => requests.map((request) => request.id === updated.id ? updated : request))
+    } catch (e: any) {
+      setBetaErr(String(e?.message ?? e))
+    } finally {
+      setReviewingId(null)
     }
   }
 
@@ -143,6 +196,53 @@ export default function AdminPage() {
         </div>
         {err ? <p className="small"><span className="pill bad">{err}</span></p> : null}
         {metrics ? <p className="small">Generated {new Date(metrics.generatedAt).toLocaleString()}</p> : null}
+      </section>
+
+      <section className="card admin-beta-card">
+        <div className="page-section-head">
+          <div>
+            <h2>Beta Access Requests</h2>
+            <p className="sub">Review curated beta applicants and send Whistle Keeper Supabase Auth invites from the server.</p>
+          </div>
+          <span className="pill info">{betaRequests.length} requests</span>
+        </div>
+        {betaErr ? <p className="small"><span className="pill bad">{betaErr}</span></p> : null}
+        {betaRequests.length ? (
+          <div className="admin-beta-list">
+            {betaRequests.map((request) => (
+              <article className="admin-beta-request" key={request.id}>
+                <div className="admin-beta-request-head">
+                  <div>
+                    <strong>{request.fullName}</strong>
+                    <span>{request.email}</span>
+                  </div>
+                  <span className={`pill ${request.status === 'invited' ? 'ok' : request.status === 'rejected' ? 'bad' : request.status === 'waitlisted' ? 'warn' : 'info'}`}>
+                    {request.status}
+                  </span>
+                </div>
+                <div className="admin-beta-meta">
+                  <span>{request.region}</span>
+                  <span>{request.devicePreference}</span>
+                  <span>{new Date(request.createdAt).toLocaleDateString()}</span>
+                </div>
+                <div className="admin-beta-tags">
+                  {[...request.sports, ...request.platforms].map((tag) => <span className="pill muted" key={tag}>{tag}</span>)}
+                </div>
+                {request.notes ? <p className="small">{request.notes}</p> : null}
+                <div className="btnbar">
+                  <button className="btn primary" onClick={() => void reviewBetaRequest(request.id, 'invite')} disabled={Boolean(reviewingId)}>
+                    {reviewingId === request.id ? 'Working...' : 'Invite'}
+                  </button>
+                  <button className="btn" onClick={() => void reviewBetaRequest(request.id, 'waitlist')} disabled={Boolean(reviewingId)}>Waitlist</button>
+                  <button className="btn danger" onClick={() => void reviewBetaRequest(request.id, 'reject')} disabled={Boolean(reviewingId)}>Reject</button>
+                </div>
+                {request.invitedAt ? <p className="small">Invited {new Date(request.invitedAt).toLocaleString()}</p> : null}
+              </article>
+            ))}
+          </div>
+        ) : !betaErr ? (
+          <p className="small">No beta requests yet.</p>
+        ) : null}
       </section>
 
       {metrics ? (
