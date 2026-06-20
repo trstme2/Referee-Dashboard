@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import HelpTip from '../components/HelpTip'
 import { useData } from '../lib/DataContext'
 import { resolveVerifiedProfileAddresses } from '../lib/profileAddressValidation'
 import { resetDB } from '../lib/storage'
 import { recordPlatformEvent } from '../lib/platformEvents'
+import { IRS_MILEAGE_ORIGIN_LINKS } from '../lib/taxReview'
 
 function parseList(s: string): string[] {
   return s.split(',').map(x => x.trim()).filter(Boolean)
@@ -215,16 +217,25 @@ export default function SettingsPage() {
             <h2>Preferences</h2>
 
             <div className="field">
-              <label>Primary work location (home office)</label>
+              <label>Primary mileage origin</label>
               <input value={home} onChange={e => setHome(e.target.value)} placeholder="123 Main St, Columbus, OH 43215" />
-              <div className="small">This stays the default origin for mileage calculations on each game. Whistle Keeper verifies it against Google Maps before saving.</div>
+              <div className="small">This stays the default origin for route estimates on each game. Whistle Keeper verifies it against Google Maps before saving.</div>
+              <HelpTip label="Mileage note" title="Mileage origin is not a tax decision">
+                <p>Whistle Keeper uses saved origins for route estimates and recordkeeping. IRS rules may limit or disallow some home-to-work mileage, and business use of home has specific requirements.</p>
+                <p>Review IRS guidance or ask your preparer before relying on mileage from any saved origin.</p>
+                <div className="tax-review-links">
+                  {IRS_MILEAGE_ORIGIN_LINKS.map(link => (
+                    <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label}</a>
+                  ))}
+                </div>
+              </HelpTip>
               {db.settings.homeAddressPlaceId && home.trim() === db.settings.homeAddress.trim() ? <div className="small">Verified Google Maps origin saved.</div> : null}
             </div>
 
             <div className="field">
-              <label>Secondary work location (optional)</label>
-              <input value={otherWork} onChange={e => setOtherWork(e.target.value)} placeholder="Office, school, or other work address" />
-              <div className="small">Use this for another saved mileage origin you sometimes travel from. If you add it, Whistle Keeper verifies it before saving.</div>
+              <label>Secondary mileage origin (optional)</label>
+              <input value={otherWork} onChange={e => setOtherWork(e.target.value)} placeholder="Office, school, or other saved origin" />
+              <div className="small">Use this for another saved route origin you sometimes travel from. If you add it, Whistle Keeper verifies it before saving.</div>
               {db.settings.otherWorkAddressPlaceId && otherWork.trim() === (db.settings.otherWorkAddress ?? '').trim() ? <div className="small">Verified Google Maps origin saved.</div> : null}
             </div>
 
@@ -237,7 +248,7 @@ export default function SettingsPage() {
             <div className="field">
               <label>Standard mileage rate (cents per mile)</label>
               <input type="number" min={0} step="0.1" value={taxMileageRateCents} onChange={e => setTaxMileageRateCents(e.target.value)} />
-              <div className="small">Used on the Tax page to estimate a mileage amount for exports. Save this once to confirm the rate for tax readiness.</div>
+              <div className="small">Used on the Tax page to estimate a mileage calculation for exports. Save this once to complete tax record setup. This does not determine whether miles qualify.</div>
             </div>
 
             <div className="field">

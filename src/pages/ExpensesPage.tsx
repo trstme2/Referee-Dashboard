@@ -22,7 +22,7 @@ export default function ExpensesPage() {
     miles: '',
     vendor: '',
     description: '',
-    taxDeductible: 'Yes',
+    taxDeductible: 'No',
     gameId: '',
     receiptFileName: '',
     notes: '',
@@ -33,10 +33,10 @@ export default function ExpensesPage() {
     const y = String(year)
     const list = db.expenses.filter(e => e.expenseDate.startsWith(y))
     const total = list.reduce((s,e) => s + e.amount, 0)
-    const deductible = list.filter(e => e.taxDeductible).reduce((s,e) => s + e.amount, 0)
+    const taxReview = list.filter(e => e.taxDeductible).reduce((s,e) => s + e.amount, 0)
     const miles = list.filter(e => e.category === 'Mileage').reduce((s,e) => s + (e.miles ?? 0), 0)
     const receipts = list.filter(e => e.receiptFileName || e.receiptStoragePath).length
-    return { total, deductible, miles, receipts, count: list.length }
+    return { total, taxReview, miles, receipts, count: list.length }
   }, [db.expenses, year])
 
   const rows = useMemo(() => {
@@ -111,7 +111,7 @@ export default function ExpensesPage() {
       miles: '',
       vendor: '',
       description: '',
-      taxDeductible: 'Yes',
+      taxDeductible: 'No',
       gameId: '',
       receiptFileName: '',
       notes: '',
@@ -137,7 +137,7 @@ export default function ExpensesPage() {
     if (isNew) {
       void recordPlatformEvent(session?.access_token, 'expense_created', {
         category: form.category,
-        markedForDeductibleReview: form.taxDeductible === 'Yes',
+        markedForTaxReview: form.taxDeductible === 'Yes',
         linkedToGame: Boolean(form.gameId),
       })
     }
@@ -253,8 +253,8 @@ export default function ExpensesPage() {
             <div className="value">{formatMoney(totals.total)}</div>
           </div>
           <div className="box">
-            <div className="label">Marked for deductible review</div>
-            <div className="value">{formatMoney(totals.deductible)}</div>
+            <div className="label">Marked for tax review</div>
+            <div className="value">{formatMoney(totals.taxReview)}</div>
           </div>
           <div className="box">
             <div className="label">Mileage</div>
@@ -270,10 +270,10 @@ export default function ExpensesPage() {
           <div>
             <h3>Expense review marker</h3>
             <p>
-              The deductible flag is your review marker, never a tax determination. IRS rules generally look for business expenses that are ordinary, necessary, documented, and separated from personal use.
+              The tax review marker is only an organizer. Whistle Keeper does not determine whether an expense is deductible or how it should be reported.
             </p>
             <p>
-              Be careful with mixed-use or personal items: season tickets to a local soccer team, fan gear, family meals, and claiming all of home internet because you use a tiny portion for assigning are the kinds of entries worth checking before export.
+              IRS guidance often looks at business purpose, documentation, personal use, reimbursement, and whether costs are ordinary and necessary for the activity. A receipt supports a record, but it does not decide tax treatment.
             </p>
           </div>
           <div className="expense-tax-links">
@@ -295,7 +295,7 @@ export default function ExpensesPage() {
               </div>
               <div className="expense-card-meta">
                 <span>{e.category}</span>
-                <span>{e.taxDeductible ? 'Marked for deductible review' : 'Not marked for deductible review'}</span>
+                <span>{e.taxDeductible ? 'Marked for tax review' : 'Not marked for tax review'}</span>
                 {e.category === 'Mileage' ? <span>{(e.miles ?? 0).toFixed(1)} mi</span> : null}
                 {linkedGameLabel(e.gameId) ? <span>{linkedGameLabel(e.gameId)}</span> : null}
               </div>
@@ -329,7 +329,7 @@ export default function ExpensesPage() {
                   <td>{e.expenseDate}</td>
                   <td>
                     <div>{e.category}</div>
-                    <div className="small">{e.taxDeductible ? 'Marked for deductible review' : 'Not marked for deductible review'}</div>
+                    <div className="small">{e.taxDeductible ? 'Marked for tax review' : 'Not marked for tax review'}</div>
                   </td>
                   <td>{formatMoney(e.amount)}</td>
                   <td>{e.category === 'Mileage' ? (e.miles ?? 0).toFixed(1) : ''}</td>
@@ -410,12 +410,12 @@ export default function ExpensesPage() {
             <input value={form.vendor} onChange={e => setForm({ ...form, vendor: e.target.value })} placeholder="e.g., Shell, Amazon" />
           </div>
           <div className="field">
-            <label>Mark for deductible review</label>
+            <label>Mark for tax review</label>
             <select value={form.taxDeductible} onChange={e => setForm({ ...form, taxDeductible: e.target.value })}>
               <option value="Yes">Yes</option>
               <option value="No">No</option>
             </select>
-            <div className="small">This marker helps you organize records for review. It does not determine whether an expense is deductible. Mixed personal/business costs may need allocation or may not qualify.</div>
+            <div className="small">This marker helps you organize records for later review. It does not determine whether an expense is deductible. Mixed personal/business costs, reimbursements, and undocumented expenses may need special review.</div>
           </div>
         </div>
 

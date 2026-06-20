@@ -8,6 +8,7 @@ import { upsertGameIn, deleteGameIn } from '../lib/mutate'
 import { getDrivingDistanceMiles } from '../lib/distance'
 import { formatMoney, isWithinNextDays } from '../lib/utils'
 import { recordPlatformEvent } from '../lib/platformEvents'
+import { IRS_MILEAGE_ORIGIN_LINKS } from '../lib/taxReview'
 
 const levels: CompetitionLevel[] = ['High School', 'College', 'Club']
 const statuses: GameStatus[] = ['Scheduled', 'Played', 'Paid / Complete', 'Canceled']
@@ -151,14 +152,14 @@ export default function GamesPage() {
   const workLocationOptions = [
     {
       value: 'home' as MileageOrigin,
-      label: 'Home office',
+      label: 'Primary mileage origin',
       address: db.settings.homeAddress.trim(),
       placeId: db.settings.homeAddressPlaceId,
     },
     ...(hasOtherWorkAddress
       ? [{
         value: 'other' as MileageOrigin,
-        label: 'Other work location',
+        label: 'Secondary mileage origin',
         address: db.settings.otherWorkAddress!.trim(),
         placeId: db.settings.otherWorkAddressPlaceId,
       }]
@@ -512,7 +513,7 @@ export default function GamesPage() {
                         {g.locationAddress}
                         {g.distanceMiles != null ? (
                           <div className="small">
-                            {g.distanceMiles.toFixed(1)} mi one-way from {g.mileageOrigin === 'other' ? 'other work location' : 'home office'}
+                            {g.distanceMiles.toFixed(1)} mi one-way from {g.mileageOrigin === 'other' ? 'secondary mileage origin' : 'primary mileage origin'}
                           </div>
                         ) : null}
                       </td>
@@ -567,7 +568,7 @@ export default function GamesPage() {
                                       ? `${(g.distanceMiles * 2).toFixed(1)} estimated roundtrip mi`
                                       : 'No mileage logged'}
                                   {' · '}
-                                  {g.mileageOrigin === 'other' ? 'from other work location' : 'from home office'}
+                                  {g.mileageOrigin === 'other' ? 'from secondary mileage origin' : 'from primary mileage origin'}
                                 </div>
                               </div>
                               {showPlatformChips ? (
@@ -683,7 +684,7 @@ export default function GamesPage() {
             <div className="editor-guidance-row">
               <HelpTip title="Why am I filling this in manually?">
                 <p>Most assignor calendar feeds provide only partial assignment details. Pay, exact field address, roundtrip mileage, and some level details often need a quick review here.</p>
-                <p>This is the place to turn a synced assignment into a record you can actually use for taxes, mileage, and end-of-season reporting.</p>
+                <p>This is the place to turn a synced assignment into a record you can review for mileage, tax-time exports, and end-of-season reporting.</p>
               </HelpTip>
               <HelpTip label="Will sync wipe this out?" title="How manual edits and sync work together">
                 <p>No. Once Whistle Keeper matches a synced assignment to this game, later syncs are designed to merge around your manual edits instead of wiping fee, location, and mileage fields.</p>
@@ -843,12 +844,21 @@ export default function GamesPage() {
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
-              <div className="small">{selectedWorkLocation?.address || 'Add a work location in Settings first.'}</div>
+              <div className="small">{selectedWorkLocation?.address || 'Add a mileage origin in Settings first.'}</div>
+              <HelpTip label="Mileage note" title="Mileage calculation is not tax advice">
+                <p>Whistle Keeper calculates route distance for records. It does not determine whether a trip is deductible, commuting, reimbursed, duplicated, or otherwise excluded.</p>
+                <p>Review IRS guidance or ask your preparer before relying on mileage in a tax filing.</p>
+                <div className="tax-review-links">
+                  {IRS_MILEAGE_ORIGIN_LINKS.map(link => (
+                    <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label}</a>
+                  ))}
+                </div>
+              </HelpTip>
             </div>
           </div>
           <div className="btnbar" style={{marginTop: 8}}>
             <button className="btn" onClick={calcDistance} disabled={!form.locationAddress.trim() || !selectedWorkLocation?.address}>
-              Calculate distance from {selectedWorkLocation?.label.toLowerCase() || 'work location'}
+              Calculate distance from {selectedWorkLocation?.label.toLowerCase() || 'mileage origin'}
             </button>
             {form.distanceMiles ? <span className="pill ok">{form.distanceMiles} mi one-way</span> : <span className="pill">distance n/a</span>}
           </div>
@@ -856,7 +866,7 @@ export default function GamesPage() {
             <div className="field">
               <label>Roundtrip miles (overrideable)</label>
               <input value={form.roundtripMiles} onChange={e => setForm({ ...form, roundtripMiles: e.target.value })} placeholder="e.g., 0 (multi-game day), 75..." />
-              <div className="small">Set to 0 if you're stacking multiple games at one site and only claiming mileage once.</div>
+              <div className="small">Set to 0 if you are stacking multiple games at one site and recording mileage once elsewhere.</div>
             </div>
           </div>
           <p className="small">Mileage lookup is available when the Maps integration has been configured.</p>

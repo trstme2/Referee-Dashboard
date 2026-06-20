@@ -7,6 +7,21 @@ export const IRS_TAX_REVIEW_LINKS = [
   { label: 'IRS business use of home', href: 'https://www.irs.gov/taxtopics/tc509' },
 ] as const
 
+export const IRS_MILEAGE_ORIGIN_LINKS = [
+  { label: 'IRS travel, gift, and car expenses', href: 'https://www.irs.gov/publications/p463' },
+  { label: 'IRS business use of home', href: 'https://www.irs.gov/taxtopics/tc509' },
+] as const
+
+export const TAX_REVIEW_CHECKLIST_ITEMS = [
+  'Confirm whether your referee income is treated as independent contractor, employee, fee-basis official, or another status.',
+  'Review whether any mileage from home is commuting, travel from a qualifying business location, or another treatment under IRS rules.',
+  'Check whether any mileage was reimbursed, duplicated, personal, or already included in another record.',
+  'Confirm whether you are using the standard mileage method or actual vehicle expenses for each vehicle and tax year.',
+  'Review mixed personal/business expenses and document any allocation you plan to use.',
+  'Review meals, lodging, travel-away-from-tax-home facts, and any limits that may apply.',
+  'Keep receipts, payment records, assignment records, and notes that support the records you export.',
+] as const
+
 export const EXPENSE_CATEGORY_CAUTIONS: Partial<Record<ExpenseCategory, string>> = {
   Mileage: 'Avoid double entry between Games and Expenses. Review whether you are using the standard mileage method or actual vehicle costs for the same vehicle and tax year; do not combine both without confirming the treatment.',
   Meals: 'Document the business purpose and attendees. Deduction limitations may apply.',
@@ -68,7 +83,7 @@ export function taxReviewFlagsForExpense(expense: Expense, games: Game[]): TaxRe
   const miles = Number(expense.miles ?? 0)
 
   if (expense.taxDeductible && expense.category !== 'Mileage' && !hasReceipt(expense)) {
-    flags.push(makeFlag(expense, 'missing-receipt', 'Receipt missing', 'This non-mileage expense is marked for deductible review but does not have a receipt uploaded.'))
+    flags.push(makeFlag(expense, 'missing-receipt', 'Receipt missing', 'This non-mileage expense is marked for tax review but does not have a receipt uploaded.'))
   }
 
   if (expense.category === 'Mileage') {

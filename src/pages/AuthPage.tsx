@@ -461,7 +461,7 @@ export default function AuthPage() {
           </div>
         </div>
         <p className="auth-lede">
-          Sign in with your email to manage assignments, mileage, expenses, readiness, and tax-time records.
+          Sign in with your email to manage assignments, mileage, expenses, readiness, and tax-time record summaries.
           On phones and PWAs, the fastest path is a one-time email code from Whistle Keeper.
         </p>
 

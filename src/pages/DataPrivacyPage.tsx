@@ -14,8 +14,8 @@ const dataInventory = [
     control: 'Refresh from cloud, export JSON, reset app data, or delete the account.',
   },
   {
-    label: 'Expenses and tax-time records',
-    examples: 'Expense date, amount, category, deductible review marker, mileage, receipts, and notes.',
+    label: 'Expenses and tax-time record summaries',
+    examples: 'Expense date, amount, category, tax review marker, mileage, receipts, and notes.',
     location: 'Database rows plus private receipt files when uploaded.',
     control: 'Export record metadata; reset/delete removes saved receipt files tracked by the app.',
   },
@@ -152,7 +152,7 @@ export default function DataPrivacyPage() {
           <h2>Data & Privacy</h2>
           <p>
             Whistle Keeper is a personal referee operations app. It organizes your assignments, expenses,
-            requirements, sync feeds, and tax-time records for you; it is not an assignor platform and does
+            requirements, sync feeds, and tax-time record summaries for you; it is not an assignor platform and does
             not sell or share your data inside the product.
           </p>
         </div>

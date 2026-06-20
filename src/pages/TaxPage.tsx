@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useData } from '../lib/DataContext'
 import { formatMoney } from '../lib/utils'
 import HelpTip from '../components/HelpTip'
-import { IRS_TAX_REVIEW_LINKS, taxReviewFlags } from '../lib/taxReview'
+import { IRS_TAX_REVIEW_LINKS, TAX_REVIEW_CHECKLIST_ITEMS, taxReviewFlags } from '../lib/taxReview'
 import { recordPlatformEvent } from '../lib/platformEvents'
 
 type IncomeBasis = 'cash' | 'accrual'
@@ -16,6 +16,10 @@ const IRS_STANDARD_MILEAGE_RATES: Record<string, number> = {
 
 function suggestedMileageRateCents(year: string): number {
   return IRS_STANDARD_MILEAGE_RATES[year] ?? 72.5
+}
+
+function incomeBasisLabel(basis: IncomeBasis): string {
+  return basis === 'cash' ? 'Paid-date view' : 'Game-date view'
 }
 
 function csvValue(v: unknown): string {
@@ -129,7 +133,7 @@ export default function TaxPage() {
         amount: e.amount,
         vendor: e.vendor ?? '',
         description: e.description ?? '',
-        markedForDeductibleReview: e.taxDeductible ? 'Yes' : 'No',
+        markedForTaxReview: e.taxDeductible ? 'Yes' : 'No',
         gameId: e.gameId ?? '',
         notes: e.notes ?? '',
       }))
@@ -141,13 +145,14 @@ export default function TaxPage() {
   }, [db.expenses, db.games, year])
 
   const reviewChecklistRows = useMemo(() => {
-    return reviewFlags.map((flag) => {
+    const flagRows = reviewFlags.map((flag) => {
       const expense = db.expenses.find((item) => item.id === flag.expenseId)
       return {
+        type: 'Record prompt',
         expenseDate: flag.expenseDate,
         category: flag.expenseCategory,
         amount: flag.expenseAmount,
-        markedForDeductibleReview: flag.markedForDeductibleReview ? 'Yes' : 'No',
+        markedForTaxReview: flag.markedForDeductibleReview ? 'Yes' : 'No',
         expenseDescription: expense?.description ?? expense?.vendor ?? '',
         reviewCode: flag.code,
         reviewItem: flag.label,
@@ -155,10 +160,23 @@ export default function TaxPage() {
         expenseId: flag.expenseId,
       }
     })
+    const checklistRows = TAX_REVIEW_CHECKLIST_ITEMS.map((item, index) => ({
+      type: 'General review',
+      expenseDate: '',
+      category: '',
+      amount: '',
+      markedForTaxReview: '',
+      expenseDescription: '',
+      reviewCode: `general-${index + 1}`,
+      reviewItem: 'General tax review',
+      reviewDetails: item,
+      expenseId: '',
+    }))
+    return [...flagRows, ...checklistRows]
   }, [reviewFlags, db.expenses])
 
   const deductibleExpenseRows = useMemo(() => {
-    return expenseRows.filter((e) => e.markedForDeductibleReview === 'Yes')
+    return expenseRows.filter((e) => e.markedForTaxReview === 'Yes')
   }, [expenseRows])
 
   const expensesByCategory = useMemo(() => {
@@ -178,6 +196,7 @@ export default function TaxPage() {
   const parsedMileageRateCents = Number(mileageRateCents)
   const mileageRateIsValid = Number.isFinite(parsedMileageRateCents) && parsedMileageRateCents >= 0
   const mileageRateConfirmed = db.settings.taxMileageRateCents != null
+  const knownMileageRateCents = IRS_STANDARD_MILEAGE_RATES[year]
   const mileageEstimate = mileageRateIsValid ? (totals.miles * parsedMileageRateCents) / 100 : 0
 
   const mileageExportRows = useMemo(() => {
@@ -214,7 +233,7 @@ export default function TaxPage() {
   }
 
   function exportExpensesCsv() {
-    const csv = toCsv(expenseRows, ['expenseDate', 'category', 'amount', 'vendor', 'description', 'markedForDeductibleReview', 'gameId', 'notes', 'id'])
+    const csv = toCsv(expenseRows, ['expenseDate', 'category', 'amount', 'vendor', 'description', 'markedForTaxReview', 'gameId', 'notes', 'id'])
     downloadCsv(`tax-expenses-${year}.csv`, csv)
     void recordPlatformEvent(session?.access_token, 'tax_export_downloaded', { exportType: 'expenses', year, rowCount: expenseRows.length })
   }
@@ -226,7 +245,7 @@ export default function TaxPage() {
   }
 
   function exportReviewChecklistCsv() {
-    const csv = toCsv(reviewChecklistRows, ['expenseDate', 'category', 'amount', 'markedForDeductibleReview', 'expenseDescription', 'reviewCode', 'reviewItem', 'reviewDetails', 'expenseId'])
+    const csv = toCsv(reviewChecklistRows, ['type', 'expenseDate', 'category', 'amount', 'markedForTaxReview', 'expenseDescription', 'reviewCode', 'reviewItem', 'reviewDetails', 'expenseId'])
     downloadCsv(`tax-export-review-checklist-${year}.csv`, csv)
     void recordPlatformEvent(session?.access_token, 'tax_export_downloaded', { exportType: 'review_checklist', year, rowCount: reviewChecklistRows.length })
   }
@@ -255,9 +274,9 @@ export default function TaxPage() {
   const exportReadiness = useMemo(() => {
     const blockers = qualityChecks.paidMissingDate + qualityChecks.expenseMissingFields
     const reviewItems = reviewFlags.length + qualityChecks.gamesMissingFee + qualityChecks.mileageMissing
-    if (blockers > 0) return { tone: 'bad', label: 'Needs review before export', detail: `${blockers} blocker${blockers === 1 ? '' : 's'} and ${reviewItems} review item${reviewItems === 1 ? '' : 's'} found.` }
-    if (reviewItems > 0) return { tone: 'warn', label: 'Ready with review notes', detail: `${reviewItems} review item${reviewItems === 1 ? '' : 's'} should be checked or discussed with your preparer.` }
-    return { tone: 'ok', label: 'Ready to export', detail: 'No missing paid dates, expense field issues, mileage gaps, fee gaps, or tax review prompts found for this year.' }
+    if (blockers > 0) return { tone: 'bad', label: 'Record gaps found', detail: `${blockers} blocker${blockers === 1 ? '' : 's'} and ${reviewItems} review item${reviewItems === 1 ? '' : 's'} found in app records.` }
+    if (reviewItems > 0) return { tone: 'warn', label: 'Review notes found', detail: `${reviewItems} review item${reviewItems === 1 ? '' : 's'} should be checked or discussed with your preparer before relying on exports.` }
+    return { tone: 'ok', label: 'No app-detected record gaps', detail: 'Whistle Keeper did not find missing paid dates, expense field issues, mileage gaps, fee gaps, or app review prompts for this year.' }
   }, [qualityChecks, reviewFlags.length])
 
   return (
@@ -265,12 +284,12 @@ export default function TaxPage() {
       <section className="card">
         <div className="page-section-head">
           <div>
-            <h2>Tax Prep Workspace</h2>
+            <h2>Tax Record Workspace</h2>
             <p className="sub">Organize income, mileage, expenses, and 1099 comparisons before you export records.</p>
           </div>
-          <HelpTip title="Tax prep guardrails" className="help-tip-inline">
-            <p>Whistle Keeper organizes records you entered. A deductible marker is only a review marker. The app does not decide what is deductible, choose your tax method, or prepare a return.</p>
-            <p>Confirm the right treatment, mileage rate, and filing approach with IRS guidance or a qualified tax professional.</p>
+          <HelpTip title="Tax-time guardrails" className="help-tip-inline">
+            <p>Whistle Keeper organizes records you entered and estimates amounts from those records. It does not prepare a return, decide deductibility, choose a filing method, or determine worker classification.</p>
+            <p>Confirm mileage treatment, reimbursement handling, worker status, and filing approach with IRS guidance or a qualified tax professional.</p>
           </HelpTip>
         </div>
 
@@ -280,10 +299,10 @@ export default function TaxPage() {
             <input type="number" min={2000} max={2100} step={1} value={year} onChange={(e) => changeYear(e.target.value)} />
           </div>
           <div className="field">
-            <label>Income basis</label>
+            <label>Income view</label>
             <select value={basis} onChange={(e) => setBasis(e.target.value as IncomeBasis)}>
-              <option value="cash">Cash (paid date)</option>
-              <option value="accrual">Game date view</option>
+              <option value="cash">Paid-date view</option>
+              <option value="accrual">Game-date view</option>
             </select>
             <div className="small">Use the view that matches how you and your preparer review records.</div>
           </div>
@@ -297,19 +316,22 @@ export default function TaxPage() {
               onChange={(e) => setMileageRateCents(e.target.value)}
             />
             <div className="small">
-              2026 IRS business rate: 72.5 cents per mile. <a href="https://www.irs.gov/newsroom/irs-sets-2026-business-standard-mileage-rate-at-725-cents-per-mile-up-25-cents" target="_blank" rel="noreferrer">View IRS source</a>.
+              {knownMileageRateCents != null
+                ? `IRS business rate for ${year}: ${knownMileageRateCents} cents per mile. `
+                : `No saved IRS rate is available for ${year}. `}
+              Verify the rate and whether your miles can be used before relying on an export. <a href="https://www.irs.gov/publications/p463" target="_blank" rel="noreferrer">Review IRS mileage guidance</a>.
             </div>
             <div className="small">
               {mileageRateConfirmed
-                ? 'Mileage rate confirmed for this tax year.'
-                : 'Review this rate and save it once to mark tax readiness complete.'}
+                ? 'Mileage rate saved for this record set.'
+                : 'Review this rate and save it once to complete tax record setup.'}
             </div>
           </div>
         </div>
 
         <div className="kpi">
           <div className="box">
-            <div className="label">Income records ({basis})</div>
+            <div className="label">Income records ({incomeBasisLabel(basis)})</div>
             <div className="value">{formatMoney(totals.income)}</div>
           </div>
           <div className="box">
@@ -317,11 +339,11 @@ export default function TaxPage() {
             <div className="value">{totals.miles.toFixed(1)} mi</div>
           </div>
           <div className="box">
-            <div className="label">Mileage amount estimate</div>
+            <div className="label">Mileage calculation estimate</div>
             <div className="value">{formatMoney(mileageEstimate)}</div>
           </div>
           <div className="box">
-            <div className="label">Marked for deductible review</div>
+            <div className="label">Marked for tax review</div>
             <div className="value">{formatMoney(totals.deductibleExpenses)}</div>
           </div>
           <div className="box">
@@ -331,7 +353,7 @@ export default function TaxPage() {
         </div>
 
         <div className="btnbar" style={{ marginTop: 10 }}>
-          <button className="btn" onClick={saveMileageRate} disabled={loading || !mileageRateIsValid}>{mileageRateConfirmed ? 'Update Mileage Rate' : 'Confirm Mileage Rate'}</button>
+          <button className="btn" onClick={saveMileageRate} disabled={loading || !mileageRateIsValid}>{mileageRateConfirmed ? 'Update mileage rate' : 'Save mileage rate'}</button>
           <button className="btn primary" onClick={exportIncomeCsv}>Export Income CSV</button>
           <button className="btn" onClick={exportMileageCsv}>Export Mileage CSV</button>
           <button className="btn" onClick={exportExpensesCsv}>Export Expenses CSV</button>
@@ -340,24 +362,24 @@ export default function TaxPage() {
         </div>
 
         <div className="footer-note">
-          Exports are record summaries for review. Keep receipts, assignment records, payment records, and any notes your preparer asks for.
+          Exports are record summaries for review. Keep receipts, assignment records, payment records, reimbursement details, and any notes your preparer asks for.
         </div>
         {!mileageRateConfirmed ? (
-          <p className="small"><span className="pill warn">Tax readiness stays incomplete until you confirm the mileage rate for the year you are preparing.</span></p>
+          <p className="small"><span className="pill warn">Tax record setup stays incomplete until you save the mileage rate for the year you are preparing.</span></p>
         ) : null}
       </section>
 
       <section className="card tax-confidence-card">
         <div className="page-section-head">
           <div>
-            <h2>Export Confidence</h2>
-            <p className="sub">A practical readiness check before you hand records to tax software or a preparer.</p>
+            <h2>Record Completeness Check</h2>
+            <p className="sub">A field-level check before you hand records to tax software or a preparer.</p>
           </div>
           <span className={`pill ${exportReadiness.tone}`}>{exportReadiness.label}</span>
         </div>
         <div className="tax-confidence-grid">
           <div>
-            <div className="expanded-label">Readiness summary</div>
+            <div className="expanded-label">Record summary</div>
             <p>{exportReadiness.detail}</p>
           </div>
           <div>
@@ -365,8 +387,8 @@ export default function TaxPage() {
             <p>Export income, mileage, expenses, 1099 reconciliation, and the review checklist together. The checklist is your cover sheet for unresolved questions.</p>
           </div>
           <div>
-            <div className="expanded-label">Tax boundary</div>
-            <p>Whistle Keeper organizes records and highlights review prompts. It does not decide deductibility, tax method, or filing treatment.</p>
+            <div className="expanded-label">App boundary</div>
+            <p>Whistle Keeper organizes records and highlights review prompts. It does not decide deductibility, tax method, worker classification, mileage eligibility, or filing treatment.</p>
           </div>
         </div>
       </section>
@@ -442,6 +464,9 @@ export default function TaxPage() {
             <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label}</a>
           ))}
         </div>
+        <div className="footer-note">
+          The review checklist export also includes general prompts for worker status, reimbursements, home-to-work mileage, vehicle expense method, mixed-use expenses, meals, lodging, and record retention.
+        </div>
       </section>
 
       <section className="grid cols2 tax-secondary-grid">
@@ -514,7 +539,7 @@ export default function TaxPage() {
 
         <div className="card">
           <h2>Expense Categories</h2>
-          <p className="sub">Totals include expenses you marked for deductible review. Use the Expenses page to change that marker.</p>
+          <p className="sub">Totals include expenses you marked for tax review. Use the Expenses page to change that marker.</p>
           <div className="tax-category-mobile-list">
             {expensesByCategory.map((r) => (
               <article key={r.category} className="tax-mobile-card is-compact">
@@ -525,7 +550,7 @@ export default function TaxPage() {
             {expensesByCategory.length === 0 ? (
               <div className="empty-state">
                 <h3>No category totals</h3>
-                <p>No expenses are marked for deductible review for the selected year.</p>
+                <p>No expenses are marked for tax review for the selected year.</p>
               </div>
             ) : null}
           </div>
@@ -543,7 +568,7 @@ export default function TaxPage() {
                 </tr>
               ))}
               {expensesByCategory.length === 0 && (
-                <tr><td colSpan={2} className="small">No expenses marked for deductible review for the selected year.</td></tr>
+                <tr><td colSpan={2} className="small">No expenses marked for tax review for the selected year.</td></tr>
               )}
             </tbody>
           </table>

@@ -40,7 +40,7 @@ export function getOnboardingSteps(db: DB, options?: OnboardingProgressOptions):
     { id: 'profile', label: 'Profile', complete: hasProfile, kind: 'required' },
     { id: 'assignments', label: 'Assignments', complete: hasAssignmentRecords, kind: 'recommended' },
     { id: 'requirements', label: 'Requirements', complete: hasRequirements, kind: 'optional' },
-    { id: 'tax', label: 'Tax readiness', complete: hasTaxBasics, kind: 'optional' },
+    { id: 'tax', label: 'Tax record setup', complete: hasTaxBasics, kind: 'optional' },
   ]
 }
 

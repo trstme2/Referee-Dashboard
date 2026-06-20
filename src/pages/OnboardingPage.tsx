@@ -8,6 +8,7 @@ import { getOnboardingProgress } from '../lib/onboarding'
 import { trackedSportsFor } from '../lib/preferences'
 import { recordPlatformEvent } from '../lib/platformEvents'
 import { resolveVerifiedProfileAddresses } from '../lib/profileAddressValidation'
+import { IRS_MILEAGE_ORIGIN_LINKS } from '../lib/taxReview'
 import type { CalendarFeed, SyncIcsResult } from '../lib/types'
 
 function parseList(value: string): string[] {
@@ -329,8 +330,17 @@ export default function OnboardingPage() {
 
           <div className="field">
             <label>Primary mileage origin</label>
-            <input value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)} placeholder="Home office or starting address" />
-            <div className="small">Use a real street address. Whistle Keeper verifies it against Google Maps before saving so mileage calculations work.</div>
+            <input value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)} placeholder="Street address used for route estimates" />
+            <div className="small">Use a real street address. Whistle Keeper verifies it against Google Maps before saving so route estimates work.</div>
+            <HelpTip label="Mileage note" title="Mileage origin is not a tax decision">
+              <p>Whistle Keeper uses this address for route estimates and recordkeeping. IRS rules may treat travel from home differently from travel from a qualifying business location, and commuting rules may apply.</p>
+              <p>Review IRS guidance or ask your preparer before relying on mileage from any origin.</p>
+              <div className="tax-review-links">
+                {IRS_MILEAGE_ORIGIN_LINKS.map(link => (
+                  <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label}</a>
+                ))}
+              </div>
+            </HelpTip>
             {db.settings.homeAddressPlaceId && homeAddress.trim() === db.settings.homeAddress.trim() ? <div className="small">Verified Google Maps origin saved.</div> : null}
           </div>
           <div className="row">
@@ -370,7 +380,7 @@ export default function OnboardingPage() {
             </button>
             {progress.minimumReady
               ? <span className="small">Profile saved. You can head to the dashboard now and come back here any time.</span>
-              : <span className="small">Save a verified home address so mileage and directions work correctly.</span>}
+              : <span className="small">Save a verified mileage origin so route estimates and directions work correctly.</span>}
           </div>
           {(profileMessage || profileError) ? (
             <div className="onboarding-status" aria-live="polite">
@@ -496,14 +506,14 @@ export default function OnboardingPage() {
               <p className="small">These tools are valuable, but they do not need to block first-day use.</p>
             </div>
           </div>
-          <p className="small">Once your profile and assignments are in place, come back here to track season readiness and prepare cleaner tax records.</p>
+          <p className="small">Once your profile and assignments are in place, come back here to track season readiness and organize tax-time records.</p>
         </div>
         <Link className="onboarding-action" to="/requirements">
           <strong>Track requirements</strong>
           <span>Set up meetings, tests, training, and evidence.</span>
         </Link>
         <Link className="onboarding-action" to="/tax">
-          <strong>Review tax readiness</strong>
+          <strong>Review tax records</strong>
           <span>Check income, mileage, expenses, and exports.</span>
         </Link>
       </section>

@@ -25,7 +25,7 @@ export default function LandingPage() {
           <h1>Manage your officiating life.</h1>
           <p>
             Whistle Keeper pulls games, pay, mileage, calendar blocks, requirements,
-            and tax-ready records into one place for officials.
+            and tax-time record summaries into one place for officials.
           </p>
           <div className="landing-actions">
             <Link to="/request-access" className="landing-cta primary">Request beta access</Link>
@@ -141,9 +141,9 @@ export default function LandingPage() {
         <div className="records-grid">
           {[
             ['Pay', 'Know what was assigned, earned, paid, and still outstanding.'],
-            ['Mileage', 'Track game travel from your saved work locations.'],
+            ['Mileage', 'Track game travel from your saved route origins.'],
             ['Requirements', 'Stay ahead of requirements, evidence, and season tasks.'],
-            ['Taxes', 'Export cleaner income and expense records when the year closes.'],
+            ['Taxes', 'Export organized income and expense records when the year closes.'],
           ].map(([title, text]) => (
             <article key={title}>
               <h3>{title}</h3>
