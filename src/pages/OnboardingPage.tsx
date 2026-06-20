@@ -289,7 +289,7 @@ export default function OnboardingPage() {
       <section className="onboarding-hero accent-frame">
         <div>
           <span className="landing-eyebrow">First-run setup</span>
-          <h2>Get moving quickly, then come back for the deeper tools.</h2>
+          <h2>Let's get started!</h2>
           <p>
             Your profile is the only required setup. Adding assignments is the best next step. Requirements and tax review can wait until you are ready for them.
           </p>
