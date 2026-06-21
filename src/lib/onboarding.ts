@@ -66,5 +66,6 @@ export function getOnboardingProgress(db: DB, options?: OnboardingProgressOption
 }
 
 export function shouldStartOnboarding(db: DB): boolean {
+  if (db.settings.onboardingCompletedAt) return false
   return !hasRequiredProfileSetup(db.settings)
 }

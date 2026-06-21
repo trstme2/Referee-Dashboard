@@ -32,6 +32,30 @@ Use only the headings that apply.
 ## 2026-06-20
 
 ### Added
+- Added server-side owner notifications for new beta access requests using the existing Resend email path.
+- Added `support@whistlekeeper.com` as the visible support contact on public, auth, settings, and data/privacy surfaces.
+- Added shared support-contact and transactional-email helpers so support address and Resend behavior stay consistent.
+
+### Changed
+- Hardened tax-facing language so tax features are framed as record organization, review prompts, and export summaries rather than tax advice or tax readiness.
+- Changed new expenses to default to not marked for tax review, reducing any implication that the app pre-classifies expenses as deductible.
+- Replaced user-facing "home office" and "work location" mileage labels with primary/secondary mileage-origin language.
+- Added IRS-linked mileage-origin guidance to onboarding, settings, and game mileage calculation.
+- Renamed Tax export confidence language to record completeness language and added general review prompts to the tax review checklist export.
+- Enlarged the PWA and Apple touch icon artwork so the installed app logo fills more of the available icon space.
+
+### Fixed
+- Restored normal app navigation on the signed-in Account page while keeping unauthenticated sign-in and auth callback screens focused.
+- Aligned onboarding mileage-origin guidance with Settings so new users see the same caution when entering their first address.
+- Stopped completed users from being redirected back to onboarding after a browser refresh by honoring the saved onboarding completion timestamp.
+
+### Security / Privacy
+- Kept beta request notification emails server-side and best-effort so email failures do not block request storage.
+- Documented new Vercel email environment variables without exposing secrets in client code.
+
+## 2026-06-20
+
+### Added
 - Added a gated beta access request flow so prospective testers can request access from the public site.
 - Added an admin beta queue with invite, waitlist, and reject actions.
 - Added a `beta_access_requests` manual Supabase patch and beta access operations documentation.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createFreshDB } from './storage'
-import { getOnboardingProgress, getOnboardingSteps, hasRequiredProfileSetup } from './onboarding'
+import { getOnboardingProgress, getOnboardingSteps, hasRequiredProfileSetup, shouldStartOnboarding } from './onboarding'
 
 describe('onboarding progress', () => {
   it('starts a fresh account at zero completed steps', () => {
@@ -131,6 +131,13 @@ describe('onboarding progress', () => {
 
     expect(progress.minimumReady).toBe(false)
     expect(progress.isComplete).toBe(false)
+  })
+
+  it('does not force the onboarding route after quick start was completed', () => {
+    const db = createFreshDB()
+    db.settings.onboardingCompletedAt = '2026-06-19T00:00:00.000Z'
+
+    expect(shouldStartOnboarding(db)).toBe(false)
   })
 
   it('shares the same required-profile rule across onboarding checks', () => {
