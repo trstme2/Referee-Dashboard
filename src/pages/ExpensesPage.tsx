@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useData } from '../lib/DataContext'
 import type { ExpenseCategory } from '../lib/types'
 import { upsertExpenseIn, deleteExpenseIn, updateExpenseIn } from '../lib/mutate'
@@ -12,13 +12,26 @@ const expenseCategories: ExpenseCategory[] = [
   'Tolls','Parking','Training','Meals','Lodging','Supplies','Phone/App','Other',
 ]
 
-export default function ExpensesPage() {
-  const { db, write, loading, mode, session } = useData()
-  const [form, setForm] = useState({
+type ExpenseFormState = {
+  id: string
+  expenseDate: string
+  amount: string
+  category: ExpenseCategory
+  miles: string
+  vendor: string
+  description: string
+  taxDeductible: string
+  gameId: string
+  receiptFileName: string
+  notes: string
+}
+
+function emptyExpenseForm(): ExpenseFormState {
+  return {
     id: '',
     expenseDate: '',
     amount: '',
-    category: 'Mileage' as ExpenseCategory,
+    category: 'Mileage',
     miles: '',
     vendor: '',
     description: '',
@@ -26,7 +39,14 @@ export default function ExpensesPage() {
     gameId: '',
     receiptFileName: '',
     notes: '',
-  })
+  }
+}
+
+export default function ExpensesPage() {
+  const { db, write, loading, mode, session } = useData()
+  const [form, setForm] = useState<ExpenseFormState>(() => emptyExpenseForm())
+  const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null)
+  const [expenseMessage, setExpenseMessage] = useState<string | null>(null)
 
   const year = new Date().getFullYear()
   const totals = useMemo(() => {
@@ -51,6 +71,7 @@ export default function ExpensesPage() {
   }, [db.expenses, db.games])
   const selectedCategoryCaution = expenseCategoryCaution(form.category)
   const noExpensesYet = db.expenses.length === 0
+  const selectedExpense = selectedExpenseId ? db.expenses.find(e => e.id === selectedExpenseId) : undefined
 
   function linkedGameLabel(gameId?: string) {
     if (!gameId) return ''
@@ -82,9 +103,9 @@ export default function ExpensesPage() {
     return (
       <div className="receipt-actions">
         {expense.receiptFileName ? <span className="pill ok receipt-name">{expense.receiptFileName}</span> : <span className="pill">No receipt</span>}
-        {expense.receiptStoragePath ? <button className="btn compact" onClick={() => openReceipt(expense.id)}>Open</button> : null}
+        {expense.receiptStoragePath ? <button className="btn compact" onClick={(event) => { event.stopPropagation(); void openReceipt(expense.id) }}>Open</button> : null}
         {mode === 'supabase' && session ? (
-          <label className={`btn compact receipt-upload-trigger${compact ? ' is-compact' : ''}`}>
+          <label className={`btn compact receipt-upload-trigger${compact ? ' is-compact' : ''}`} onClick={(event) => event.stopPropagation()}>
             Upload
             <input
               type="file"
@@ -97,32 +118,23 @@ export default function ExpensesPage() {
             />
           </label>
         ) : null}
-        {expense.receiptStoragePath ? <button className="btn compact" onClick={() => removeReceipt(expense.id)}>Remove</button> : null}
+        {expense.receiptStoragePath ? <button className="btn compact" onClick={(event) => { event.stopPropagation(); void removeReceipt(expense.id) }}>Remove</button> : null}
       </div>
     )
   }
 
   function startNew() {
-    setForm({
-      id: '',
-      expenseDate: '',
-      amount: '',
-      category: 'Mileage',
-      miles: '',
-      vendor: '',
-      description: '',
-      taxDeductible: 'No',
-      gameId: '',
-      receiptFileName: '',
-      notes: '',
-    })
+    setSelectedExpenseId(null)
+    setExpenseMessage(null)
+    setForm(emptyExpenseForm())
   }
 
   async function save() {
     if (!form.expenseDate || !form.amount) return
     const isNew = !form.id
+    const expenseId = form.id || crypto.randomUUID()
     const next = upsertExpenseIn(db, {
-      id: form.id || undefined,
+      id: expenseId,
       expenseDate: form.expenseDate,
       amount: safeNumber(form.amount),
       category: form.category,
@@ -141,12 +153,16 @@ export default function ExpensesPage() {
         linkedToGame: Boolean(form.gameId),
       })
     }
-    startNew()
+    setSelectedExpenseId(expenseId)
+    setForm(prev => ({ ...prev, id: expenseId }))
+    setExpenseMessage(isNew ? 'Expense saved. You can attach a receipt now.' : 'Expense updated.')
   }
 
   function edit(id: string) {
     const e = db.expenses.find(x => x.id === id)
     if (!e) return
+    setSelectedExpenseId(e.id)
+    setExpenseMessage(null)
     setForm({
       id: e.id,
       expenseDate: e.expenseDate,
@@ -177,6 +193,7 @@ export default function ExpensesPage() {
     const next = deleteExpenseIn(db, id)
     await write(next)
     if (form.id === id) startNew()
+    if (selectedExpenseId === id) setSelectedExpenseId(null)
   }
 
   async function uploadReceipt(expenseId: string, file: File | null) {
@@ -200,6 +217,7 @@ export default function ExpensesPage() {
       })
       await write(next)
       if (form.id === expenseId) setForm(prev => ({ ...prev, receiptFileName: uploaded.fileName }))
+      setExpenseMessage('Receipt uploaded.')
     } catch (e: any) {
       alert(`Receipt upload failed: ${String(e?.message ?? e)}`)
     }
@@ -231,6 +249,7 @@ export default function ExpensesPage() {
       })
       await write(next)
       if (form.id === expenseId) setForm(prev => ({ ...prev, receiptFileName: '' }))
+      setExpenseMessage('Receipt removed.')
     } catch (e: any) {
       alert(`Could not remove receipt: ${String(e?.message ?? e)}`)
     }
@@ -285,7 +304,20 @@ export default function ExpensesPage() {
 
         <div className="expense-card-list">
           {rows.map(e => (
-            <article key={e.id} className="expense-card">
+            <article
+              key={e.id}
+              className={`expense-card expense-clickable${selectedExpenseId === e.id ? ' is-selected' : ''}`}
+              onClick={() => edit(e.id)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  edit(e.id)
+                }
+              }}
+              aria-label={`Edit ${expenseTitle(e)} expense from ${e.expenseDate}`}
+            >
               <div className="expense-card-head">
                 <div>
                   <div className="expense-date">{e.expenseDate}</div>
@@ -301,9 +333,15 @@ export default function ExpensesPage() {
               </div>
               {expenseReviewItems(e.id)}
               {receiptControls(e.id, true)}
+              {selectedExpenseId === e.id ? (
+                <div className="expense-expanded-detail">
+                  <strong>Selected for editing</strong>
+                  <span>{e.notes?.trim() ? e.notes : 'Use the edit panel to update details or attach a receipt.'}</span>
+                </div>
+              ) : null}
               <div className="expense-card-actions">
-                <button className="btn compact" onClick={() => edit(e.id)}>Edit</button>
-                <button className="btn compact danger" onClick={() => del(e.id)}>Delete</button>
+                <button className="btn compact" onClick={(event) => { event.stopPropagation(); edit(e.id) }}>Edit</button>
+                <button className="btn compact danger" onClick={(event) => { event.stopPropagation(); void del(e.id) }}>Delete</button>
               </div>
             </article>
           ))}
@@ -325,27 +363,50 @@ export default function ExpensesPage() {
             </thead>
             <tbody>
               {rows.map(e => (
-                <tr key={e.id}>
-                  <td>{e.expenseDate}</td>
-                  <td>
-                    <div>{e.category}</div>
-                    <div className="small">{e.taxDeductible ? 'Marked for tax review' : 'Not marked for tax review'}</div>
-                  </td>
-                  <td>{formatMoney(e.amount)}</td>
-                  <td>{e.category === 'Mileage' ? (e.miles ?? 0).toFixed(1) : ''}</td>
-                  <td>
-                    <div>{expenseTitle(e)}</div>
-                    {linkedGameLabel(e.gameId) ? <div className="small">{linkedGameLabel(e.gameId)}</div> : null}
-                  </td>
-                  <td>{expenseReviewItems(e.id)}</td>
-                  <td>{receiptControls(e.id)}</td>
-                  <td>
-                    <div className="btnbar expense-row-actions">
-                      <button className="btn compact" onClick={() => edit(e.id)}>Edit</button>
-                      <button className="btn compact danger" onClick={() => del(e.id)}>Delete</button>
-                    </div>
-                  </td>
-                </tr>
+                <Fragment key={e.id}>
+                  <tr
+                    className={`expandable-row expense-clickable${selectedExpenseId === e.id ? ' expanded' : ''}`}
+                    onClick={() => edit(e.id)}
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        edit(e.id)
+                      }
+                    }}
+                    aria-label={`Edit ${expenseTitle(e)} expense from ${e.expenseDate}`}
+                  >
+                    <td>{e.expenseDate}</td>
+                    <td>
+                      <div>{e.category}</div>
+                      <div className="small">{e.taxDeductible ? 'Marked for tax review' : 'Not marked for tax review'}</div>
+                    </td>
+                    <td>{formatMoney(e.amount)}</td>
+                    <td>{e.category === 'Mileage' ? (e.miles ?? 0).toFixed(1) : ''}</td>
+                    <td>
+                      <div>{expenseTitle(e)}</div>
+                      {linkedGameLabel(e.gameId) ? <div className="small">{linkedGameLabel(e.gameId)}</div> : null}
+                    </td>
+                    <td>{expenseReviewItems(e.id)}</td>
+                    <td>{receiptControls(e.id)}</td>
+                    <td>
+                      <div className="btnbar expense-row-actions">
+                        <button className="btn compact" onClick={(event) => { event.stopPropagation(); edit(e.id) }}>Edit</button>
+                        <button className="btn compact danger" onClick={(event) => { event.stopPropagation(); void del(e.id) }}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                  {selectedExpenseId === e.id ? (
+                    <tr className="expense-expanded-row">
+                      <td colSpan={8}>
+                        <div className="expense-expanded-detail">
+                          <strong>Selected for editing</strong>
+                          <span>{e.notes?.trim() ? e.notes : 'Use the edit panel to update details, receipt, notes, or tax review marker.'}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
               ))}
               {rows.length === 0 && (
                 <tr>
@@ -366,6 +427,7 @@ export default function ExpensesPage() {
       <section className="card expense-editor-card">
         <h2>{form.id ? 'Edit expense' : 'Add expense'}</h2>
         <p className="sub">{form.id ? 'Update the record, receipt, or review marker.' : 'Capture a cost while the details are still fresh.'}</p>
+        {expenseMessage ? <div className="notice success expense-form-message">{expenseMessage}</div> : null}
 
         <div className="row">
           <div className="field">
@@ -443,34 +505,45 @@ export default function ExpensesPage() {
           <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
         </div>
 
-        {form.id && (
-          <div className="field">
-            <label>Receipt</label>
-            <div className="receipt-editor">
-              {form.receiptFileName ? <span className="pill ok">{form.receiptFileName}</span> : <span className="pill">{noExpensesYet ? 'Receipts ready when you are' : 'No receipt uploaded yet'}</span>}
-              {mode === 'supabase' && session ? (
-                <label className="btn receipt-upload-trigger">
-                  Upload receipt
-                  <input
-                    type="file"
-                    accept=".pdf,image/jpeg,image/png,image/webp"
-                    onChange={evt => {
-                      const file = evt.target.files?.[0] ?? null
-                      void uploadReceipt(form.id, file)
-                      evt.currentTarget.value = ''
-                    }}
-                    />
-                </label>
-              ) : <span className="small">Sign in to upload receipts and keep them available across devices.</span>}
-              {form.id && db.expenses.find(x => x.id === form.id)?.receiptStoragePath ? (
-                <>
-                  <button className="btn" onClick={() => openReceipt(form.id)}>Open receipt</button>
-                  <button className="btn" onClick={() => removeReceipt(form.id)}>Remove receipt</button>
-                </>
-              ) : null}
-            </div>
+        <div className="field">
+          <label>Receipt</label>
+          <div className="receipt-editor">
+            {form.id ? (
+              <>
+                {selectedExpense?.receiptFileName || form.receiptFileName ? (
+                  <span className="pill ok">{selectedExpense?.receiptFileName ?? form.receiptFileName}</span>
+                ) : (
+                  <span className="pill">{noExpensesYet ? 'Receipts ready when you are' : 'No receipt uploaded yet'}</span>
+                )}
+                {mode === 'supabase' && session ? (
+                  <label className="btn receipt-upload-trigger">
+                    Upload receipt
+                    <input
+                      type="file"
+                      accept=".pdf,image/jpeg,image/png,image/webp"
+                      onChange={evt => {
+                        const file = evt.target.files?.[0] ?? null
+                        void uploadReceipt(form.id, file)
+                        evt.currentTarget.value = ''
+                      }}
+                      />
+                  </label>
+                ) : <span className="small">Sign in to upload receipts and keep them available across devices.</span>}
+                {selectedExpense?.receiptStoragePath ? (
+                  <>
+                    <button className="btn" onClick={() => openReceipt(form.id)}>Open receipt</button>
+                    <button className="btn" onClick={() => removeReceipt(form.id)}>Remove receipt</button>
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <div className="receipt-save-prompt">
+                <span className="pill">Save first</span>
+                <span className="small">Save the expense, then the receipt uploader will appear here for PDF, JPG, PNG, or WebP files.</span>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         <div className="btnbar">
           <button className="btn primary" onClick={save} disabled={loading || !form.expenseDate || !form.amount}>Save</button>

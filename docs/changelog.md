@@ -29,6 +29,12 @@ Use short, dated entries:
 
 Use only the headings that apply.
 
+## 2026-06-21
+
+### Changed
+- Improved the expense workflow so newly saved expenses stay open for receipt upload instead of resetting the form immediately.
+- Made saved expense cards and table rows clickable/selectable for editing, with expanded detail feedback for the selected record.
+
 ## 2026-06-20
 
 ### Added
