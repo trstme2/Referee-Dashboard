@@ -973,6 +973,80 @@ button, input, select, textarea { font: inherit; }
 }
 
 .platform-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.game-time-picker {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.18);
+}
+
+.game-time-main {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.game-time-stepper {
+  flex: 1 1 126px;
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.game-time-stepper span {
+  color: #97a7bc;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.game-time-stepper > div,
+.game-time-meridiem,
+.game-time-summary,
+.game-time-presets {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.game-time-stepper strong {
+  min-width: 46px;
+  padding: 9px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.04);
+  color: #f8fafc;
+  font-size: 20px;
+  text-align: center;
+}
+
+.game-time-divider {
+  display: grid;
+  place-items: end center;
+  padding-bottom: 8px;
+  color: #97a7bc;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.game-time-meridiem {
+  align-self: end;
+  padding-bottom: 1px;
+}
+
+.game-time-summary {
+  justify-content: space-between;
+}
+
+.game-time-presets .btn {
+  min-height: 34px;
+}
+
 .games-platform-manager {
   display: grid;
   gap: 10px;

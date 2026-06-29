@@ -29,6 +29,11 @@ Use short, dated entries:
 
 Use only the headings that apply.
 
+## 2026-06-29
+
+### Changed
+- Reworked the Games page start-time input into a larger hour/minute/AM-PM picker with common start-time shortcuts.
+
 ## 2026-06-21
 
 ### Changed

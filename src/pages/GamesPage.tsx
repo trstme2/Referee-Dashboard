@@ -16,6 +16,7 @@ const statuses: GameStatus[] = ['Scheduled', 'Played', 'Paid / Complete', 'Cance
 const soccerRoles: SoccerRole[] = ['Center', 'AR', '4th', 'Dual', 'Mentor']
 const lacrosseRoles: LacrosseRole[] = ['Lead', 'Field Judge', 'Alternate', 'Mentor']
 const DEFAULT_GAME_START_TIME = '19:00'
+const commonStartTimes = ['16:00', '17:00', '18:00', '19:00', '19:30', '20:00']
 
 type Meridiem = 'AM' | 'PM'
 type GameFormState = {
@@ -83,6 +84,11 @@ function shiftTimeByMinutes(time: string, deltaMinutes: number): string {
   const nh = Math.floor(total / 60)
   const nm = total % 60
   return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`
+}
+
+function timeLabel(time: string): string {
+  const parts = to12HourParts(time)
+  return `${parts.hour}:${String(parts.minute).padStart(2, '0')} ${parts.meridiem}`
 }
 
 function paymentBadge(game: { paidConfirmed: boolean; status: GameStatus }) {
@@ -346,6 +352,19 @@ export default function GamesPage() {
       ...prev,
       platformConfirmations: { ...(prev.platformConfirmations ?? {}), [p]: !prev.platformConfirmations?.[p] }
     }))
+  }
+
+  function updateStartTime(hour: number, minute: number, meridiem: Meridiem) {
+    setForm(prev => ({ ...prev, startTime: to24HourString(hour, minute, meridiem) }))
+  }
+
+  function adjustStartHour(delta: number) {
+    const nextHour = (((timeParts.hour - 1 + delta) % 12) + 12) % 12 + 1
+    updateStartTime(nextHour, timeParts.minute, timeParts.meridiem)
+  }
+
+  function adjustStartMinutes(delta: number) {
+    setForm(prev => ({ ...prev, startTime: shiftTimeByMinutes(prev.startTime || DEFAULT_GAME_START_TIME, delta) }))
   }
 
   async function saveTrackedPlatforms(nextPlatforms: string[]) {
@@ -721,58 +740,54 @@ export default function GamesPage() {
 
           <div className="field">
             <label>Start time</label>
-            <div className="btnbar" style={{ alignItems: 'center' }}>
-              <input
-                type="number"
-                min={1}
-                max={12}
-                value={timeParts.hour}
-                onChange={e => {
-                  const h = Number(e.target.value)
-                  setForm(prev => ({ ...prev, startTime: to24HourString(h, timeParts.minute, timeParts.meridiem) }))
-                }}
-                style={{ width: 80 }}
-              />
-              <select
-                value={String(timeParts.minute)}
-                onChange={e => {
-                  const m = Number(e.target.value)
-                  setForm(prev => ({ ...prev, startTime: to24HourString(timeParts.hour, m, timeParts.meridiem) }))
-                }}
-                style={{ width: 90 }}
-              >
-                <option value="0">00</option>
-                <option value="15">15</option>
-                <option value="30">30</option>
-                <option value="45">45</option>
-              </select>
-              <select
-                value={timeParts.meridiem}
-                onChange={e => {
-                  const meridiem = e.target.value as Meridiem
-                  setForm(prev => ({ ...prev, startTime: to24HourString(timeParts.hour, timeParts.minute, meridiem) }))
-                }}
-                style={{ width: 90 }}
-              >
-                <option value="AM">AM</option>
-                <option value="PM">PM</option>
-              </select>
-            </div>
-            <div className="btnbar" style={{ marginTop: 8 }}>
-              <button
-                className="btn"
-                onClick={() => setForm(prev => ({ ...prev, startTime: shiftTimeByMinutes(prev.startTime || '19:00', -15) }))}
-              >
-                -15m
-              </button>
-              <button
-                className="btn"
-                onClick={() => setForm(prev => ({ ...prev, startTime: shiftTimeByMinutes(prev.startTime || '19:00', 15) }))}
-              >
-                +15m
-              </button>
-              <button className="btn" onClick={() => setForm(prev => ({ ...prev, startTime: '' }))}>Clear</button>
-              <span className={'pill ' + (form.startTime ? 'ok' : '')}>{form.startTime || 'No start time'}</span>
+            <div className="game-time-picker" aria-label="Game start time picker">
+              <div className="game-time-main">
+                <div className="game-time-stepper">
+                  <span>Hour</span>
+                  <div>
+                    <button type="button" className="btn compact" onClick={() => adjustStartHour(-1)} aria-label="Decrease start hour">-</button>
+                    <strong>{timeParts.hour}</strong>
+                    <button type="button" className="btn compact" onClick={() => adjustStartHour(1)} aria-label="Increase start hour">+</button>
+                  </div>
+                </div>
+                <div className="game-time-divider">:</div>
+                <div className="game-time-stepper">
+                  <span>Minutes</span>
+                  <div>
+                    <button type="button" className="btn compact" onClick={() => adjustStartMinutes(-15)} aria-label="Decrease start time by 15 minutes">-</button>
+                    <strong>{String(timeParts.minute).padStart(2, '0')}</strong>
+                    <button type="button" className="btn compact" onClick={() => adjustStartMinutes(15)} aria-label="Increase start time by 15 minutes">+</button>
+                  </div>
+                </div>
+                <div className="game-time-meridiem" aria-label="AM or PM">
+                  {(['AM', 'PM'] as Meridiem[]).map(value => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`btn compact ${timeParts.meridiem === value ? 'primary' : ''}`}
+                      onClick={() => updateStartTime(timeParts.hour, timeParts.minute, value)}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="game-time-summary">
+                <span className={'pill ' + (form.startTime ? 'ok' : '')}>{form.startTime ? timeLabel(form.startTime) : 'No start time'}</span>
+                <button type="button" className="btn compact" onClick={() => setForm(prev => ({ ...prev, startTime: '' }))}>Clear</button>
+              </div>
+              <div className="game-time-presets" aria-label="Common start times">
+                {commonStartTimes.map(time => (
+                  <button
+                    key={time}
+                    type="button"
+                    className={`btn compact ${form.startTime === time ? 'primary' : ''}`}
+                    onClick={() => setForm(prev => ({ ...prev, startTime: time }))}
+                  >
+                    {timeLabel(time)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <div className="field">
