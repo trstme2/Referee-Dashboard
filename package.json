@@ -19,7 +19,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.108.0",
     "node-ical": "^0.26.1",
-    "papaparse": "^5.4.1",
+    "papaparse": "^5.5.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.17.0",
