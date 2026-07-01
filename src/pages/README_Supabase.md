@@ -89,6 +89,8 @@ Serverless:
 The weekly schedule email runs from `/api/weekly-games-email` every Sunday at `13:00 UTC`.
 It sends opted-in users a "Games Next 7 Days" email using the same Scheduled-game date window as the Home page.
 Users opt in or out from Settings with the Weekly Sunday game email checkbox.
+To test the route without sending mail, call `/api/weekly-games-email?dryRun=1` with `Authorization: Bearer <CRON_SECRET>`.
+To test a real send, call `/api/weekly-games-email` with the same authorization header after confirming `RESEND_API_KEY`, `EMAIL_FROM`, and a verified Resend sending domain are configured in Vercel.
 
 Beta access notifications are sent after `/request-access` saves a request. They are best-effort: a notification failure does not block the request from being stored in Supabase. To enable alerts, configure `RESEND_API_KEY`, `EMAIL_FROM`, and `BETA_REQUEST_NOTIFY_TO` in Vercel.
 

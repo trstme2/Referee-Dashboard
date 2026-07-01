@@ -29,6 +29,12 @@ Use short, dated entries:
 
 Use only the headings that apply.
 
+## 2026-07-01
+
+### Changed
+- Added structured logging and a secured dry-run mode for the weekly games email cron route so delivery issues can be diagnosed without waiting for Sunday.
+- Documented `CRON_SECRET` in the example environment file and weekly email manual test instructions.
+
 ## 2026-06-29
 
 ### Changed

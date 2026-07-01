@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createServiceSupabase, cronAuthorized, setApiSecurityHeaders } from '../src/server/auth-utils.js'
 import { appUrl, escapeEmailHtml, sendTransactionalEmail } from '../src/server/email.js'
+import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
 
 type GameRow = {
   id: string
@@ -163,51 +164,83 @@ async function loadGames(client: any, userId: string, startYmd: string, endYmd: 
   return (data ?? []) as GameRow[]
 }
 
+function queryFlag(req: VercelRequest, name: string): boolean {
+  const value = req.query[name]
+  const raw = Array.isArray(value) ? value[0] : value
+  return raw === '1' || raw === 'true'
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const route = '/api/weekly-games-email'
+  const startedAtMs = Date.now()
   setApiSecurityHeaders(res)
+  logApiStart(route, req, {
+    schedule: String(req.headers['x-vercel-cron-schedule'] || ''),
+  })
 
   if (req.method !== 'GET' && req.method !== 'POST') {
+    logApiDone(route, startedAtMs, { status: 405 })
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  if (!cronAuthorized(req)) return res.status(401).json({ error: 'Unauthorized' })
-
-  const client = createServiceSupabase()
-  const dashboardUrl = appUrl()
-  const summaries: UserSummary[] = []
-  const enabledSettings = await loadEnabledSettings(client)
-  const enabledByUser = new Map(enabledSettings.map((s) => [s.user_id, s]))
-  const userEmails = new Map((await loadUsers(client)).map((u) => [u.id, u.email]))
-
-  for (const setting of enabledSettings) {
-    const user = { id: setting.user_id, email: userEmails.get(setting.user_id) }
-    if (!user.email) {
-      summaries.push({ userId: user.id, email: '', sent: false, games: 0, error: 'No email address found for user' })
-      continue
-    }
-    try {
-      const timeZone = String(enabledByUser.get(user.id)?.default_timezone || DEFAULT_TIMEZONE)
-      const today = ymdInZone(new Date(), timeZone)
-      const end = ymdInZone(addDays(new Date(), 7), timeZone)
-      const games = await loadGames(client, user.id, today, end)
-      const subject = games.length === 1
-        ? '1 game in the next 7 days'
-        : `${games.length} games in the next 7 days`
-
-      await sendTransactionalEmail({
-        to: user.email,
-        subject,
-        text: `Games Next 7 Days\n\n${gamesText(games, timeZone)}`,
-        html: gamesHtml(games, timeZone, dashboardUrl),
-        idempotencyKey: `weekly-games-${user.id}-${today}`,
-      })
-
-      summaries.push({ userId: user.id, email: user.email, sent: true, games: games.length })
-    } catch (e: any) {
-      summaries.push({ userId: user.id, email: user.email, sent: false, games: 0, error: String(e?.message ?? e) })
-    }
+  if (!cronAuthorized(req)) {
+    logApiDone(route, startedAtMs, { status: 401 })
+    return res.status(401).json({ error: 'Unauthorized' })
   }
 
-  const sent = summaries.filter((s) => s.sent).length
-  const failed = summaries.length - sent
-  return res.status(failed ? 207 : 200).json({ sent, failed, users: summaries })
+  const dryRun = queryFlag(req, 'dryRun')
+
+  try {
+    const client = createServiceSupabase()
+    const dashboardUrl = appUrl()
+    const summaries: UserSummary[] = []
+    const enabledSettings = await loadEnabledSettings(client)
+    const enabledByUser = new Map(enabledSettings.map((s) => [s.user_id, s]))
+    const userEmails = new Map((await loadUsers(client)).map((u) => [u.id, u.email]))
+
+    for (const setting of enabledSettings) {
+      const user = { id: setting.user_id, email: userEmails.get(setting.user_id) }
+      if (!user.email) {
+        summaries.push({ userId: user.id, email: '', sent: false, games: 0, error: 'No email address found for user' })
+        continue
+      }
+      try {
+        const timeZone = String(enabledByUser.get(user.id)?.default_timezone || DEFAULT_TIMEZONE)
+        const today = ymdInZone(new Date(), timeZone)
+        const end = ymdInZone(addDays(new Date(), 7), timeZone)
+        const games = await loadGames(client, user.id, today, end)
+        const subject = games.length === 1
+          ? '1 game in the next 7 days'
+          : `${games.length} games in the next 7 days`
+
+        if (!dryRun) {
+          await sendTransactionalEmail({
+            to: user.email,
+            subject,
+            text: `Games Next 7 Days\n\n${gamesText(games, timeZone)}`,
+            html: gamesHtml(games, timeZone, dashboardUrl),
+            idempotencyKey: `weekly-games-${user.id}-${today}`,
+          })
+        }
+
+        summaries.push({ userId: user.id, email: user.email, sent: !dryRun, games: games.length, ...(dryRun ? { error: 'dry-run: email not sent' } : {}) })
+      } catch (e: any) {
+        summaries.push({ userId: user.id, email: user.email, sent: false, games: 0, error: String(e?.message ?? e) })
+      }
+    }
+
+    const sent = summaries.filter((s) => s.sent).length
+    const failed = summaries.filter((s) => s.error && !(dryRun && s.error.startsWith('dry-run:'))).length
+    const status = failed && !dryRun ? 207 : 200
+    logApiDone(route, startedAtMs, {
+      status,
+      dryRun,
+      optedInUsers: enabledSettings.length,
+      sent,
+      failed,
+    })
+    return res.status(status).json({ sent, failed, dryRun, users: summaries })
+  } catch (error) {
+    logApiError(route, startedAtMs, error)
+    return res.status(500).json({ error: String(error instanceof Error ? error.message : error) })
+  }
 }
