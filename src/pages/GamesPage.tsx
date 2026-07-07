@@ -69,7 +69,7 @@ function to12HourParts(time: string | undefined): { hour: number; minute: number
 
 function to24HourString(hour: number, minute: number, meridiem: Meridiem): string {
   const clampedHour = Math.min(12, Math.max(1, Math.floor(hour)))
-  const safeMinute = [0, 15, 30, 45].includes(minute) ? minute : 0
+  const safeMinute = Number.isFinite(minute) ? Math.min(55, Math.max(0, Math.round(minute / 5) * 5)) : 0
   let h24 = clampedHour % 12
   if (meridiem === 'PM') h24 += 12
   return `${String(h24).padStart(2, '0')}:${String(safeMinute).padStart(2, '0')}`
@@ -103,6 +103,12 @@ function gameStatusTone(status: GameStatus) {
   if (status === 'Played') return 'warn'
   if (status === 'Canceled') return 'bad'
   return 'info'
+}
+
+function nextGameStatusAction(status: GameStatus): { label: string; status: GameStatus } | null {
+  if (status === 'Scheduled') return { label: 'Mark played', status: 'Played' }
+  if (status === 'Played') return { label: 'Mark paid', status: 'Paid / Complete' }
+  return null
 }
 
 const commonPlatformSuggestions = ['DragonFly', 'RefQuest', 'Arbiter', 'Assignr', 'GameOfficials', 'GotSport']
@@ -367,6 +373,25 @@ export default function GamesPage() {
     setForm(prev => ({ ...prev, startTime: shiftTimeByMinutes(prev.startTime || DEFAULT_GAME_START_TIME, delta) }))
   }
 
+  function statusQuickActions(g: typeof rows[number]) {
+    const nextAction = nextGameStatusAction(g.status)
+    return (
+      <div className="game-status-actions" onClick={event => event.stopPropagation()}>
+        <span className={`pill ${gameStatusTone(g.status)}`}>{g.status}</span>
+        {nextAction ? (
+          <button className="btn compact primary" onClick={() => void updateStatus(g.id, nextAction.status)}>
+            {nextAction.label}
+          </button>
+        ) : null}
+        {g.status !== 'Scheduled' ? (
+          <button className="btn compact" onClick={() => void updateStatus(g.id, 'Scheduled')}>
+            Reset scheduled
+          </button>
+        ) : null}
+      </div>
+    )
+  }
+
   async function saveTrackedPlatforms(nextPlatforms: string[]) {
     await write({
       ...db,
@@ -537,16 +562,7 @@ export default function GamesPage() {
                         ) : null}
                       </td>
                       <td>
-                        <div className="btnbar" onClick={e => e.stopPropagation()}>
-                          <span className={`pill ${gameStatusTone(g.status)}`}>{g.status}</span>
-                          <select
-                            value={g.status}
-                            onChange={e => updateStatus(g.id, e.target.value as GameStatus)}
-                            style={{ minWidth: 145 }}
-                          >
-                            {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                        </div>
+                        {statusQuickActions(g)}
                       </td>
                       <td>
                         <div className="btnbar" onClick={e => e.stopPropagation()}>
@@ -668,6 +684,7 @@ export default function GamesPage() {
                   <span>{g.gameFee != null ? `$${Number(g.gameFee).toFixed(0)}` : 'No pay'}</span>
                 </div>
                 <div className="small">{g.locationAddress || 'No location entered'}</div>
+                {statusQuickActions(g)}
                 <div className="game-card-foot">
                   <span className={`pill ${payBadge.tone}`}>{payBadge.label}</span>
                   {showPlatformChips ? (
@@ -754,9 +771,9 @@ export default function GamesPage() {
                 <div className="game-time-stepper">
                   <span>Minutes</span>
                   <div>
-                    <button type="button" className="btn compact" onClick={() => adjustStartMinutes(-15)} aria-label="Decrease start time by 15 minutes">-</button>
+                    <button type="button" className="btn compact" onClick={() => adjustStartMinutes(-5)} aria-label="Decrease start time by 5 minutes">-</button>
                     <strong>{String(timeParts.minute).padStart(2, '0')}</strong>
-                    <button type="button" className="btn compact" onClick={() => adjustStartMinutes(15)} aria-label="Increase start time by 15 minutes">+</button>
+                    <button type="button" className="btn compact" onClick={() => adjustStartMinutes(5)} aria-label="Increase start time by 5 minutes">+</button>
                   </div>
                 </div>
                 <div className="game-time-meridiem" aria-label="AM or PM">

@@ -29,6 +29,17 @@ Use short, dated entries:
 
 Use only the headings that apply.
 
+## 2026-07-07
+
+### Changed
+- Updated the Games page start-time picker to move in 5-minute increments while keeping common start-time shortcuts.
+- Restored one-touch game status actions for marking scheduled games played and played games paid from the Games list.
+- Added safer weekly games email diagnostics for cron authorization, email configuration, and per-user send failures so production can show where the Sunday email job stops.
+
+### Fixed
+- Preserved existing sport and competition level during calendar sync so manual corrections, such as changing a synced soccer game from High School to Club, are not overwritten by later feed syncs.
+- Kept loaded game counts in weekly email failure summaries so Resend or delivery failures no longer misleadingly report zero games.
+
 ## 2026-07-01
 
 ### Changed

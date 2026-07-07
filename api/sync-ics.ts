@@ -761,8 +761,8 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
     return {
       id: existing?.id ?? crypto.randomUUID(),
       user_id: feed.user_id,
-      sport: n.sport,
-      competition_level: n.competitionLevel,
+      sport: existing?.sport ?? n.sport,
+      competition_level: existing?.competition_level ?? n.competitionLevel,
       league: existing?.league ?? feed.default_league ?? null,
       level_detail: existing?.level_detail ?? n.levelDetail ?? null,
       game_date: n.gameDate,

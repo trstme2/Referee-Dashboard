@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createServiceSupabase, cronAuthorized, setApiSecurityHeaders } from '../src/server/auth-utils.js'
+import { createServiceSupabase, cronAuthorized, getBearerToken, setApiSecurityHeaders } from '../src/server/auth-utils.js'
 import { appUrl, escapeEmailHtml, sendTransactionalEmail } from '../src/server/email.js'
 import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
 
@@ -30,6 +30,19 @@ type EnabledSetting = {
 }
 
 const DEFAULT_TIMEZONE = 'America/New_York'
+
+function emailConfigStatus() {
+  return {
+    resendConfigured: Boolean(process.env.RESEND_API_KEY),
+    emailFromConfigured: Boolean(process.env.EMAIL_FROM || process.env.WEEKLY_EMAIL_FROM),
+    appUrlConfigured: Boolean(appUrl()),
+  }
+}
+
+function emailDomain(email: string): string {
+  const domain = email.split('@').pop()
+  return domain ? domain.toLowerCase().slice(0, 80) : ''
+}
 
 function addDays(d: Date, days: number): Date {
   const next = new Date(d)
@@ -183,11 +196,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
   if (!cronAuthorized(req)) {
-    logApiDone(route, startedAtMs, { status: 401 })
+    const suppliedToken = getBearerToken(req)
+    logApiDone(route, startedAtMs, {
+      status: 401,
+      cronSecretConfigured: Boolean(process.env.CRON_SECRET),
+      expectedTokenLength: process.env.CRON_SECRET?.length ?? 0,
+      suppliedTokenLength: suppliedToken?.length ?? 0,
+      hasAuthorizationHeader: Boolean(req.headers.authorization),
+    })
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
   const dryRun = queryFlag(req, 'dryRun')
+  const diagnostics = queryFlag(req, 'diagnostics')
+  const config = emailConfigStatus()
 
   try {
     const client = createServiceSupabase()
@@ -203,11 +225,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         summaries.push({ userId: user.id, email: '', sent: false, games: 0, error: 'No email address found for user' })
         continue
       }
+      let gameCount = 0
       try {
         const timeZone = String(enabledByUser.get(user.id)?.default_timezone || DEFAULT_TIMEZONE)
         const today = ymdInZone(new Date(), timeZone)
         const end = ymdInZone(addDays(new Date(), 7), timeZone)
         const games = await loadGames(client, user.id, today, end)
+        gameCount = games.length
         const subject = games.length === 1
           ? '1 game in the next 7 days'
           : `${games.length} games in the next 7 days`
@@ -224,7 +248,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         summaries.push({ userId: user.id, email: user.email, sent: !dryRun, games: games.length, ...(dryRun ? { error: 'dry-run: email not sent' } : {}) })
       } catch (e: any) {
-        summaries.push({ userId: user.id, email: user.email, sent: false, games: 0, error: String(e?.message ?? e) })
+        logApiError(route, startedAtMs, e, {
+          phase: 'user_send',
+          userId: user.id,
+          emailDomain: emailDomain(user.email),
+          games: gameCount,
+        })
+        summaries.push({ userId: user.id, email: user.email, sent: false, games: gameCount, error: String(e?.message ?? e) })
       }
     }
 
@@ -237,8 +267,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       optedInUsers: enabledSettings.length,
       sent,
       failed,
+      resendConfigured: config.resendConfigured,
+      emailFromConfigured: config.emailFromConfigured,
+      appUrlConfigured: config.appUrlConfigured,
     })
-    return res.status(status).json({ sent, failed, dryRun, users: summaries })
+    return res.status(status).json({
+      sent,
+      failed,
+      dryRun,
+      ...(dryRun || diagnostics ? { config } : {}),
+      users: summaries,
+    })
   } catch (error) {
     logApiError(route, startedAtMs, error)
     return res.status(500).json({ error: String(error instanceof Error ? error.message : error) })

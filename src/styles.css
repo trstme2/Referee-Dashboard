@@ -862,6 +862,17 @@ button, input, select, textarea { font: inherit; }
   flex-wrap: wrap;
 }
 
+.game-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.game-status-actions .btn {
+  min-height: 30px;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
