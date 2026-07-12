@@ -7,7 +7,8 @@ import { fetchCalendarFeedTextWithRetry } from '../src/server/feed-fetch.js'
 import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
 import { revealFeedUrl } from '../src/server/personal-data-security.js'
 import { enqueueFeedSyncJobs, loadSyncJobsForUser, processDueSyncJobs, type SyncJobResult } from '../src/server/sync-jobs.js'
-import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks } from '../src/server/sync-ics-utils.js'
+import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks, looksLikeAvailabilityBlock } from '../src/server/sync-ics-utils.js'
+import { buildSyncedGameRow } from '../src/server/sync-merge.js'
 
 export type Feed = {
   id: string
@@ -219,6 +220,7 @@ function parseDragonFlySummary(summary: string, sport: string) {
 }
 
 function inferEventType(text: string, allDay: boolean, startTime: string | null, location: string | null): 'Game' | 'Block' | 'Admin' | 'Travel' {
+  if (looksLikeAvailabilityBlock(text)) return 'Block'
   if (/\btravel\b|\bhotel\b|\bflight\b|\bdrive\b|\bout of town\b/i.test(text)) return 'Travel'
   if (/\bmeeting\b|\bclinic\b|\btraining\b|\badmin\b|\bclass\b/i.test(text)) return 'Admin'
   if (allDay) return 'Block'
@@ -731,6 +733,27 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
   }
 
   const eventByRef = new Map<string, any>((upsertedEvents ?? []).map((e: any) => [String(e.external_ref), e]))
+  const blockEventIds = normalized
+    .filter((n) => n.eventType === 'Block')
+    .map((n) => eventByRef.get(n.externalRef)?.id ? String(eventByRef.get(n.externalRef).id) : null)
+    .filter(Boolean) as string[]
+  if (blockEventIds.length) {
+    const { data: blockLinkedGames, error: blockGamesLookupErr } = await client
+      .from('games')
+      .select('id')
+      .eq('user_id', feed.user_id)
+      .in('calendar_event_id', blockEventIds)
+    if (blockGamesLookupErr) throw new Error(`games block cleanup lookup: ${blockGamesLookupErr.message}`)
+    const blockLinkedGameIds = (blockLinkedGames ?? []).map((game: any) => String(game.id)).filter(Boolean)
+    if (blockLinkedGameIds.length) {
+      const { error: deleteBlockGamesErr } = await client
+        .from('games')
+        .delete()
+        .eq('user_id', feed.user_id)
+        .in('id', blockLinkedGameIds)
+      if (deleteBlockGamesErr) throw new Error(`games block cleanup: ${deleteBlockGamesErr.message}`)
+    }
+  }
   const gameNormalized = normalized.filter((n) => n.eventType === 'Game')
   const eventIds = gameNormalized
     .map((n) => eventByRef.get(n.externalRef)?.id ? String(eventByRef.get(n.externalRef).id) : null)
@@ -754,38 +777,18 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
     const ev = eventByRef.get(n.externalRef)
     const matchedManual = manualMatchByExternalRef.get(n.externalRef)
     const existing = gameByEventId.get(String(ev.id)) ?? matchedManual
-    const platformConfirmations = {
-      ...(existing?.platform_confirmations ?? {}),
-      [feed.platform]: true,
-    }
-    return {
-      id: existing?.id ?? crypto.randomUUID(),
-      user_id: feed.user_id,
-      sport: existing?.sport ?? n.sport,
-      competition_level: existing?.competition_level ?? n.competitionLevel,
-      league: existing?.league ?? feed.default_league ?? null,
-      level_detail: existing?.level_detail ?? n.levelDetail ?? null,
-      game_date: n.gameDate,
-      start_time: n.startTime ?? existing?.start_time ?? null,
-      timezone: existing?.timezone ?? userDefaultTimezone,
-      location_address: existing?.location_address || n.location || '',
-      distance_miles: existing?.distance_miles ?? null,
-      roundtrip_miles: existing?.roundtrip_miles ?? null,
-      mileage_origin: existing?.mileage_origin ?? 'home',
-      role: existing?.role ?? n.role ?? null,
-      status: existing?.status ?? 'Scheduled',
-      game_fee: existing?.game_fee ?? null,
-      paid_confirmed: existing?.paid_confirmed ?? false,
-      paid_date: existing?.paid_date ?? null,
-      pay_expected: existing?.pay_expected ?? null,
-      home_team: existing?.home_team || n.homeTeam || null,
-      away_team: existing?.away_team || n.awayTeam || null,
-      notes: existing?.notes ?? n.notes ?? null,
-      platform_confirmations: platformConfirmations,
-      calendar_event_id: ev.id,
-      created_at: existing?.created_at ?? now,
-      updated_at: now,
-    }
+    return buildSyncedGameRow({
+      existing,
+      normalized: n,
+      feed: {
+        userId: feed.user_id,
+        platform: feed.platform,
+        defaultLeague: feed.default_league,
+      },
+      calendarEventId: ev.id,
+      now,
+      userDefaultTimezone,
+    })
   })
 
   autoMileageUpdatedGames = await hydrateMissingMileage(gameRows, mileageOrigin)

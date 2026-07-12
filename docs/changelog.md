@@ -35,10 +35,13 @@ Use only the headings that apply.
 - Updated the Games page start-time picker to move in 5-minute increments while keeping common start-time shortcuts.
 - Restored one-touch game status actions for marking scheduled games played and played games paid from the Games list.
 - Added safer weekly games email diagnostics for cron authorization, email configuration, and per-user send failures so production can show where the Sunday email job stops.
+- Added a focused sync reliability test command and documented manual live-feed checks for feed import, repeated syncs, manual corrections, blocks, mileage, and recovery.
+- Extracted synced-game merge behavior into a shared server helper so production sync and regression tests use the same preservation rules.
 
 ### Fixed
 - Preserved existing sport and competition level during calendar sync so manual corrections, such as changing a synced soccer game from High School to Club, are not overwritten by later feed syncs.
 - Kept loaded game counts in weekly email failure summaries so Resend or delivery failures no longer misleadingly report zero games.
+- Kept DragonFly availability blocks out of the Games list by classifying availability/block text before game inference and cleaning up previously-created games linked to block calendar events on the next sync.
 
 ## 2026-07-01
 

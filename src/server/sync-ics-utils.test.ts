@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks } from './sync-ics-utils.js'
+import { cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks, looksLikeAvailabilityBlock } from './sync-ics-utils.js'
 
 describe('sync ICS utilities', () => {
   it('removes shifted DragonFly timestamps from availability block titles', () => {
     expect(cleanupDragonFlyBlockTitle('Availability Block: Unavailable 5/24/2026 07:00 pm - 5/25/2026 02:00 am')).toBe('Availability Block: Unavailable')
+  })
+
+  it('recognizes availability blocks before game classification', () => {
+    expect(looksLikeAvailabilityBlock('Availability Block: Unavailable 5/24/2026 07:00 pm - 5/25/2026 02:00 am')).toBe(true)
+    expect(looksLikeAvailabilityBlock('Blocked')).toBe(true)
+    expect(looksLikeAvailabilityBlock('Soccer (Club): Ants vs Bees')).toBe(false)
   })
 
   it('deduplicates repeated block slots without collapsing games', () => {

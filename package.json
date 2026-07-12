@@ -9,6 +9,7 @@
     "typecheck:api": "tsc --noEmit -p tsconfig.api.json",
     "typecheck:all": "npm run typecheck && npm run typecheck:api",
     "test": "vitest run src",
+    "test:sync": "vitest run src/server/sync-merge.test.ts src/server/sync-ics-utils.test.ts src/server/feed-fetch.test.ts src/lib/calendarFeedInput.test.ts src/lib/calendarEvents.test.ts src/lib/mobileDashboard.test.ts",
     "test:e2e": "node scripts/run-playwright-smoke.mjs",
     "qa:smoke": "node scripts/run-playwright-smoke.mjs",
     "qa:release": "npm run typecheck:all && npm test && npm run lint && npm run build && npm run qa:smoke",
