@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks, looksLikeAvailabilityBlock } from './sync-ics-utils.js'
+import { cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks, inferCompetitionLevelForPlatform, looksLikeAvailabilityBlock, parseRefQuestTeamsFromText } from './sync-ics-utils.js'
 
 describe('sync ICS utilities', () => {
   it('removes shifted DragonFly timestamps from availability block titles', () => {
@@ -11,6 +11,31 @@ describe('sync ICS utilities', () => {
     expect(looksLikeAvailabilityBlock('Availability 10/1/2026 07:00 pm - 10/2/2026 02:00 am')).toBe(true)
     expect(looksLikeAvailabilityBlock('Blocked')).toBe(true)
     expect(looksLikeAvailabilityBlock('Soccer (Club): Ants vs Bees')).toBe(false)
+  })
+
+  it('uses assigning-platform defaults when the feed does not say the competition level', () => {
+    expect(inferCompetitionLevelForPlatform('RefQuest', 'Morehead State at Ohio (1:00PM EDT).')).toBe('College')
+    expect(inferCompetitionLevelForPlatform('RQ+', 'Morehead State at Ohio (1:00PM EDT).')).toBe('College')
+    expect(inferCompetitionLevelForPlatform('Ref Insight', 'Crew Academy vs CUP')).toBe('Club')
+    expect(inferCompetitionLevelForPlatform('RefInsight', 'Crew Academy vs CUP')).toBe('Club')
+    expect(inferCompetitionLevelForPlatform('DragonFly', 'Center: Central vs North')).toBe('High School')
+  })
+
+  it('still lets explicit competition-level text beat the platform default', () => {
+    expect(inferCompetitionLevelForPlatform('RefQuest', 'U19 Club Match')).toBe('Club')
+    expect(inferCompetitionLevelForPlatform('Ref Insight', 'NCAA Soccer')).toBe('College')
+    expect(inferCompetitionLevelForPlatform('DragonFly', 'Adult league')).toBe('Club')
+  })
+
+  it('parses RefQuest note details into away and home teams', () => {
+    expect(parseRefQuestTeamsFromText('Morehead State at Ohio (1:00PM EDT).')).toEqual({
+      awayTeam: 'Morehead State',
+      homeTeam: 'Ohio',
+    })
+    expect(parseRefQuestTeamsFromText('Assignment details | Wright State at Cleveland State (7:00PM EDT).')).toEqual({
+      awayTeam: 'Wright State',
+      homeTeam: 'Cleveland State',
+    })
   })
 
   it('deduplicates repeated block slots without collapsing games', () => {

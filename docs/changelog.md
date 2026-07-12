@@ -44,6 +44,8 @@ Use only the headings that apply.
 - Kept DragonFly availability blocks out of the Games list by classifying availability/block text before game inference and cleaning up previously-created games linked to block calendar events on the next sync.
 - Added stale-feed deviation handling so future scheduled synced games/calendar items missing from the latest feed are marked canceled for review instead of staying active indefinitely.
 - Broadened DragonFly availability-block detection to catch simpler "Availability" feed titles.
+- Added platform-specific sync competition defaults: RefQuest defaults to College, Ref Insight defaults to Club, and DragonFly defaults to High School when the feed does not provide a clearer level.
+- Parsed RefQuest note text like "Morehead State at Ohio (1:00PM EDT)" into away/home teams during sync.
 
 ## 2026-07-01
 

@@ -7,7 +7,7 @@ import { fetchCalendarFeedTextWithRetry } from '../src/server/feed-fetch.js'
 import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
 import { revealFeedUrl } from '../src/server/personal-data-security.js'
 import { enqueueFeedSyncJobs, loadSyncJobsForUser, processDueSyncJobs, type SyncJobResult } from '../src/server/sync-jobs.js'
-import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks, looksLikeAvailabilityBlock } from '../src/server/sync-ics-utils.js'
+import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks, inferCompetitionLevelForPlatform, looksLikeAvailabilityBlock, parseRefQuestTeamsFromText } from '../src/server/sync-ics-utils.js'
 import { buildSyncedGameRow } from '../src/server/sync-merge.js'
 
 export type Feed = {
@@ -147,13 +147,6 @@ function inferSport(feedSport: Feed['sport'], text: string): string {
   if (/\bbasketball\b|\bhoops\b|\bbb\b/i.test(text)) return 'Basketball'
   if (/\bfootball\b|\bgridiron\b/i.test(text)) return 'Football'
   return 'Soccer'
-}
-
-function inferCompetitionLevel(text: string): 'High School' | 'College' | 'Club' {
-  if (/\bcollege\b|\bncaa\b|\bnaia\b|\bjuco\b/i.test(text)) return 'College'
-  if (/\bvarsity\b|\bjv\b|junior varsity|\bms\b|middle school|\bhs\b|high school/i.test(text)) return 'High School'
-  if (/\badult\b|\bu\d{1,2}\b|\bclub\b/i.test(text)) return 'Club'
-  return 'High School'
 }
 
 function inferLevelDetail(text: string): string | null {
@@ -578,8 +571,9 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
     const end = rawEnd
     const text = eventDesc(ev)
     const sport = inferSport(feed.sport, text)
-    const competitionLevel = inferCompetitionLevel(text)
+    const competitionLevel = inferCompetitionLevelForPlatform(feed.platform, text)
     const dragonFlySummary = feed.platform === 'DragonFly' ? parseDragonFlySummary(String(ev.summary || ''), sport) : null
+    const refQuestTeams = feed.platform === 'RefQuest' ? parseRefQuestTeamsFromText(text) : { awayTeam: null, homeTeam: null }
     const levelDetail = dragonFlySummary?.levelDetail ?? inferLevelDetail(text)
     const role = dragonFlySummary?.role ?? inferRole(feed.platform, sport, text)
     const { externalRef, legacyExternalRef } = sourceRefs(feed, String(ev.uid))
@@ -604,8 +598,8 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
       competitionLevel,
       levelDetail,
       role,
-      awayTeam: dragonFlySummary?.awayTeam ?? null,
-      homeTeam: dragonFlySummary?.homeTeam ?? null,
+      awayTeam: dragonFlySummary?.awayTeam ?? refQuestTeams.awayTeam,
+      homeTeam: dragonFlySummary?.homeTeam ?? refQuestTeams.homeTeam,
       gameDate: ymdInZone(start, userDefaultTimezone),
       startTime,
     }

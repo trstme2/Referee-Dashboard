@@ -8,6 +8,8 @@ type FeedEventSlot = {
   allDay: boolean
 }
 
+type CompetitionLevel = 'High School' | 'College' | 'Club'
+
 function dateKeyInZone(date: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -31,6 +33,44 @@ export function cleanupDragonFlyBlockTitle(title: string): string {
 
 export function looksLikeAvailabilityBlock(text: string): boolean {
   return AVAILABILITY_BLOCK_PATTERN.test(String(text || ''))
+}
+
+function platformKey(platform: string): string {
+  return String(platform || '').toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+export function defaultCompetitionLevelForPlatform(platform: string): CompetitionLevel {
+  const key = platformKey(platform)
+  if (key === 'refquest' || key === 'rq') return 'College'
+  if (key === 'refinsight') return 'Club'
+  if (key === 'dragonfly') return 'High School'
+  return 'High School'
+}
+
+export function inferCompetitionLevelForPlatform(platform: string, text: string): CompetitionLevel {
+  if (/\bcollege\b|\bncaa\b|\bnaia\b|\bjuco\b/i.test(text)) return 'College'
+  if (/\bvarsity\b|\bjv\b|junior varsity|\bms\b|middle school|\bhs\b|high school/i.test(text)) return 'High School'
+  if (/\badult\b|\bu\d{1,2}\b|\bclub\b/i.test(text)) return 'Club'
+  return defaultCompetitionLevelForPlatform(platform)
+}
+
+function cleanTeamName(value: string): string {
+  return value
+    .replace(/\s+/g, ' ')
+    .replace(/[.;,]\s*$/, '')
+    .trim()
+}
+
+export function parseRefQuestTeamsFromText(text: string): { awayTeam: string | null; homeTeam: string | null } {
+  const lines = String(text || '').split(/\r?\n|\s+\|\s+/).map(line => line.trim()).filter(Boolean)
+  for (const line of lines) {
+    const match = line.match(/^(.+?)\s+at\s+(.+?)\s*(?:\((?:\d{1,2}:\d{2}\s*)?(?:AM|PM)?\s*(?:[A-Z]{2,4})?\))?[.;]?\s*$/i)
+    if (!match) continue
+    const awayTeam = cleanTeamName(match[1])
+    const homeTeam = cleanTeamName(match[2])
+    if (awayTeam && homeTeam) return { awayTeam, homeTeam }
+  }
+  return { awayTeam: null, homeTeam: null }
 }
 
 export function blockSlotKey(event: FeedEventSlot | { event_type: string; start_ts: string; end_ts: string; all_day: boolean }): string {
