@@ -505,6 +505,13 @@ export default function SyncPage() {
               {result.durationMs != null ? ` in ${formatDuration(result.durationMs)}` : ''}. Events: +{result.createdEvents} created, {result.updatedEvents} updated | Games: +{result.createdGames} created, {result.updatedGames} updated
               {result.jobsQueued != null ? ` | Jobs: ${result.jobsCompleted ?? 0} done, ${result.jobsRequeued ?? 0} retrying, ${result.jobsFailed ?? 0} failed` : ''}
             </p>
+            {Number(result.staleCanceledGames ?? 0) > 0 || Number(result.staleCanceledEvents ?? 0) > 0 ? (
+              <p className="small">
+                <span className="pill warn">
+                  {Number(result.staleCanceledGames ?? 0)} game{Number(result.staleCanceledGames ?? 0) === 1 ? '' : 's'} and {Number(result.staleCanceledEvents ?? 0)} calendar item{Number(result.staleCanceledEvents ?? 0) === 1 ? '' : 's'} were missing from the latest feed and marked canceled for review.
+                </span>
+              </p>
+            ) : null}
             {Number(result.autoMileageUpdatedGames ?? 0) > 0 ? (
               <p className="small"><span className="pill ok">Auto-filled mileage for {Number(result.autoMileageUpdatedGames)} game{Number(result.autoMileageUpdatedGames) === 1 ? '' : 's'} with mappable addresses.</span></p>
             ) : null}
@@ -522,6 +529,7 @@ export default function SyncPage() {
                       {feedResult.status}
                     </span>{' '}
                     {feedResult.feedName}: {feedResult.createdGames} games created, {feedResult.updatedGames} games updated, {feedResult.createdEvents} events created, {feedResult.updatedEvents} events updated
+                    {Number(feedResult.staleCanceledGames ?? 0) > 0 || Number(feedResult.staleCanceledEvents ?? 0) > 0 ? `, ${Number(feedResult.staleCanceledGames ?? 0)} missing-feed games canceled` : ''}
                     {feedResult.durationMs != null ? ` in ${formatDuration(feedResult.durationMs)}` : ''}
                     {feedResult.attempts ? ` (${feedResult.attempts} attempt${feedResult.attempts === 1 ? '' : 's'})` : ''}
                   </p>
@@ -532,6 +540,7 @@ export default function SyncPage() {
               <div style={{ marginTop: 8 }}>
                 <p className="small">
                   Existing synced matches: {result.diagnostics.existingRefMatches} | Manual matches: {result.diagnostics.manualMatches} | New games created: {result.diagnostics.createdFromFeed} | Ambiguous cases skipped: {result.diagnostics.ambiguousCandidates}
+                  {result.diagnostics.missingFromFeed != null ? ` | Missing from feed: ${result.diagnostics.missingFromFeed}` : ''}
                 </p>
                 {result.diagnostics.samples?.length ? (
                   <div>
@@ -540,7 +549,7 @@ export default function SyncPage() {
                         <span className={`pill ${
                           sample.action === 'matched-existing' || sample.action === 'matched-manual'
                             ? 'ok'
-                            : sample.action === 'ambiguous'
+                            : sample.action === 'ambiguous' || sample.action === 'missing-from-feed'
                               ? 'warn'
                               : ''
                         }`}>

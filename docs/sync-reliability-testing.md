@@ -62,6 +62,9 @@ Use a beta/test account with at least one real feed whenever possible. Do not ru
 2. Run Sync again.
 3. Confirm time/date/location changes from the source feed are reflected.
 4. Confirm user-owned fields such as fee, mileage, notes, payment status, and manual classification are not unnecessarily overwritten.
+5. Remove or cancel a future scheduled test assignment in the source platform if practical, then sync again.
+6. Confirm Whistle Keeper marks the future scheduled game/calendar item canceled for review instead of leaving it as an active assignment.
+7. Confirm Played or Paid history is not canceled just because the source feed stops carrying old games.
 
 ### 5. Availability Blocks
 
@@ -69,6 +72,7 @@ Use a beta/test account with at least one real feed whenever possible. Do not ru
 2. Confirm duplicate blocks collapse in the app calendar and outbound calendar export.
 3. Confirm multi-day blocks display on every touched date.
 4. Confirm a block does not hide or duplicate a real game on the same day.
+5. Confirm DragonFly availability blocks do not appear as Games rows.
 
 ### 6. Import Start Date
 

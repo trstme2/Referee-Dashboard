@@ -196,6 +196,8 @@ export interface SyncIcsResult {
   createdGames: number
   updatedGames: number
   autoMileageUpdatedGames?: number
+  staleCanceledEvents?: number
+  staleCanceledGames?: number
   errors: string[]
   jobsQueued?: number
   jobsClaimed?: number
@@ -218,6 +220,8 @@ export interface SyncIcsResult {
     createdGames: number
     updatedGames: number
     autoMileageUpdatedGames?: number
+    staleCanceledEvents?: number
+    staleCanceledGames?: number
     errors: string[]
   }>
   diagnostics?: {
@@ -225,9 +229,10 @@ export interface SyncIcsResult {
     manualMatches: number
     createdFromFeed: number
     ambiguousCandidates: number
+    missingFromFeed?: number
     samples: Array<{
       feedName: string
-      action: 'matched-existing' | 'matched-manual' | 'created-new' | 'ambiguous'
+      action: 'matched-existing' | 'matched-manual' | 'created-new' | 'ambiguous' | 'missing-from-feed'
       summary: string
       score?: number
       competingScore?: number

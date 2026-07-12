@@ -8,6 +8,7 @@ describe('sync ICS utilities', () => {
 
   it('recognizes availability blocks before game classification', () => {
     expect(looksLikeAvailabilityBlock('Availability Block: Unavailable 5/24/2026 07:00 pm - 5/25/2026 02:00 am')).toBe(true)
+    expect(looksLikeAvailabilityBlock('Availability 10/1/2026 07:00 pm - 10/2/2026 02:00 am')).toBe(true)
     expect(looksLikeAvailabilityBlock('Blocked')).toBe(true)
     expect(looksLikeAvailabilityBlock('Soccer (Club): Ants vs Bees')).toBe(false)
   })

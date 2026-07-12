@@ -42,6 +42,8 @@ Use only the headings that apply.
 - Preserved existing sport and competition level during calendar sync so manual corrections, such as changing a synced soccer game from High School to Club, are not overwritten by later feed syncs.
 - Kept loaded game counts in weekly email failure summaries so Resend or delivery failures no longer misleadingly report zero games.
 - Kept DragonFly availability blocks out of the Games list by classifying availability/block text before game inference and cleaning up previously-created games linked to block calendar events on the next sync.
+- Added stale-feed deviation handling so future scheduled synced games/calendar items missing from the latest feed are marked canceled for review instead of staying active indefinitely.
+- Broadened DragonFly availability-block detection to catch simpler "Availability" feed titles.
 
 ## 2026-07-01
 

@@ -26,6 +26,9 @@ export type SyncJobResult = {
   updatedEvents: number
   createdGames: number
   updatedGames: number
+  autoMileageUpdatedGames?: number
+  staleCanceledEvents?: number
+  staleCanceledGames?: number
   errors: string[]
   diagnostics?: unknown
 }

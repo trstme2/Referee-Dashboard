@@ -1,5 +1,5 @@
 const DRAGONFLY_BLOCK_RANGE_SUFFIX = /\s+\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}\s*(?:am|pm)\s*-\s*\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}\s*(?:am|pm)\s*$/i
-const AVAILABILITY_BLOCK_PATTERN = /\b(availability\s+block|unavailable|not\s+available|blocked|blackout|out\s+of\s+office)\b/i
+const AVAILABILITY_BLOCK_PATTERN = /\b(availability(?:\s+block)?|unavailable|not\s+available|blocked|blackout|out\s+of\s+office)\b/i
 
 type FeedEventSlot = {
   eventType: string

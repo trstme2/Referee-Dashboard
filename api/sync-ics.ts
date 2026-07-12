@@ -27,7 +27,7 @@ type SyncTrigger = 'manual' | 'scheduled'
 
 type SyncDiagnostic = {
   feedName: string
-  action: 'matched-existing' | 'matched-manual' | 'created-new' | 'ambiguous'
+  action: 'matched-existing' | 'matched-manual' | 'created-new' | 'ambiguous' | 'missing-from-feed'
   summary: string
   score?: number
   competingScore?: number
@@ -48,12 +48,15 @@ export type SyncFeedResult = {
   createdGames: number
   updatedGames: number
   autoMileageUpdatedGames: number
+  staleCanceledEvents: number
+  staleCanceledGames: number
   errors: string[]
   diagnostics: {
     existingRefMatches: number
     manualMatches: number
     createdFromFeed: number
     ambiguousCandidates: number
+    missingFromFeed: number
     samples: SyncDiagnostic[]
   }
 }
@@ -477,12 +480,15 @@ export async function recordSyncFailure(client: any, feed: Feed, trigger: SyncTr
     createdGames: 0,
     updatedGames: 0,
     autoMileageUpdatedGames: 0,
+    staleCanceledEvents: 0,
+    staleCanceledGames: 0,
     errors: [message],
     diagnostics: {
       existingRefMatches: 0,
       manualMatches: 0,
       createdFromFeed: 0,
       ambiguousCandidates: 0,
+      missingFromFeed: 0,
       samples: [],
     },
   }
@@ -502,6 +508,8 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
   let createdGames = 0
   let updatedGames = 0
   let autoMileageUpdatedGames = 0
+  let staleCanceledEvents = 0
+  let staleCanceledGames = 0
   let attempts = 0
   const errors: string[] = []
   const diagnostics: SyncDiagnostic[] = []
@@ -522,12 +530,15 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
       createdGames,
       updatedGames,
       autoMileageUpdatedGames,
+      staleCanceledEvents,
+      staleCanceledGames,
       errors,
       diagnostics: {
         existingRefMatches: diagnostics.filter((d) => d.action === 'matched-existing').length,
         manualMatches: diagnostics.filter((d) => d.action === 'matched-manual').length,
         createdFromFeed: diagnostics.filter((d) => d.action === 'created-new').length,
         ambiguousCandidates: diagnostics.filter((d) => d.action === 'ambiguous').length,
+        missingFromFeed: diagnostics.filter((d) => d.action === 'missing-from-feed').length,
         samples: diagnostics.slice(0, 20),
       },
     }
@@ -648,7 +659,7 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
   for (const refPrefix of refPrefixes) {
     const { data, error: evLookupErr } = await client
       .from('calendar_events')
-      .select('id,event_type,title,start_ts,end_ts,all_day,external_ref,linked_game_id,created_at,timezone,location_address,notes,platform_confirmations')
+      .select('id,event_type,title,start_ts,end_ts,all_day,external_ref,linked_game_id,created_at,timezone,location_address,notes,platform_confirmations,status')
       .eq('user_id', feed.user_id)
       .like('external_ref', `${refPrefix}%`)
     if (evLookupErr) throw new Error(`calendar_events lookup: ${evLookupErr.message}`)
@@ -668,6 +679,72 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
         action: 'matched-existing',
         summary: summarizeNormalizedGame(n),
         reason: 'Matched an existing synced event by source reference.',
+      })
+    }
+  }
+
+  const currentFeedRefs = new Set<string>()
+  for (const n of normalized) {
+    currentFeedRefs.add(n.externalRef)
+    currentFeedRefs.add(n.legacyExternalRef)
+  }
+
+  const staleExistingEvents = existingEvents
+    .filter((event) => String(event.status || 'Scheduled') !== 'Canceled')
+    .filter((event) => !currentFeedRefs.has(String(event.external_ref)))
+    .filter((event) => new Date(event.start_ts).getTime() >= startedAtMs - 12 * 60 * 60 * 1000)
+
+  if (staleExistingEvents.length) {
+    const staleEventIds = staleExistingEvents.map((event) => String(event.id))
+    const { data: linkedGames, error: staleGamesLookupErr } = await client
+      .from('games')
+      .select('id,status,calendar_event_id')
+      .eq('user_id', feed.user_id)
+      .in('calendar_event_id', staleEventIds)
+    if (staleGamesLookupErr) throw new Error(`games stale lookup: ${staleGamesLookupErr.message}`)
+
+    const scheduledLinkedGames = (linkedGames ?? [])
+      .filter((game: any) => String(game.status || 'Scheduled') === 'Scheduled')
+    const scheduledLinkedEventIds = new Set(scheduledLinkedGames.map((game: any) => String(game.calendar_event_id)))
+    const protectedLinkedEventIds = new Set((linkedGames ?? [])
+      .filter((game: any) => String(game.status || 'Scheduled') !== 'Scheduled')
+      .map((game: any) => String(game.calendar_event_id)))
+
+    const staleEventIdsToCancel = staleExistingEvents
+      .filter((event) => !protectedLinkedEventIds.has(String(event.id)))
+      .map((event) => String(event.id))
+
+    if (scheduledLinkedGames.length) {
+      const { error: staleGamesUpdateErr } = await client
+        .from('games')
+        .update({ status: 'Canceled', updated_at: now })
+        .eq('user_id', feed.user_id)
+        .in('id', scheduledLinkedGames.map((game: any) => String(game.id)))
+      if (staleGamesUpdateErr) throw new Error(`games stale update: ${staleGamesUpdateErr.message}`)
+      staleCanceledGames = scheduledLinkedGames.length
+      updatedGames += staleCanceledGames
+    }
+
+    if (staleEventIdsToCancel.length) {
+      const { error: staleEventsUpdateErr } = await client
+        .from('calendar_events')
+        .update({ status: 'Canceled', updated_at: now })
+        .eq('user_id', feed.user_id)
+        .in('id', staleEventIdsToCancel)
+      if (staleEventsUpdateErr) throw new Error(`calendar_events stale update: ${staleEventsUpdateErr.message}`)
+      staleCanceledEvents = staleEventIdsToCancel.length
+      updatedEvents += staleCanceledEvents
+    }
+
+    for (const event of staleExistingEvents.filter((item) => staleEventIdsToCancel.includes(String(item.id)) || scheduledLinkedEventIds.has(String(item.id)))) {
+      diagnostics.push({
+        feedName: feed.name,
+        action: 'missing-from-feed',
+        summary: [
+          String(event.title || 'Synced item'),
+          event.start_ts ? ymdInZone(new Date(event.start_ts), userDefaultTimezone) : null,
+        ].filter(Boolean).join(' | '),
+        reason: 'This synced item was not present in the latest feed. Whistle Keeper marked the future scheduled record canceled for review.',
       })
     }
   }
@@ -868,6 +945,8 @@ async function runFeedsDirect(client: any, feeds: Feed[], trigger: SyncTrigger) 
   let createdGames = 0
   let updatedGames = 0
   let autoMileageUpdatedGames = 0
+  let staleCanceledEvents = 0
+  let staleCanceledGames = 0
   const errors: string[] = []
   const feedResults: SyncFeedResult[] = []
   const diagnostics = {
@@ -875,6 +954,7 @@ async function runFeedsDirect(client: any, feeds: Feed[], trigger: SyncTrigger) 
     manualMatches: 0,
     createdFromFeed: 0,
     ambiguousCandidates: 0,
+    missingFromFeed: 0,
     samples: [] as SyncDiagnostic[],
   }
 
@@ -887,11 +967,14 @@ async function runFeedsDirect(client: any, feeds: Feed[], trigger: SyncTrigger) 
       createdGames += result.createdGames
       updatedGames += result.updatedGames
       autoMileageUpdatedGames += result.autoMileageUpdatedGames
+      staleCanceledEvents += result.staleCanceledEvents
+      staleCanceledGames += result.staleCanceledGames
       errors.push(...result.errors)
       diagnostics.existingRefMatches += result.diagnostics?.existingRefMatches ?? 0
       diagnostics.manualMatches += result.diagnostics?.manualMatches ?? 0
       diagnostics.createdFromFeed += result.diagnostics?.createdFromFeed ?? 0
       diagnostics.ambiguousCandidates += result.diagnostics?.ambiguousCandidates ?? 0
+      diagnostics.missingFromFeed += result.diagnostics?.missingFromFeed ?? 0
       diagnostics.samples.push(...(result.diagnostics?.samples ?? []))
     } catch (e: any) {
       const result = await recordSyncFailure(client, feed, trigger, e)
@@ -911,6 +994,8 @@ async function runFeedsDirect(client: any, feeds: Feed[], trigger: SyncTrigger) 
     createdGames,
     updatedGames,
     autoMileageUpdatedGames,
+    staleCanceledEvents,
+    staleCanceledGames,
     errors,
     feedResults,
     diagnostics: {
@@ -928,6 +1013,7 @@ function summarizeFeedResults(startedAtMs: number, feedResults: Array<SyncFeedRe
     manualMatches: feedResults.reduce((sum, result) => sum + ((result.diagnostics as any)?.manualMatches ?? 0), 0),
     createdFromFeed: feedResults.reduce((sum, result) => sum + ((result.diagnostics as any)?.createdFromFeed ?? 0), 0),
     ambiguousCandidates: feedResults.reduce((sum, result) => sum + ((result.diagnostics as any)?.ambiguousCandidates ?? 0), 0),
+    missingFromFeed: feedResults.reduce((sum, result) => sum + ((result.diagnostics as any)?.missingFromFeed ?? 0), 0),
     samples: feedResults.flatMap(result => (result.diagnostics as any)?.samples ?? []).slice(0, 20),
   }
 
@@ -941,6 +1027,8 @@ function summarizeFeedResults(startedAtMs: number, feedResults: Array<SyncFeedRe
     createdGames: feedResults.reduce((sum, result) => sum + result.createdGames, 0),
     updatedGames: feedResults.reduce((sum, result) => sum + result.updatedGames, 0),
     autoMileageUpdatedGames: feedResults.reduce((sum, result) => sum + Number((result as any).autoMileageUpdatedGames ?? 0), 0),
+    staleCanceledEvents: feedResults.reduce((sum, result) => sum + Number((result as any).staleCanceledEvents ?? 0), 0),
+    staleCanceledGames: feedResults.reduce((sum, result) => sum + Number((result as any).staleCanceledGames ?? 0), 0),
     errors,
     feedResults,
     diagnostics,
