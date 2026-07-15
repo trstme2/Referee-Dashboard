@@ -29,6 +29,13 @@ Use short, dated entries:
 
 Use only the headings that apply.
 
+## 2026-07-14
+
+### Changed
+- Added date-based 2026 mileage-rate handling for the one-time midyear IRS business-rate change: 72.5 cents per mile from January through June and 76 cents per mile from July through December.
+- Updated the Tax mileage estimate and mileage CSV export to apply the mileage rate by record date for split-rate years, including a rate-period column in the export.
+- Clarified Settings and Tax page mileage-rate copy so saved rates remain a setup confirmation while split-rate years use date-based calculations.
+
 ## 2026-07-07
 
 ### Changed

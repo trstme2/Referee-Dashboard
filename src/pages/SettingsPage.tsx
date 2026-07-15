@@ -6,6 +6,7 @@ import { resetDB } from '../lib/storage'
 import { recordPlatformEvent } from '../lib/platformEvents'
 import { IRS_MILEAGE_ORIGIN_LINKS } from '../lib/taxReview'
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/support'
+import { suggestedMileageRateCents } from '../lib/mileageRates'
 
 function parseList(s: string): string[] {
   return s.split(',').map(x => x.trim()).filter(Boolean)
@@ -20,7 +21,7 @@ export default function SettingsPage() {
   const [home, setHome] = useState(db.settings.homeAddress)
   const [otherWork, setOtherWork] = useState(db.settings.otherWorkAddress ?? '')
   const [defaultTimezone, setDefaultTimezone] = useState(db.settings.defaultTimezone ?? 'America/New_York')
-  const [taxMileageRateCents, setTaxMileageRateCents] = useState(String(db.settings.taxMileageRateCents ?? 72.5))
+  const [taxMileageRateCents, setTaxMileageRateCents] = useState(String(db.settings.taxMileageRateCents ?? suggestedMileageRateCents(String(new Date().getFullYear()))))
   const [weeklyGamesEmailEnabled, setWeeklyGamesEmailEnabled] = useState(Boolean(db.settings.weeklyGamesEmailEnabled))
   const [trackedSports, setTrackedSports] = useState(toListString(db.settings.trackedSports))
   const [showGamePlatformChips, setShowGamePlatformChips] = useState(db.settings.showGamePlatformChips !== false)
@@ -249,7 +250,7 @@ export default function SettingsPage() {
             <div className="field">
               <label>Standard mileage rate (cents per mile)</label>
               <input type="number" min={0} step="0.1" value={taxMileageRateCents} onChange={e => setTaxMileageRateCents(e.target.value)} />
-              <div className="small">Used on the Tax page to estimate a mileage calculation for exports. Save this once to complete tax record setup. This does not determine whether miles qualify.</div>
+              <div className="small">Used on the Tax page for years with a single saved rate. If IRS has a split-rate year, the Tax page applies the configured rate by mileage date. This does not determine whether miles qualify.</div>
             </div>
 
             <div className="field">

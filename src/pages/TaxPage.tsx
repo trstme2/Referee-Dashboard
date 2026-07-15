@@ -4,19 +4,9 @@ import { formatMoney } from '../lib/utils'
 import HelpTip from '../components/HelpTip'
 import { IRS_TAX_REVIEW_LINKS, TAX_REVIEW_CHECKLIST_ITEMS, taxReviewFlags } from '../lib/taxReview'
 import { recordPlatformEvent } from '../lib/platformEvents'
+import { hasSplitMileageRates, mileageRateForDate, mileageRateSummary, suggestedMileageRateCents } from '../lib/mileageRates'
 
 type IncomeBasis = 'cash' | 'accrual'
-
-const IRS_STANDARD_MILEAGE_RATES: Record<string, number> = {
-  '2026': 72.5,
-  '2025': 70,
-  '2024': 67,
-  '2023': 65.5,
-}
-
-function suggestedMileageRateCents(year: string): number {
-  return IRS_STANDARD_MILEAGE_RATES[year] ?? 72.5
-}
 
 function incomeBasisLabel(basis: IncomeBasis): string {
   return basis === 'cash' ? 'Paid-date view' : 'Game-date view'
@@ -194,19 +184,31 @@ export default function TaxPage() {
   }, [incomeRows, mileageRows, expenseRows, deductibleExpenseRows])
 
   const parsedMileageRateCents = Number(mileageRateCents)
-  const mileageRateIsValid = Number.isFinite(parsedMileageRateCents) && parsedMileageRateCents >= 0
+  const mileageRateInputIsValid = Number.isFinite(parsedMileageRateCents) && parsedMileageRateCents >= 0
+  const splitMileageRates = hasSplitMileageRates(year)
+  const displayedMileageRateCents = splitMileageRates ? String(suggestedMileageRateCents(year)) : mileageRateCents
+  const mileageRateIsValid = splitMileageRates || mileageRateInputIsValid
   const mileageRateConfirmed = db.settings.taxMileageRateCents != null
-  const knownMileageRateCents = IRS_STANDARD_MILEAGE_RATES[year]
-  const mileageEstimate = mileageRateIsValid ? (totals.miles * parsedMileageRateCents) / 100 : 0
+  const mileageRateSummaryText = mileageRateSummary(year)
 
   const mileageExportRows = useMemo(() => {
-    const rate = mileageRateIsValid ? parsedMileageRateCents : 0
-    return mileageRows.map((r) => ({
-      ...r,
-      rateCents: rate,
-      estimatedStandardMileageAmount: Number(((r.miles * rate) / 100).toFixed(2)),
-    }))
-  }, [mileageRows, mileageRateIsValid, parsedMileageRateCents])
+    return mileageRows.map((r) => {
+      const matchedRate = splitMileageRates ? mileageRateForDate(r.date) : undefined
+      const rate = matchedRate?.rateCents ?? (mileageRateInputIsValid ? parsedMileageRateCents : 0)
+      return {
+        ...r,
+        rateCents: rate,
+        ratePeriod: splitMileageRates
+          ? matchedRate?.label ?? 'No configured rate for this date'
+          : 'Saved flat rate',
+        estimatedStandardMileageAmount: Number(((r.miles * rate) / 100).toFixed(2)),
+      }
+    })
+  }, [mileageRows, mileageRateInputIsValid, parsedMileageRateCents, splitMileageRates])
+
+  const mileageEstimate = useMemo(() => {
+    return mileageExportRows.reduce((sum, row) => sum + row.estimatedStandardMileageAmount, 0)
+  }, [mileageExportRows])
 
   const reconRows = useMemo(() => {
     return incomeByPayor.map((r) => {
@@ -227,7 +229,7 @@ export default function TaxPage() {
   }
 
   function exportMileageCsv() {
-    const csv = toCsv(mileageExportRows, ['source', 'date', 'description', 'miles', 'rateCents', 'estimatedStandardMileageAmount', 'refId'])
+    const csv = toCsv(mileageExportRows, ['source', 'date', 'description', 'miles', 'rateCents', 'ratePeriod', 'estimatedStandardMileageAmount', 'refId'])
     downloadCsv(`tax-mileage-${year}.csv`, csv)
     void recordPlatformEvent(session?.access_token, 'tax_export_downloaded', { exportType: 'mileage', year, rowCount: mileageExportRows.length })
   }
@@ -255,11 +257,12 @@ export default function TaxPage() {
       alert('Enter a mileage rate of 0 or higher.')
       return
     }
+    const rateToSave = splitMileageRates ? suggestedMileageRateCents(year) : parsedMileageRateCents
     await write({
       ...db,
       settings: {
         ...db.settings,
-        taxMileageRateCents: parsedMileageRateCents,
+        taxMileageRateCents: rateToSave,
       },
     })
   }
@@ -307,24 +310,25 @@ export default function TaxPage() {
             <div className="small">Use the view that matches how you and your preparer review records.</div>
           </div>
           <div className="field">
-            <label>Standard mileage rate (cents per mile)</label>
+            <label>{splitMileageRates ? 'Mileage rates by date' : 'Standard mileage rate (cents per mile)'}</label>
             <input
               type="number"
               min={0}
               step="0.1"
-              value={mileageRateCents}
-              onChange={(e) => setMileageRateCents(e.target.value)}
+              value={displayedMileageRateCents}
+              onChange={(e) => {
+                if (!splitMileageRates) setMileageRateCents(e.target.value)
+              }}
+              disabled={splitMileageRates}
             />
             <div className="small">
-              {knownMileageRateCents != null
-                ? `IRS business rate for ${year}: ${knownMileageRateCents} cents per mile. `
-                : `No saved IRS rate is available for ${year}. `}
+              {mileageRateSummaryText} {splitMileageRates ? 'Whistle Keeper applies the rate by mileage date in the mileage estimate and CSV export. ' : ''}
               Verify the rate and whether your miles can be used before relying on an export. <a href="https://www.irs.gov/publications/p463" target="_blank" rel="noreferrer">Review IRS mileage guidance</a>.
             </div>
             <div className="small">
               {mileageRateConfirmed
-                ? 'Mileage rate saved for this record set.'
-                : 'Review this rate and save it once to complete tax record setup.'}
+                ? splitMileageRates ? 'Date-based mileage rates confirmed for this record set.' : 'Mileage rate saved for this record set.'
+                : splitMileageRates ? 'Review and confirm these date-based rates once to complete tax record setup.' : 'Review this rate and save it once to complete tax record setup.'}
             </div>
           </div>
         </div>
@@ -353,7 +357,7 @@ export default function TaxPage() {
         </div>
 
         <div className="btnbar" style={{ marginTop: 10 }}>
-          <button className="btn" onClick={saveMileageRate} disabled={loading || !mileageRateIsValid}>{mileageRateConfirmed ? 'Update mileage rate' : 'Save mileage rate'}</button>
+          <button className="btn" onClick={saveMileageRate} disabled={loading || !mileageRateIsValid}>{splitMileageRates ? 'Confirm date-based rates' : mileageRateConfirmed ? 'Update mileage rate' : 'Save mileage rate'}</button>
           <button className="btn primary" onClick={exportIncomeCsv}>Export Income CSV</button>
           <button className="btn" onClick={exportMileageCsv}>Export Mileage CSV</button>
           <button className="btn" onClick={exportExpensesCsv}>Export Expenses CSV</button>
