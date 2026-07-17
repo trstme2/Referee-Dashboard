@@ -29,6 +29,29 @@ Use short, dated entries:
 
 Use only the headings that apply.
 
+## 2026-07-17
+
+### Changed
+
+- Bounded calendar-feed syncs to 1,000 source events, a rolling import window, and 25 automatic mileage lookups per sync to control work and Google Maps usage.
+- Moved calendar feeds, durable sync jobs, sync history, and beta-access requests behind verified server routes while preserving the existing app APIs and Sync experience.
+- Moved cloud reset and account deletion cleanup fully server-side, including recursive removal of receipt and requirement-evidence files from private Storage buckets.
+- Changed distance lookups to POST request bodies so route URLs do not contain precise origin and destination addresses.
+- Changed invite-only login flows to request OTPs and magic links only for existing Auth users.
+
+### Security / Privacy
+
+- Added a Supabase hardening patch with server-managed sync-table access, durable hashed-subject rate-limit buckets, and a service-role-only database function.
+- Added durable rate limiting for feed management, sync, distance, account lifecycle, beta access requests, and authenticated platform actions, with a conservative in-memory fallback until the SQL patch is installed.
+- Cleared the signed-in user's local cloud cache on sign-out.
+- Added server-side bounds validation for settings fields, protected existing beta requests from anonymous overwrites, restricted evidence links to HTTP(S), and expanded private-network feed URL blocking.
+- Updated production schema drift checks to detect server-table policies, client grants, policy shape issues, and an exposed rate-limit function.
+
+### QA / Release
+
+- Added sync safety unit coverage and security deployment, closed-beta, and manual QA documentation.
+- Updated the `undici` override to the patched 6.27+ line; full audit still has a build-tool-only `js-yaml`/Vercel dependency finding with no compatible upstream remediation reported by npm.
+
 ## 2026-07-14
 
 ### Changed

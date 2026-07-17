@@ -515,6 +515,16 @@ create table if not exists public.csv_import_rows (
   created_game_id uuid null references public.games(id) on delete set null
 );
 
+create table if not exists public.api_rate_limit_buckets (
+  bucket text not null,
+  subject_hash text not null,
+  window_started_at timestamptz not null default now(),
+  request_count integer not null default 0 check (request_count >= 0),
+  primary key (bucket, subject_hash),
+  check (char_length(bucket) between 1 and 120),
+  check (char_length(subject_hash) = 64)
+);
+
 -- =========================
 -- RLS
 -- =========================
@@ -533,6 +543,7 @@ alter table public.requirement_instances enable row level security;
 alter table public.requirement_activities enable row level security;
 alter table public.csv_imports enable row level security;
 alter table public.csv_import_rows enable row level security;
+alter table public.api_rate_limit_buckets enable row level security;
 
 do $$
 declare
@@ -541,38 +552,54 @@ begin
   foreach t in array array[
     'user_settings',
     'games','calendar_events','expenses','requirement_definitions',
-    'requirement_instances','requirement_activities','csv_imports','csv_import_rows',
-    'calendar_feeds','calendar_feed_sync_runs','calendar_sync_jobs'
+    'requirement_instances','requirement_activities','csv_imports','csv_import_rows'
   ]
   loop
     execute format('drop policy if exists "select_own_%1$s" on public.%1$s;', t);
-    execute format('create policy "select_own_%1$s" on public.%1$s for select using (auth.uid() = user_id);', t);
+    execute format('create policy "select_own_%1$s" on public.%1$s for select to authenticated using ((select auth.uid()) = user_id);', t);
 
     execute format('drop policy if exists "insert_own_%1$s" on public.%1$s;', t);
-    execute format('create policy "insert_own_%1$s" on public.%1$s for insert with check (auth.uid() = user_id);', t);
+    execute format('create policy "insert_own_%1$s" on public.%1$s for insert to authenticated with check ((select auth.uid()) = user_id);', t);
 
     execute format('drop policy if exists "update_own_%1$s" on public.%1$s;', t);
-    execute format('create policy "update_own_%1$s" on public.%1$s for update using (auth.uid() = user_id) with check (auth.uid() = user_id);', t);
+    execute format('create policy "update_own_%1$s" on public.%1$s for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);', t);
 
     execute format('drop policy if exists "delete_own_%1$s" on public.%1$s;', t);
-    execute format('create policy "delete_own_%1$s" on public.%1$s for delete using (auth.uid() = user_id);', t);
+    execute format('create policy "delete_own_%1$s" on public.%1$s for delete to authenticated using ((select auth.uid()) = user_id);', t);
   end loop;
 end $$;
 
+do $$
+declare
+  t text;
+  policy_name text;
+begin
+  foreach t in array array['calendar_feeds', 'calendar_feed_sync_runs', 'calendar_sync_jobs', 'beta_access_requests', 'api_rate_limit_buckets']
+  loop
+    for policy_name in
+      select policyname from pg_policies where schemaname = 'public' and tablename = t
+    loop
+      execute format('drop policy if exists %I on public.%I;', policy_name, t);
+    end loop;
+  end loop;
+end $$;
+
+revoke all privileges on table public.calendar_feeds, public.calendar_feed_sync_runs, public.calendar_sync_jobs, public.beta_access_requests, public.api_rate_limit_buckets from anon, authenticated;
+
 drop policy if exists "select_own_user_profiles" on public.user_profiles;
 create policy "select_own_user_profiles"
-on public.user_profiles for select
-using (auth.uid() = user_id);
+on public.user_profiles for select to authenticated
+using ((select auth.uid()) = user_id);
 
 drop policy if exists "select_own_app_events" on public.app_events;
 create policy "select_own_app_events"
-on public.app_events for select
-using (auth.uid() = user_id);
+on public.app_events for select to authenticated
+using ((select auth.uid()) = user_id);
 
 drop policy if exists "delete_own_app_events" on public.app_events;
 create policy "delete_own_app_events"
-on public.app_events for delete
-using (auth.uid() = user_id);
+on public.app_events for delete to authenticated
+using ((select auth.uid()) = user_id);
 
 create index if not exists idx_games_user_date on public.games(user_id, game_date);
 create unique index if not exists idx_user_settings_calendar_export_token on public.user_settings(calendar_export_token) where calendar_export_token is not null;
@@ -595,6 +622,57 @@ create index if not exists idx_calendar_sync_jobs_feed_status on public.calendar
 create unique index if not exists idx_calendar_sync_jobs_one_active_per_feed
 on public.calendar_sync_jobs(feed_id)
 where status in ('queued','running');
+create index if not exists idx_api_rate_limit_buckets_expiry on public.api_rate_limit_buckets(window_started_at);
+
+create or replace function public.consume_api_rate_limit(
+  p_bucket text,
+  p_subject_hash text,
+  p_limit integer,
+  p_window_seconds integer
+)
+returns table(allowed boolean, retry_after_seconds integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := clock_timestamp();
+  v_window_started_at timestamptz;
+  v_request_count integer;
+begin
+  if char_length(coalesce(p_bucket, '')) not between 1 and 120
+    or char_length(coalesce(p_subject_hash, '')) <> 64
+    or p_limit < 1
+    or p_limit > 100000
+    or p_window_seconds < 1
+    or p_window_seconds > 86400 then
+    raise exception 'invalid rate limit parameters';
+  end if;
+
+  insert into public.api_rate_limit_buckets(bucket, subject_hash, window_started_at, request_count)
+  values (p_bucket, p_subject_hash, v_now, 1)
+  on conflict (bucket, subject_hash) do update
+  set window_started_at = case
+        when public.api_rate_limit_buckets.window_started_at <= v_now - make_interval(secs => p_window_seconds) then v_now
+        else public.api_rate_limit_buckets.window_started_at
+      end,
+      request_count = case
+        when public.api_rate_limit_buckets.window_started_at <= v_now - make_interval(secs => p_window_seconds) then 1
+        else public.api_rate_limit_buckets.request_count + 1
+      end
+  returning window_started_at, request_count into v_window_started_at, v_request_count;
+
+  allowed := v_request_count <= p_limit;
+  retry_after_seconds := case
+    when allowed then 0
+    else greatest(1, ceil(extract(epoch from (v_window_started_at + make_interval(secs => p_window_seconds) - v_now)))::integer)
+  end;
+  return next;
+end;
+$$;
+
+revoke all on function public.consume_api_rate_limit(text, text, integer, integer) from public, anon, authenticated;
+grant execute on function public.consume_api_rate_limit(text, text, integer, integer) to service_role;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (

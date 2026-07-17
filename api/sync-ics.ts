@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import ical from 'node-ical'
 import { createHash } from 'node:crypto'
-import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
+import { checkDurableRateLimit, checkRateLimit, createAuthedSupabase, createServiceSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
 import { lookupDrivingDistanceMiles } from '../src/server/distance-service.js'
 import { fetchCalendarFeedTextWithRetry } from '../src/server/feed-fetch.js'
 import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
@@ -9,6 +9,7 @@ import { revealFeedUrl } from '../src/server/personal-data-security.js'
 import { enqueueFeedSyncJobs, loadSyncJobsForUser, processDueSyncJobs, type SyncJobResult } from '../src/server/sync-jobs.js'
 import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks, inferCompetitionLevelForPlatform, looksLikeAvailabilityBlock, parseRefQuestTeamsFromText } from '../src/server/sync-ics-utils.js'
 import { buildSyncedGameRow } from '../src/server/sync-merge.js'
+import { assertSyncEventCount, isWithinSyncWindow, MAX_AUTO_MILEAGE_LOOKUPS_PER_SYNC, mileageLookupCandidates } from '../src/server/sync-safety.js'
 
 export type Feed = {
   id: string
@@ -350,11 +351,8 @@ async function hydrateMissingMileage(gameRows: any[], mileageOrigin: MileageOrig
   if (!origin || !apiKey) return 0
 
   let updated = 0
-  for (const row of gameRows) {
+  for (const row of mileageLookupCandidates(gameRows).slice(0, MAX_AUTO_MILEAGE_LOOKUPS_PER_SYNC)) {
     const destination = String(row.location_address || '').trim()
-    const alreadyHasMileage = row.distance_miles != null || row.roundtrip_miles != null
-    const optedOut = row.mileage_origin === 'other'
-    if (!destination || alreadyHasMileage || optedOut) continue
 
     try {
       const miles = await lookupDrivingDistanceMiles({
@@ -563,6 +561,12 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
     await client.from('calendar_feeds').update({ last_synced_at: now, updated_at: now }).eq('id', feed.id).eq('user_id', feed.user_id)
     return await finish('success')
   }
+  try {
+    assertSyncEventCount(icsEvents.length)
+  } catch (e: any) {
+    errors.push(`${feed.name}: ${String(e?.message || e)}`)
+    return await finish('failed')
+  }
 
   const normalizedRows = icsEvents.map((ev: any) => {
     const rawStart = new Date(ev.start)
@@ -604,7 +608,8 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
       startTime,
     }
   }).filter((n) => !feed.import_start_date || n.gameDate >= feed.import_start_date)
-  const normalized = feed.platform === 'DragonFly' ? dedupeFeedBlocks(normalizedRows) : normalizedRows
+  const normalizedWithinImportRange = feed.platform === 'DragonFly' ? dedupeFeedBlocks(normalizedRows) : normalizedRows
+  const normalized = normalizedWithinImportRange.filter((n) => isWithinSyncWindow(n.start))
 
   if (!normalized.length) {
     await client.from('calendar_feeds').update({ last_synced_at: now, updated_at: now }).eq('id', feed.id).eq('user_id', feed.user_id)
@@ -678,7 +683,7 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
   }
 
   const currentFeedRefs = new Set<string>()
-  for (const n of normalized) {
+  for (const n of normalizedWithinImportRange) {
     currentFeedRefs.add(n.externalRef)
     currentFeedRefs.add(n.legacyExternalRef)
   }
@@ -863,6 +868,10 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
   })
 
   autoMileageUpdatedGames = await hydrateMissingMileage(gameRows, mileageOrigin)
+  const skippedMileageLookups = Math.max(0, mileageLookupCandidates(gameRows).length - MAX_AUTO_MILEAGE_LOOKUPS_PER_SYNC)
+  if (skippedMileageLookups) {
+    errors.push(`${feed.name}: automatic mileage was limited to ${MAX_AUTO_MILEAGE_LOOKUPS_PER_SYNC} games. Review the remaining ${skippedMileageLookups} game location${skippedMileageLookups === 1 ? '' : 's'} and calculate mileage when needed.`)
+  }
 
   let upsertedGames: any[] = []
   if (gameRows.length) {
@@ -1059,10 +1068,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Invalid auth token' })
     }
     const userId = authData.user.id
+    const durableRate = await checkDurableRateLimit(req, 'sync-ics', { limit: 20, windowMs: 10 * 60 * 1000 }, userId)
+    if (!durableRate.allowed) {
+      logApiDone(route, requestStartedAtMs, { status: 429 })
+      return sendRateLimited(res, durableRate.retryAfterSeconds)
+    }
+    const serviceClient = createServiceSupabase()
 
     if (req.method === 'GET') {
       const limit = Math.min(50, Math.max(1, Number(req.query.limit || 25)))
-      const { data, error } = await client
+      const { data, error } = await serviceClient
         .from('calendar_feed_sync_runs')
         .select('id,feed_id,feed_name,platform,trigger,status,started_at,finished_at,duration_ms,attempts,created_events,updated_events,created_games,updated_games,errors')
         .eq('user_id', userId)
@@ -1078,7 +1093,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: error.message })
       }
 
-      const jobsResult = await loadSyncJobsForUser(client, userId, limit).catch((jobError: any) => {
+      const jobsResult = await loadSyncJobsForUser(serviceClient, userId, limit).catch((jobError: any) => {
         if (String(jobError?.message ?? jobError).includes('calendar_sync_jobs')) {
           return { jobs: [], queueUnavailable: 'Durable sync job table has not been added yet.' }
         }
@@ -1111,7 +1126,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = toJsonBody(req)
     const feedId = String(body.feedId || '').trim() || null
 
-    let query = client.from('calendar_feeds').select('*').eq('user_id', userId)
+    let query = serviceClient.from('calendar_feeds').select('*').eq('user_id', userId)
     if (feedId) query = query.eq('id', feedId)
     else query = query.eq('enabled', true)
 
@@ -1138,9 +1153,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const syncStartedAtMs = Date.now()
-    const enqueued = await enqueueFeedSyncJobs(client, feeds as Feed[], 'manual')
+    const enqueued = await enqueueFeedSyncJobs(serviceClient, feeds as Feed[], 'manual')
     if (enqueued.queueUnavailable) {
-      const direct = await runFeedsDirect(client, feeds as Feed[], 'manual')
+      const direct = await runFeedsDirect(serviceClient, feeds as Feed[], 'manual')
       const status = direct.errors.length ? 207 : 200
       logApiDone(route, requestStartedAtMs, {
         status,
@@ -1157,12 +1172,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const processed = await processDueSyncJobs(
-      client,
+      serviceClient,
       async (feed, trigger) => {
         try {
-          return await syncFeed(client, feed as Feed, { trigger })
+          return await syncFeed(serviceClient, feed as Feed, { trigger })
         } catch (e: any) {
-          return await recordSyncFailure(client, feed as Feed, trigger, e)
+          return await recordSyncFailure(serviceClient, feed as Feed, trigger, e)
         }
       },
       {

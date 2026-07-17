@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useData } from '../lib/DataContext'
 import { createFreshDB, resetDB } from '../lib/storage'
 import { supabaseConfigured } from '../lib/supabaseClient'
-import { deleteCalendarFeeds, deleteOwnAppEvents, deleteSyncHistory, evidencePaths, exportAccountData, purgeCloudRows, removeStorageFiles } from '../lib/accountLifecycle'
+import { deleteCloudAccount, evidencePaths, exportAccountData, resetCloudAccountData } from '../lib/accountLifecycle'
 import { recordPlatformEvent } from '../lib/platformEvents'
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/support'
 
@@ -96,10 +96,7 @@ export default function DataPrivacyPage() {
     setBusy(true)
     try {
       if (isCloud && activeSession) {
-        await removeStorageFiles(db)
-        await deleteOwnAppEvents(activeSession.user.id)
-        await deleteSyncHistory(activeSession.user.id)
-        await deleteCalendarFeeds(activeSession.user.id)
+        await resetCloudAccountData(activeSession.access_token)
         await write(createFreshDB(), { forceFullReplace: true })
         void recordPlatformEvent(activeSession.access_token, 'app_data_reset', {
           deletedRecords: totalRecords,
@@ -125,17 +122,7 @@ export default function DataPrivacyPage() {
     setMsg(null)
     setBusy(true)
     try {
-      await removeStorageFiles(db)
-      await purgeCloudRows(activeSession.user.id)
-      const res = await fetch('/api/account-delete', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${activeSession.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(String(json?.error || res.statusText))
+      await deleteCloudAccount(activeSession.access_token)
       resetDB(activeSession.user.id)
       await signOut()
       location.href = '/'

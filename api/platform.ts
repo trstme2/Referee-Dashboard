@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { checkRateLimit, createAuthedSupabase, createServiceSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
+import { checkDurableRateLimit, checkRateLimit, createAuthedSupabase, createServiceSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
 import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
 import { ensurePlatformProfile, isAdminRole, isMissingPlatformTableError, recordAppEvent, requireAdminProfile, sanitizeEventMetadata } from '../src/server/platform-auth.js'
 import { appUrl, escapeEmailHtml, sendTransactionalEmail, supportEmail } from '../src/server/email.js'
@@ -71,29 +71,59 @@ function average(rows: any[], key: string) {
 
 function sanitizeUserSettingsPayload(payload: any, userId: string) {
   if (!payload || typeof payload !== 'object') throw new Error('Settings payload is required')
+  const cleanText = (value: unknown, label: string, maxLength: number, required = false): string | null => {
+    const text = String(value ?? '').trim()
+    if (required && !text) throw new Error(`${label} is required`)
+    if (text.length > maxLength) throw new Error(`${label} must be ${maxLength} characters or fewer`)
+    return text || null
+  }
+  const coordinate = (value: unknown, label: string, min: number, max: number): number | null => {
+    if (value == null || value === '') return null
+    const number = Number(value)
+    if (!Number.isFinite(number) || number < min || number > max) throw new Error(`${label} is invalid`)
+    return number
+  }
+  const list = (value: unknown, label: string, maxItems: number, maxItemLength: number): string[] => {
+    if (!Array.isArray(value)) return []
+    if (value.length > maxItems) throw new Error(`${label} has too many entries`)
+    return value.map((item) => cleanText(item, label, maxItemLength)).filter((item): item is string => Boolean(item))
+  }
+  const timezone = cleanText(payload.default_timezone || 'America/New_York', 'Default timezone', 100, true)!
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format()
+  } catch {
+    throw new Error('Default timezone is invalid')
+  }
+  const completedAt = cleanText(payload.onboarding_completed_at, 'Onboarding completion date', 50)
+  if (completedAt && Number.isNaN(Date.parse(completedAt))) throw new Error('Onboarding completion date is invalid')
+
+  const homeAddress = cleanText(payload.home_address, 'Home address', 300) ?? ''
+  const otherWorkAddress = cleanText(payload.other_work_address, 'Other work address', 300)
   return {
     user_id: userId,
-    home_address: String(payload.home_address ?? '').trim(),
-    home_address_place_id: payload.home_address_place_id ? String(payload.home_address_place_id) : null,
-    home_address_latitude: payload.home_address_latitude == null ? null : Number(payload.home_address_latitude),
-    home_address_longitude: payload.home_address_longitude == null ? null : Number(payload.home_address_longitude),
-    other_work_address: payload.other_work_address ? String(payload.other_work_address).trim() : null,
-    other_work_address_place_id: payload.other_work_address_place_id ? String(payload.other_work_address_place_id) : null,
-    other_work_address_latitude: payload.other_work_address_latitude == null ? null : Number(payload.other_work_address_latitude),
-    other_work_address_longitude: payload.other_work_address_longitude == null ? null : Number(payload.other_work_address_longitude),
-    default_timezone: String(payload.default_timezone || 'America/New_York').trim() || 'America/New_York',
-    tax_mileage_rate_cents: payload.tax_mileage_rate_cents == null ? null : Number(payload.tax_mileage_rate_cents),
+    home_address: homeAddress,
+    home_address_place_id: homeAddress ? cleanText(payload.home_address_place_id, 'Home address place id', 200) : null,
+    home_address_latitude: homeAddress ? coordinate(payload.home_address_latitude, 'Home address latitude', -90, 90) : null,
+    home_address_longitude: homeAddress ? coordinate(payload.home_address_longitude, 'Home address longitude', -180, 180) : null,
+    other_work_address: otherWorkAddress,
+    other_work_address_place_id: otherWorkAddress ? cleanText(payload.other_work_address_place_id, 'Other work address place id', 200) : null,
+    other_work_address_latitude: otherWorkAddress ? coordinate(payload.other_work_address_latitude, 'Other work address latitude', -90, 90) : null,
+    other_work_address_longitude: otherWorkAddress ? coordinate(payload.other_work_address_longitude, 'Other work address longitude', -180, 180) : null,
+    default_timezone: timezone,
+    tax_mileage_rate_cents: coordinate(payload.tax_mileage_rate_cents, 'Mileage rate', 0, 1000),
     weekly_games_email_enabled: Boolean(payload.weekly_games_email_enabled),
-    onboarding_completed_at: payload.onboarding_completed_at ? String(payload.onboarding_completed_at) : null,
-    tracked_sports: Array.isArray(payload.tracked_sports) ? payload.tracked_sports.map((value: unknown) => String(value)).filter(Boolean) : [],
+    onboarding_completed_at: completedAt,
+    tracked_sports: list(payload.tracked_sports, 'Tracked sports', 20, 60),
     show_game_platform_chips: payload.show_game_platform_chips !== false,
-    assigning_platforms: Array.isArray(payload.assigning_platforms) ? payload.assigning_platforms.map((value: unknown) => String(value)).filter(Boolean) : [],
-    leagues: Array.isArray(payload.leagues) ? payload.leagues.map((value: unknown) => String(value)).filter(Boolean) : [],
-    updated_at: payload.updated_at ? String(payload.updated_at) : new Date().toISOString(),
+    assigning_platforms: list(payload.assigning_platforms, 'Assigning platforms', 40, 60),
+    leagues: list(payload.leagues, 'Leagues', 100, 120),
+    updated_at: new Date().toISOString(),
   }
 }
 
 function requestOrigin(req: VercelRequest) {
+  const configured = appUrl()
+  if (configured) return configured
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim()
   const proto = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim()
   if (!host) return process.env.SITE_URL || process.env.VERCEL_URL || ''
@@ -198,10 +228,18 @@ async function submitBetaAccessRequest(serviceClient: any, input: any) {
   }
 
   const value = validation.value
+  const { data: existing, error: existingError } = await serviceClient
+    .from('beta_access_requests')
+    .select('id,status,created_at,updated_at')
+    .eq('email_normalized', value.emailNormalized)
+    .maybeSingle()
+  if (existingError) throw existingError
+  if (existing) return existing
+
   const now = new Date().toISOString()
   const { data, error } = await serviceClient
     .from('beta_access_requests')
-    .upsert({
+    .insert({
       email: value.email,
       email_normalized: value.emailNormalized,
       full_name: value.fullName,
@@ -211,11 +249,21 @@ async function submitBetaAccessRequest(serviceClient: any, input: any) {
       device_preference: value.devicePreference,
       notes: value.notes,
       updated_at: now,
-    }, { onConflict: 'email_normalized' })
+    })
     .select('id,status,created_at,updated_at')
     .single()
 
-  if (error) throw error
+  if (error) {
+    if (String(error.code || '') === '23505') {
+      const { data: racedRequest, error: raceError } = await serviceClient
+        .from('beta_access_requests')
+        .select('id,status,created_at,updated_at')
+        .eq('email_normalized', value.emailNormalized)
+        .single()
+      if (!raceError && racedRequest) return racedRequest
+    }
+    throw error
+  }
   try {
     await notifyBetaAccessRequest(value, data.id)
   } catch (e) {
@@ -442,8 +490,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         logApiDone(route, requestStartedAtMs, { status: 429, action: 'beta-request' })
         return sendRateLimited(res, betaRate.retryAfterSeconds)
       }
-      const serviceClient = createServiceSupabase()
       const body = toJsonBody(req)
+      const durableBetaRate = await checkDurableRateLimit(
+        req,
+        'beta-access-request',
+        { limit: 3, windowMs: 24 * 60 * 60 * 1000 },
+        String(body.request?.email || '').trim().toLowerCase() || null,
+      )
+      if (!durableBetaRate.allowed) {
+        logApiDone(route, requestStartedAtMs, { status: 429, action: 'beta-request' })
+        return sendRateLimited(res, durableBetaRate.retryAfterSeconds)
+      }
+      const serviceClient = createServiceSupabase()
       const request = await submitBetaAccessRequest(serviceClient, body.request)
       logApiDone(route, requestStartedAtMs, { status: 200, action: 'beta-request' })
       return res.status(200).json({ ok: true, request: { id: request.id, status: request.status } })
@@ -463,6 +521,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const serviceClient = createServiceSupabase()
+    const durableRate = await checkDurableRateLimit(req, 'platform-authenticated', { limit: 240, windowMs: 10 * 60 * 1000 }, authData.user.id)
+    if (!durableRate.allowed) {
+      logApiDone(route, requestStartedAtMs, { status: 429, action })
+      return sendRateLimited(res, durableRate.retryAfterSeconds)
+    }
 
     if (req.method === 'GET' && action === 'me') {
       const profile = await ensurePlatformProfile(serviceClient, authData.user)

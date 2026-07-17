@@ -10,6 +10,7 @@ with expected_tables(table_name) as (
     ('user_settings'),
     ('user_profiles'),
     ('app_events'),
+    ('beta_access_requests'),
     ('games'),
     ('calendar_events'),
     ('calendar_feeds'),
@@ -20,7 +21,8 @@ with expected_tables(table_name) as (
     ('requirement_instances'),
     ('requirement_activities'),
     ('csv_imports'),
-    ('csv_import_rows')
+    ('csv_import_rows'),
+    ('api_rate_limit_buckets')
 ),
 expected_columns(table_name, column_name) as (
   values
@@ -61,6 +63,12 @@ expected_columns(table_name, column_name) as (
     ('app_events', 'event_source'),
     ('app_events', 'metadata'),
     ('app_events', 'created_at'),
+
+    ('beta_access_requests', 'id'),
+    ('beta_access_requests', 'email_normalized'),
+    ('beta_access_requests', 'status'),
+    ('beta_access_requests', 'created_at'),
+    ('beta_access_requests', 'updated_at'),
 
     ('games', 'id'),
     ('games', 'user_id'),
@@ -159,6 +167,11 @@ expected_columns(table_name, column_name) as (
     ('calendar_sync_jobs', 'created_at'),
     ('calendar_sync_jobs', 'updated_at'),
 
+    ('api_rate_limit_buckets', 'bucket'),
+    ('api_rate_limit_buckets', 'subject_hash'),
+    ('api_rate_limit_buckets', 'window_started_at'),
+    ('api_rate_limit_buckets', 'request_count'),
+
     ('expenses', 'id'),
     ('expenses', 'user_id'),
     ('expenses', 'expense_date'),
@@ -253,16 +266,14 @@ expected_indexes(index_name) as (
     ('idx_calendar_sync_jobs_due'),
     ('idx_calendar_sync_jobs_user_created'),
     ('idx_calendar_sync_jobs_feed_status'),
-    ('idx_calendar_sync_jobs_one_active_per_feed')
+    ('idx_calendar_sync_jobs_one_active_per_feed'),
+    ('idx_api_rate_limit_buckets_expiry')
 ),
 expected_user_owned_tables(table_name) as (
   values
     ('user_settings'),
     ('games'),
     ('calendar_events'),
-    ('calendar_feeds'),
-    ('calendar_feed_sync_runs'),
-    ('calendar_sync_jobs'),
     ('expenses'),
     ('requirement_definitions'),
     ('requirement_instances'),
@@ -270,17 +281,25 @@ expected_user_owned_tables(table_name) as (
     ('csv_imports'),
     ('csv_import_rows')
 ),
-expected_table_policies(table_name, policy_name) as (
-  select table_name, action || '_own_' || table_name
+expected_server_managed_tables(table_name) as (
+  values
+    ('calendar_feeds'),
+    ('calendar_feed_sync_runs'),
+    ('calendar_sync_jobs'),
+    ('beta_access_requests'),
+    ('api_rate_limit_buckets')
+),
+expected_table_policies(table_name, policy_name, expected_command) as (
+  select table_name, action || '_own_' || table_name, upper(action)
   from expected_user_owned_tables
   cross join (values ('select'), ('insert'), ('update'), ('delete')) as actions(action)
   union all
   select *
   from (values
-    ('user_profiles', 'select_own_user_profiles'),
-    ('app_events', 'select_own_app_events'),
-    ('app_events', 'delete_own_app_events')
-  ) as explicit_policies(table_name, policy_name)
+    ('user_profiles', 'select_own_user_profiles', 'SELECT'),
+    ('app_events', 'select_own_app_events', 'SELECT'),
+    ('app_events', 'delete_own_app_events', 'DELETE')
+  ) as explicit_policies(table_name, policy_name, expected_command)
 ),
 expected_buckets(bucket_id) as (
   values
@@ -314,6 +333,43 @@ findings as (
   union all
 
   select
+    'misconfigured_policy' as issue,
+    'public.' || ep.table_name || ' policy ' || ep.policy_name as object_name,
+    'Recreate the policy with TO authenticated and auth.uid() ownership checks.' as fix
+  from expected_table_policies ep
+  join pg_policies p
+    on p.schemaname = 'public'
+    and p.tablename = ep.table_name
+    and p.policyname = ep.policy_name
+  where upper(p.cmd) <> ep.expected_command
+    or not ('authenticated' = any(p.roles))
+    or (ep.expected_command in ('SELECT', 'UPDATE', 'DELETE') and coalesce(p.qual, '') !~ 'auth\\.uid')
+    or (ep.expected_command in ('INSERT', 'UPDATE') and coalesce(p.with_check, '') !~ 'auth\\.uid')
+
+  union all
+
+  select
+    'unexpected_server_policy' as issue,
+    'public.' || p.tablename || ' policy ' || p.policyname as object_name,
+    'Remove browser-accessible policies from server-managed tables.' as fix
+  from pg_policies p
+  join expected_server_managed_tables smt on smt.table_name = p.tablename
+  where p.schemaname = 'public'
+
+  union all
+
+  select
+    'excess_client_grant' as issue,
+    'public.' || g.table_name || ' granted to ' || g.grantee as object_name,
+    'Revoke direct table privileges from anon and authenticated roles.' as fix
+  from information_schema.role_table_grants g
+  join expected_server_managed_tables smt on smt.table_name = g.table_name
+  where g.table_schema = 'public'
+    and g.grantee in ('anon', 'authenticated')
+
+  union all
+
+  select
     'missing_column' as issue,
     'public.' || ec.table_name || '.' || ec.column_name as object_name,
     'Run supabase/schema.sql to add the missing column.' as fix
@@ -337,6 +393,36 @@ findings as (
   join pg_namespace ns on ns.oid = cls.relnamespace and ns.nspname = 'public'
   where cls.relkind = 'r'
     and not cls.relrowsecurity
+
+  union all
+
+  select
+    'missing_server_function' as issue,
+    'public.consume_api_rate_limit' as object_name,
+    'Run supabase/manual-patches/2026-07-17-security-hardening.sql.' as fix
+  where not exists (
+    select 1
+    from pg_proc p
+    join pg_namespace ns on ns.oid = p.pronamespace
+    where ns.nspname = 'public'
+      and p.proname = 'consume_api_rate_limit'
+      and pg_get_function_identity_arguments(p.oid) = 'p_bucket text, p_subject_hash text, p_limit integer, p_window_seconds integer'
+  )
+
+  union all
+
+  select
+    'exposed_server_function' as issue,
+    'public.consume_api_rate_limit' as object_name,
+    'Revoke EXECUTE from public, anon, and authenticated; only service_role should call this function.' as fix
+  from pg_proc p
+  join pg_namespace ns on ns.oid = p.pronamespace
+  where ns.nspname = 'public'
+    and p.proname = 'consume_api_rate_limit'
+    and (
+      has_function_privilege('anon', p.oid, 'EXECUTE')
+      or has_function_privilege('authenticated', p.oid, 'EXECUTE')
+    )
 
   union all
 

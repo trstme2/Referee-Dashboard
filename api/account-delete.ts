@@ -1,41 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { checkRateLimit, createAuthedSupabase, createServiceSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders } from '../src/server/auth-utils.js'
-
-const ACCOUNT_DELETE_TABLES = [
-  'csv_import_rows',
-  'csv_imports',
-  'requirement_activities',
-  'requirement_instances',
-  'requirement_definitions',
-  'expenses',
-  'calendar_events',
-  'games',
-  'calendar_sync_jobs',
-  'calendar_feed_sync_runs',
-  'calendar_feeds',
-  'user_settings',
-  'app_events',
-  'user_profiles',
-] as const
-
-const OPTIONAL_TABLES = new Set<string>(['calendar_sync_jobs', 'calendar_feed_sync_runs', 'app_events', 'user_profiles'])
-
-function isMissingOptionalTableError(error: any, table: string) {
-  const code = String(error?.code ?? '')
-  const message = String(error?.message ?? error ?? '')
-  if (code === '42P01' || code === 'PGRST205') return true
-  if (message.includes('Could not find the table')) return true
-  if (message.includes(table) && (message.includes('does not exist') || message.includes('schema cache'))) return true
-  return false
-}
-
-async function deleteAccountRows(serviceClient: any, userId: string) {
-  for (const table of ACCOUNT_DELETE_TABLES) {
-    const { error } = await serviceClient.from(table).delete().eq('user_id', userId)
-    if (error && OPTIONAL_TABLES.has(table) && isMissingOptionalTableError(error, table)) continue
-    if (error) throw new Error(`${table}: ${error.message}`)
-  }
-}
+import { deleteAccountData } from '../src/server/account-lifecycle.js'
+import { checkDurableRateLimit, checkRateLimit, createAuthedSupabase, createServiceSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setApiSecurityHeaders(res)
@@ -52,16 +17,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const authedClient = createAuthedSupabase(token)
     const { data: authData, error: authError } = await authedClient.auth.getUser()
     if (authError || !authData?.user) return res.status(401).json({ error: 'Invalid auth token' })
-
-    const serviceClient = createServiceSupabase()
     const userId = authData.user.id
+    const action = toJsonBody(req)?.action === 'reset' ? 'reset' : 'delete'
+    const rateBucket = action === 'reset' ? 'account-reset' : 'account-delete'
+    const durableRate = await checkDurableRateLimit(req, rateBucket, { limit: 3, windowMs: 60 * 60 * 1000 }, userId)
+    if (!durableRate.allowed) return sendRateLimited(res, durableRate.retryAfterSeconds)
+    const serviceClient = createServiceSupabase()
 
     try {
-      await deleteAccountRows(serviceClient, userId)
+      const result = await deleteAccountData(serviceClient, userId, { includeProfile: action === 'delete' })
+      if (action === 'reset') return res.status(200).json({ ok: true, deletedFiles: result.deletedFiles })
     } catch (e: any) {
       console.error('Account row deletion failed', { userId, error: String(e?.message ?? e) })
       return res.status(500).json({ error: 'Could not delete account data' })
     }
+
+    const { error: signOutError } = await authedClient.auth.signOut({ scope: 'global' })
+    if (signOutError) console.warn('Could not revoke account sessions before deletion', { userId, error: signOutError.message })
 
     const { error } = await serviceClient.auth.admin.deleteUser(userId, false)
     if (error) {

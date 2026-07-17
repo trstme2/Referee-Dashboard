@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase, supabaseConfigured } from '../lib/supabaseClient'
 import { useData } from '../lib/DataContext'
 import { createFreshDB, resetDB } from '../lib/storage'
-import { deleteCalendarFeeds, deleteOwnAppEvents, deleteSyncHistory, exportAccountData as downloadAccountExport, purgeCloudRows, removeStorageFiles } from '../lib/accountLifecycle'
+import { deleteCloudAccount, exportAccountData as downloadAccountExport, resetCloudAccountData } from '../lib/accountLifecycle'
 import { AuthDelivery, destinationForUser, friendlyAuthError, normalizeOtpToken } from '../lib/authFlow'
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/support'
 import logo from '../assets/logo.png'
@@ -80,10 +80,7 @@ export default function AuthPage() {
       setMsg(null)
       setAccountBusy(true)
       try {
-        await removeStorageFiles(db)
-        await deleteOwnAppEvents(activeSession.user.id)
-        await deleteSyncHistory(activeSession.user.id)
-        await deleteCalendarFeeds(activeSession.user.id)
+        await resetCloudAccountData(activeSession.access_token)
         await write(createFreshDB(), { forceFullReplace: true })
         setMsg('App data reset complete. Your account is still active.')
       } catch (e: any) {
@@ -100,17 +97,7 @@ export default function AuthPage() {
       setMsg(null)
       setAccountBusy(true)
       try {
-        await removeStorageFiles(db)
-        await purgeCloudRows(activeSession.user.id)
-        const res = await fetch('/api/account-delete', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${activeSession.access_token}`,
-            'Content-Type': 'application/json',
-          },
-        })
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(String(json?.error || res.statusText))
+        await deleteCloudAccount(activeSession.access_token)
         resetDB(activeSession.user.id)
         await signOut()
         location.href = '/'
@@ -195,7 +182,7 @@ export default function AuthPage() {
       if (!supabase) throw new Error('Supabase client missing')
       const { error } = await supabase.auth.signInWithOtp({
         email: nextEmail,
-        options: { shouldCreateUser: true },
+        options: { shouldCreateUser: false },
       })
       if (error) throw error
       setSubmittedEmail(nextEmail)
@@ -225,7 +212,7 @@ export default function AuthPage() {
       const { error } = await supabase.auth.signInWithOtp({
         email: nextEmail,
         options: {
-          shouldCreateUser: true,
+          shouldCreateUser: false,
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       })

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { checkRateLimit, createAuthedSupabase, getBearerToken, maskUrl, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
+import { checkDurableRateLimit, checkRateLimit, createAuthedSupabase, createServiceSupabase, getBearerToken, maskUrl, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
 import { validateFeedUrl } from '../src/server/feed-fetch.js'
 import { protectFeedUrl, revealFeedUrl } from '../src/server/personal-data-security.js'
 
@@ -78,9 +78,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: authData, error: authErr } = await client.auth.getUser()
     if (authErr || !authData?.user) return res.status(401).json({ error: 'Invalid auth token' })
     const userId = authData.user.id
+    const durableRate = await checkDurableRateLimit(req, 'calendar-feeds', { limit: 120, windowMs: 60 * 1000 }, userId)
+    if (!durableRate.allowed) return sendRateLimited(res, durableRate.retryAfterSeconds)
+    const serviceClient = createServiceSupabase()
 
     if (req.method === 'GET') {
-      const { data, error } = await client
+      const { data, error } = await serviceClient
         .from('calendar_feeds')
         .select('id,user_id,platform,name,feed_url,enabled,sport,default_league,import_start_date,last_synced_at,created_at,updated_at')
         .eq('user_id', userId)
@@ -106,7 +109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'POST') {
       const body = toJsonBody(req)
       const platform = normalizePlatform(body.platform)
-      await enforcePlatformLimit(client, userId, platform)
+      await enforcePlatformLimit(serviceClient, userId, platform)
 
       const name = normalizeName(body.name)
       const feedUrl = protectFeedUrl(mustUrl(body.feedUrl))
@@ -115,7 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const defaultLeague = normalizeDefaultLeague(body.defaultLeague)
       const importStartDate = normalizeDateOnly(body.importStartDate)
 
-      const { data, error } = await client
+      const { data, error } = await serviceClient
         .from('calendar_feeds')
         .insert([{
           user_id: userId,
@@ -152,7 +155,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const id = String(body.id || '').trim()
       if (!id) return res.status(400).json({ error: 'id is required' })
 
-      const { data: existing, error: exErr } = await client
+      const { data: existing, error: exErr } = await serviceClient
         .from('calendar_feeds')
         .select('id,platform')
         .eq('user_id', userId)
@@ -163,7 +166,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const nextPlatform = body.platform ?? existing.platform
       const normalizedPlatform = normalizePlatform(nextPlatform)
-      await enforcePlatformLimit(client, userId, normalizedPlatform, id)
+      await enforcePlatformLimit(serviceClient, userId, normalizedPlatform, id)
 
       const updates: any = { updated_at: new Date().toISOString(), platform: normalizedPlatform }
       if (body.name != null) {
@@ -175,7 +178,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (body.defaultLeague !== undefined) updates.default_league = normalizeDefaultLeague(body.defaultLeague)
       if (body.importStartDate !== undefined) updates.import_start_date = normalizeDateOnly(body.importStartDate)
 
-      const { data, error } = await client
+      const { data, error } = await serviceClient
         .from('calendar_feeds')
         .update(updates)
         .eq('user_id', userId)
@@ -203,7 +206,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'DELETE') {
       const id = String((req.query.id as string) || '').trim()
       if (!id) return res.status(400).json({ error: 'id query param is required' })
-      const { error } = await client.from('calendar_feeds').delete().eq('user_id', userId).eq('id', id)
+      const { error } = await serviceClient.from('calendar_feeds').delete().eq('user_id', userId).eq('id', id)
       if (error) return res.status(400).json({ error: error.message })
       return res.status(200).json({ ok: true })
     }

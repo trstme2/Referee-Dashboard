@@ -551,7 +551,9 @@ export default function RequirementsPage() {
         return
       }
       if (activity.evidenceLink) {
-        window.open(activity.evidenceLink, '_blank', 'noopener,noreferrer')
+        const url = new URL(activity.evidenceLink)
+        if (!['https:', 'http:'].includes(url.protocol)) throw new Error('Evidence links must use http or https')
+        window.open(url.toString(), '_blank', 'noopener,noreferrer')
       }
     } catch (e: any) {
       alert(`Could not open evidence: ${String(e?.message ?? e)}`)

@@ -1,6 +1,6 @@
 import type { VercelRequest } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
-import { timingSafeEqual } from 'node:crypto'
+import { createHash, timingSafeEqual } from 'node:crypto'
 
 type HeaderResponse = {
   setHeader(name: string, value: string): void
@@ -82,6 +82,39 @@ export function checkRateLimit(req: VercelRequest, bucket: string, options: Rate
   return {
     allowed: false,
     retryAfterSeconds: Math.max(1, Math.ceil((existing.resetAt - now) / 1000)),
+  }
+}
+
+export async function checkDurableRateLimit(
+  req: VercelRequest,
+  bucket: string,
+  options: RateLimitOptions,
+  subject?: string | null,
+): Promise<RateLimitResult> {
+  const fallback = checkRateLimit(req, `durable:${bucket}`, options)
+  if (!fallback.allowed) return fallback
+
+  const subjectValue = String(subject || clientIp(req)).trim()
+  if (!subjectValue) return fallback
+
+  try {
+    const subjectHash = createHash('sha256').update(`${bucket}:${subjectValue}`).digest('hex')
+    const { data, error } = await createServiceSupabase().rpc('consume_api_rate_limit', {
+      p_bucket: bucket,
+      p_subject_hash: subjectHash,
+      p_limit: options.limit,
+      p_window_seconds: Math.max(1, Math.ceil(options.windowMs / 1000)),
+    })
+    if (error) throw error
+    const row = Array.isArray(data) ? data[0] : data
+    if (!row || typeof row.allowed !== 'boolean') return fallback
+    return {
+      allowed: row.allowed,
+      retryAfterSeconds: Math.max(0, Number(row.retry_after_seconds) || 0),
+    }
+  } catch {
+    // The in-process limit remains a conservative fallback until the durable SQL patch is installed.
+    return fallback
   }
 }
 

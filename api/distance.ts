@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders } from '../src/server/auth-utils.js'
+import { checkDurableRateLimit, checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
 import { lookupDrivingDistanceMiles } from '../src/server/distance-service.js'
 
 const MAX_ADDRESS_LENGTH = 300
@@ -8,7 +8,7 @@ const MAX_PLACE_ID_LENGTH = 200
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setApiSecurityHeaders(res)
 
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
     const rate = checkRateLimit(req, 'distance', { limit: 60, windowMs: 60 * 1000 })
@@ -20,10 +20,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const client = createAuthedSupabase(token)
     const { data: authData, error: authError } = await client.auth.getUser()
     if (authError || !authData?.user) return res.status(401).json({ error: 'Invalid auth token' })
+    const durableRate = await checkDurableRateLimit(req, 'distance', { limit: 60, windowMs: 60 * 1000 }, authData.user.id)
+    if (!durableRate.allowed) return sendRateLimited(res, durableRate.retryAfterSeconds)
 
-    const origin = String(req.query.origin ?? '').trim()
-    const destination = String(req.query.destination ?? '').trim()
-    const originPlaceId = String(req.query.originPlaceId ?? '').trim()
+    const body = toJsonBody(req)
+    const origin = String(body.origin ?? '').trim()
+    const destination = String(body.destination ?? '').trim()
+    const originPlaceId = String(body.originPlaceId ?? '').trim()
     if (!origin || !destination) return res.status(400).json({ error: 'origin and destination are required' })
     if (origin.length > MAX_ADDRESS_LENGTH || destination.length > MAX_ADDRESS_LENGTH) {
       return res.status(400).json({ error: 'origin and destination are too long' })

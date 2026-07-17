@@ -1,8 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { checkRateLimit, createAuthedSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
 import { ensureCalendarExportToken, regenerateCalendarExportToken } from '../src/server/calendar-export-utils.js'
+import { appUrl } from '../src/server/email.js'
 
 function originFromReq(req: VercelRequest): string {
+  const configured = appUrl()
+  if (configured) return configured
   const proto = String(req.headers['x-forwarded-proto'] || 'https')
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').trim()
   if (!host) throw new Error('Missing host header')

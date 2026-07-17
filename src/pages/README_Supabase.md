@@ -21,6 +21,10 @@ If the drift check returns rows, production is missing tables, columns, indexes,
 
 Use `supabase/manual-patches/*` only for small targeted fixes when you do not want to rerun the full idempotent schema. The full `supabase/schema.sql` remains the source of truth.
 
+## 2b) Security hardening patch
+
+After deploying the server-managed sync/security release, run `supabase/manual-patches/2026-07-17-security-hardening.sql`. It removes direct browser access to feed/queue/history tables and adds durable rate-limit storage. See `docs/security-hardening.md` for the deployment and QA steps.
+
 ## 2b) Roles, subscriptions, and admin bootstrap
 The app uses `user_profiles` for server-side roles and subscription entitlement metadata:
 

@@ -31,9 +31,15 @@ function isPrivateIpv4(ip: string): boolean {
     isInRange(n, ipv4ToNumber('0.0.0.0'), ipv4ToNumber('0.255.255.255')) ||
     isInRange(n, ipv4ToNumber('10.0.0.0'), ipv4ToNumber('10.255.255.255')) ||
     isInRange(n, ipv4ToNumber('127.0.0.0'), ipv4ToNumber('127.255.255.255')) ||
+    isInRange(n, ipv4ToNumber('100.64.0.0'), ipv4ToNumber('100.127.255.255')) ||
     isInRange(n, ipv4ToNumber('169.254.0.0'), ipv4ToNumber('169.254.255.255')) ||
     isInRange(n, ipv4ToNumber('172.16.0.0'), ipv4ToNumber('172.31.255.255')) ||
     isInRange(n, ipv4ToNumber('192.168.0.0'), ipv4ToNumber('192.168.255.255')) ||
+    isInRange(n, ipv4ToNumber('192.0.0.0'), ipv4ToNumber('192.0.0.255')) ||
+    isInRange(n, ipv4ToNumber('192.0.2.0'), ipv4ToNumber('192.0.2.255')) ||
+    isInRange(n, ipv4ToNumber('198.18.0.0'), ipv4ToNumber('198.19.255.255')) ||
+    isInRange(n, ipv4ToNumber('198.51.100.0'), ipv4ToNumber('198.51.100.255')) ||
+    isInRange(n, ipv4ToNumber('203.0.113.0'), ipv4ToNumber('203.0.113.255')) ||
     isInRange(n, ipv4ToNumber('224.0.0.0'), ipv4ToNumber('255.255.255.255'))
   )
 }
@@ -64,7 +70,7 @@ export function validateFeedUrl(raw: unknown): string {
     : value
   const url = new URL(normalized)
   if (url.protocol !== 'https:') {
-    if (url.protocol === 'http:' && process.env.ALLOW_INSECURE_FEED_URLS === 'true') return url.toString()
+    if (url.protocol === 'http:' && process.env.ALLOW_INSECURE_FEED_URLS === 'true' && process.env.NODE_ENV !== 'production') return url.toString()
     throw new Error('feedUrl must use https')
   }
   return url.toString()

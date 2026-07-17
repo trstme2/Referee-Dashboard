@@ -53,6 +53,6 @@
     "minimatch": "^10.2.5",
     "path-to-regexp": "^6.3.0",
     "smol-toml": "^1.6.1",
-    "undici": "^6.24.0"
+    "undici": "^6.27.0"
   }
 }

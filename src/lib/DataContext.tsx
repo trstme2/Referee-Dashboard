@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { DB, Settings } from './types'
-import { createFreshDB, loadDB, saveDB } from './storage'
+import { createFreshDB, loadDB, resetDB, saveDB } from './storage'
 import { supabase, supabaseConfigured } from './supabaseClient'
 import type { Session } from '@supabase/supabase-js'
 import { migrateLegacyGameStatus } from './gameStatus'
@@ -457,8 +457,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [mode, userId, db, accessToken])
 
   const signOut = useCallback(async () => {
+    const cacheUserId = session?.user.id ?? userId
+    if (cacheUserId) resetDB(cacheUserId)
     if (supabase) await supabase.auth.signOut()
-  }, [])
+  }, [session?.user.id, userId])
 
   const value = useMemo(
     () => ({ mode, session, authReady, hydrating, db, loading, error, refresh, write, signOut }),

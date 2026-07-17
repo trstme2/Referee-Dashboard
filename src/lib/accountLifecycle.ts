@@ -1,24 +1,6 @@
-import { EXPENSE_RECEIPT_BUCKET, REQUIREMENT_EVIDENCE_BUCKET } from './documents'
 import { recordPlatformEvent } from './platformEvents'
 import { supabase } from './supabaseClient'
 import type { DB } from './types'
-
-export const ACCOUNT_TABLE_DELETE_ORDER = [
-  'csv_import_rows',
-  'csv_imports',
-  'requirement_activities',
-  'requirement_instances',
-  'requirement_definitions',
-  'expenses',
-  'calendar_events',
-  'games',
-  'calendar_sync_jobs',
-  'calendar_feed_sync_runs',
-  'calendar_feeds',
-  'user_settings',
-] as const
-
-const OPTIONAL_ACCOUNT_TABLES = new Set<string>(['calendar_feed_sync_runs', 'calendar_sync_jobs'])
 
 export function downloadJson(filename: string, value: unknown) {
   const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' })
@@ -133,50 +115,24 @@ export async function exportAccountData(db: DB, user: { id: string; email?: stri
   await recordPlatformEvent(accessToken, 'account_exported')
 }
 
-export async function deleteOwnAppEvents(userId: string) {
-  if (!supabase) throw new Error('Supabase client missing')
-  const { error } = await supabase.from('app_events').delete().eq('user_id', userId)
-  if (error && !isMissingOptionalTableError(error, 'app_events')) {
-    throw new Error(`Delete app events: ${error.message}`)
-  }
+async function postAccountLifecycle(endpoint: string, accessToken: string, body?: unknown) {
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(String(json?.error || res.statusText))
+  return json
 }
 
-export async function removeStorageFiles(db: DB) {
-  if (!supabase) throw new Error('Supabase client missing')
-  const paths = evidencePaths(db)
-  if (paths.expenseReceipts.length) {
-    const { error } = await supabase.storage.from(EXPENSE_RECEIPT_BUCKET).remove(paths.expenseReceipts)
-    if (error) throw new Error(`Delete expense receipts: ${error.message}`)
-  }
-  if (paths.requirementEvidence.length) {
-    const { error } = await supabase.storage.from(REQUIREMENT_EVIDENCE_BUCKET).remove(paths.requirementEvidence)
-    if (error) throw new Error(`Delete requirement evidence: ${error.message}`)
-  }
+export function resetCloudAccountData(accessToken: string) {
+  return postAccountLifecycle('/api/account-delete', accessToken, { action: 'reset' })
 }
 
-export async function deleteSyncHistory(userId: string) {
-  if (!supabase) throw new Error('Supabase client missing')
-  const { error: jobsError } = await supabase.from('calendar_sync_jobs').delete().eq('user_id', userId)
-  if (jobsError && !isMissingOptionalTableError(jobsError, 'calendar_sync_jobs')) {
-    throw new Error(`Delete sync jobs: ${jobsError.message}`)
-  }
-  const { error } = await supabase.from('calendar_feed_sync_runs').delete().eq('user_id', userId)
-  if (error && !isMissingOptionalTableError(error, 'calendar_feed_sync_runs')) {
-    throw new Error(`Delete sync history: ${error.message}`)
-  }
-}
-
-export async function deleteCalendarFeeds(userId: string) {
-  if (!supabase) throw new Error('Supabase client missing')
-  const { error } = await supabase.from('calendar_feeds').delete().eq('user_id', userId)
-  if (error) throw new Error(`Delete calendar feeds: ${error.message}`)
-}
-
-export async function purgeCloudRows(userId: string) {
-  if (!supabase) throw new Error('Supabase client missing')
-  for (const table of ACCOUNT_TABLE_DELETE_ORDER) {
-    const { error } = await supabase.from(table).delete().eq('user_id', userId)
-    if (error && OPTIONAL_ACCOUNT_TABLES.has(table) && isMissingOptionalTableError(error, table)) continue
-    if (error) throw new Error(`Delete ${table}: ${error.message}`)
-  }
+export function deleteCloudAccount(accessToken: string) {
+  return postAccountLifecycle('/api/account-delete', accessToken)
 }
