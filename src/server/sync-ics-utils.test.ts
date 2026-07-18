@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks, inferCompetitionLevelForPlatform, looksLikeAvailabilityBlock, parseRefQuestTeamsFromText } from './sync-ics-utils.js'
+import { cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks, inferCompetitionLevelForPlatform, looksLikeAvailabilityBlock, looksLikeDragonFlyAdministrativeEvent, parseRefQuestTeamsFromText } from './sync-ics-utils.js'
 
 describe('sync ICS utilities', () => {
   it('removes shifted DragonFly timestamps from availability block titles', () => {
@@ -11,6 +11,13 @@ describe('sync ICS utilities', () => {
     expect(looksLikeAvailabilityBlock('Availability 10/1/2026 07:00 pm - 10/2/2026 02:00 am')).toBe(true)
     expect(looksLikeAvailabilityBlock('Blocked')).toBe(true)
     expect(looksLikeAvailabilityBlock('Soccer (Club): Ants vs Bees')).toBe(false)
+  })
+
+  it('recognizes DragonFly officials-association meetings without misclassifying matchups', () => {
+    expect(looksLikeDragonFlyAdministrativeEvent('Greater Cleveland Soccer Officials Association - Recreation Department')).toBe(true)
+    expect(looksLikeDragonFlyAdministrativeEvent('Canton Soccer Referee Assocation - Community Room')).toBe(true)
+    expect(looksLikeDragonFlyAdministrativeEvent('MWSOA - Virtual')).toBe(true)
+    expect(looksLikeDragonFlyAdministrativeEvent('Center: Central High School vs North High School')).toBe(false)
   })
 
   it('uses assigning-platform defaults when the feed does not say the competition level', () => {

@@ -7,7 +7,7 @@ import { fetchCalendarFeedTextWithRetry } from '../src/server/feed-fetch.js'
 import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
 import { revealFeedUrl } from '../src/server/personal-data-security.js'
 import { enqueueFeedSyncJobs, loadSyncJobsForUser, processDueSyncJobs, type SyncJobResult } from '../src/server/sync-jobs.js'
-import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks, inferCompetitionLevelForPlatform, looksLikeAvailabilityBlock, parseRefQuestTeamsFromText } from '../src/server/sync-ics-utils.js'
+import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks, inferCompetitionLevelForPlatform, looksLikeAvailabilityBlock, looksLikeDragonFlyAdministrativeEvent, parseRefQuestTeamsFromText } from '../src/server/sync-ics-utils.js'
 import { buildSyncedGameRow } from '../src/server/sync-merge.js'
 import { assertSyncEventCount, chunkSyncValues, isWithinSyncWindow, MAX_AUTO_MILEAGE_LOOKUPS_PER_SYNC, mileageLookupCandidates } from '../src/server/sync-safety.js'
 
@@ -216,9 +216,10 @@ function parseDragonFlySummary(summary: string, sport: string) {
   }
 }
 
-function inferEventType(text: string, allDay: boolean, startTime: string | null, location: string | null): 'Game' | 'Block' | 'Admin' | 'Travel' {
+function inferEventType(platform: Feed['platform'], text: string, allDay: boolean, startTime: string | null, location: string | null): 'Game' | 'Block' | 'Admin' | 'Travel' {
   if (looksLikeAvailabilityBlock(text)) return 'Block'
   if (/\btravel\b|\bhotel\b|\bflight\b|\bdrive\b|\bout of town\b/i.test(text)) return 'Travel'
+  if (platform === 'DragonFly' && looksLikeDragonFlyAdministrativeEvent(text)) return 'Admin'
   if (/\bmeeting\b|\bclinic\b|\btraining\b|\badmin\b|\bclass\b/i.test(text)) return 'Admin'
   if (allDay) return 'Block'
   if (/\bblocked\b|\bblock\b|\bunavailable\b|\bnot available\b|\bblackout\b|\bhold\b/i.test(text)) return 'Block'
@@ -584,7 +585,7 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
     const allDay = Boolean((ev as any).datetype === 'date')
     const location = trimOrNull(ev.location)
     const startTime = allDay ? null : hhmmInZone(start, userDefaultTimezone)
-    const eventType = inferEventType(text, allDay, startTime, location)
+    const eventType = inferEventType(feed.platform, text, allDay, startTime, location)
     const rawTitle = String(ev.summary || 'Assigned Game')
 
     return {

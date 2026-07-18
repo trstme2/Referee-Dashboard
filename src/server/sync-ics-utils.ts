@@ -1,5 +1,6 @@
 const DRAGONFLY_BLOCK_RANGE_SUFFIX = /\s+\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}\s*(?:am|pm)\s*-\s*\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}\s*(?:am|pm)\s*$/i
 const AVAILABILITY_BLOCK_PATTERN = /\b(availability(?:\s+block)?|unavailable|not\s+available|blocked|blackout|out\s+of\s+office)\b/i
+const DRAGONFLY_ADMIN_PATTERN = /\b(?:soccer\s+)?(?:officials?|referees?)\s+assoc(?:iation|ation)\b|\b(?:MWSOA|NWOSOA|MVSOA)\b/i
 
 type FeedEventSlot = {
   eventType: string
@@ -33,6 +34,12 @@ export function cleanupDragonFlyBlockTitle(title: string): string {
 
 export function looksLikeAvailabilityBlock(text: string): boolean {
   return AVAILABILITY_BLOCK_PATTERN.test(String(text || ''))
+}
+
+export function looksLikeDragonFlyAdministrativeEvent(text: string): boolean {
+  const value = String(text || '')
+  if (/\bvs\b/i.test(value)) return false
+  return DRAGONFLY_ADMIN_PATTERN.test(value)
 }
 
 function platformKey(platform: string): string {
