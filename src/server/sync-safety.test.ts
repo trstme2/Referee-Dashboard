@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   assertSyncEventCount,
+  chunkSyncValues,
   isWithinSyncWindow,
   MAX_AUTO_MILEAGE_LOOKUPS_PER_SYNC,
   MAX_EVENTS_PER_FEED_SYNC,
@@ -18,6 +19,15 @@ describe('sync safety guardrails', () => {
     expect(isWithinSyncWindow(new Date('2025-05-01T12:00:00.000Z'), now)).toBe(false)
     expect(isWithinSyncWindow(new Date('2026-07-17T12:00:00.000Z'), now)).toBe(true)
     expect(isWithinSyncWindow(new Date('2028-08-01T12:00:00.000Z'), now)).toBe(false)
+  })
+
+  it('batches large database filters so sync requests stay within API URL limits', () => {
+    const values = Array.from({ length: 205 }, (_, index) => `event-${index}`)
+    const chunks = chunkSyncValues(values, 100)
+
+    expect(chunks.map((chunk) => chunk.length)).toEqual([100, 100, 5])
+    expect(chunks.flat()).toEqual(values)
+    expect(chunkSyncValues([], 100)).toEqual([])
   })
 
   it('selects only games that need automatic mileage', () => {

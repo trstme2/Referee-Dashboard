@@ -9,7 +9,7 @@ import { revealFeedUrl } from '../src/server/personal-data-security.js'
 import { enqueueFeedSyncJobs, loadSyncJobsForUser, processDueSyncJobs, type SyncJobResult } from '../src/server/sync-jobs.js'
 import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks, inferCompetitionLevelForPlatform, looksLikeAvailabilityBlock, parseRefQuestTeamsFromText } from '../src/server/sync-ics-utils.js'
 import { buildSyncedGameRow } from '../src/server/sync-merge.js'
-import { assertSyncEventCount, isWithinSyncWindow, MAX_AUTO_MILEAGE_LOOKUPS_PER_SYNC, mileageLookupCandidates } from '../src/server/sync-safety.js'
+import { assertSyncEventCount, chunkSyncValues, isWithinSyncWindow, MAX_AUTO_MILEAGE_LOOKUPS_PER_SYNC, mileageLookupCandidates } from '../src/server/sync-safety.js'
 
 export type Feed = {
   id: string
@@ -695,12 +695,16 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
 
   if (staleExistingEvents.length) {
     const staleEventIds = staleExistingEvents.map((event) => String(event.id))
-    const { data: linkedGames, error: staleGamesLookupErr } = await client
-      .from('games')
-      .select('id,status,calendar_event_id')
-      .eq('user_id', feed.user_id)
-      .in('calendar_event_id', staleEventIds)
-    if (staleGamesLookupErr) throw new Error(`games stale lookup: ${staleGamesLookupErr.message}`)
+    const linkedGames: any[] = []
+    for (const staleEventIdBatch of chunkSyncValues(staleEventIds)) {
+      const { data, error: staleGamesLookupErr } = await client
+        .from('games')
+        .select('id,status,calendar_event_id')
+        .eq('user_id', feed.user_id)
+        .in('calendar_event_id', staleEventIdBatch)
+      if (staleGamesLookupErr) throw new Error(`games stale lookup: ${staleGamesLookupErr.message}`)
+      linkedGames.push(...(data ?? []))
+    }
 
     const scheduledLinkedGames = (linkedGames ?? [])
       .filter((game: any) => String(game.status || 'Scheduled') === 'Scheduled')
@@ -714,23 +718,27 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
       .map((event) => String(event.id))
 
     if (scheduledLinkedGames.length) {
-      const { error: staleGamesUpdateErr } = await client
-        .from('games')
-        .update({ status: 'Canceled', updated_at: now })
-        .eq('user_id', feed.user_id)
-        .in('id', scheduledLinkedGames.map((game: any) => String(game.id)))
-      if (staleGamesUpdateErr) throw new Error(`games stale update: ${staleGamesUpdateErr.message}`)
+      for (const staleGameIdBatch of chunkSyncValues(scheduledLinkedGames.map((game: any) => String(game.id)))) {
+        const { error: staleGamesUpdateErr } = await client
+          .from('games')
+          .update({ status: 'Canceled', updated_at: now })
+          .eq('user_id', feed.user_id)
+          .in('id', staleGameIdBatch)
+        if (staleGamesUpdateErr) throw new Error(`games stale update: ${staleGamesUpdateErr.message}`)
+      }
       staleCanceledGames = scheduledLinkedGames.length
       updatedGames += staleCanceledGames
     }
 
     if (staleEventIdsToCancel.length) {
-      const { error: staleEventsUpdateErr } = await client
-        .from('calendar_events')
-        .update({ status: 'Canceled', updated_at: now })
-        .eq('user_id', feed.user_id)
-        .in('id', staleEventIdsToCancel)
-      if (staleEventsUpdateErr) throw new Error(`calendar_events stale update: ${staleEventsUpdateErr.message}`)
+      for (const staleEventIdBatch of chunkSyncValues(staleEventIdsToCancel)) {
+        const { error: staleEventsUpdateErr } = await client
+          .from('calendar_events')
+          .update({ status: 'Canceled', updated_at: now })
+          .eq('user_id', feed.user_id)
+          .in('id', staleEventIdBatch)
+        if (staleEventsUpdateErr) throw new Error(`calendar_events stale update: ${staleEventsUpdateErr.message}`)
+      }
       staleCanceledEvents = staleEventIdsToCancel.length
       updatedEvents += staleCanceledEvents
     }
