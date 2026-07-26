@@ -1,4 +1,4 @@
-import { isFeedUrlEncrypted, isFeedUrlEncryptionConfigured, isHashedCalendarExportToken, protectFeedUrl, revealFeedUrl } from './personal-data-security.js'
+import { hashCalendarExportToken, isFeedUrlEncrypted, isFeedUrlEncryptionConfigured, isHashedCalendarExportToken, protectFeedUrl, revealFeedUrl } from './personal-data-security.js'
 
 type FeedRow = { id: string; feed_url: string | null }
 type SettingsRow = { user_id: string; calendar_export_token: string | null }
@@ -103,19 +103,24 @@ export async function migrateLegacySensitiveData(serviceClient: any) {
     encryptedFeeds += 1
   }
 
-  const legacyTokenUserIds = rows.settings
-    .filter((setting) => {
-      const token = asText(setting.calendar_export_token)
-      return Boolean(token) && !isHashedCalendarExportToken(token)
-    })
-    .map((setting) => setting.user_id)
+  let hashedCalendarExportTokens = 0
+  for (const setting of rows.settings) {
+    const legacyToken = asText(setting.calendar_export_token)
+    if (!legacyToken || isHashedCalendarExportToken(legacyToken)) continue
 
-  if (legacyTokenUserIds.length) {
-    const { error } = await serviceClient
+    const protectedToken = hashCalendarExportToken(legacyToken)
+    const { data, error } = await serviceClient
       .from('user_settings')
-      .update({ calendar_export_token: null, updated_at: now })
-      .in('user_id', legacyTokenUserIds)
+      .update({ calendar_export_token: protectedToken, updated_at: now })
+      .eq('user_id', setting.user_id)
+      .eq('calendar_export_token', setting.calendar_export_token)
+      .select('calendar_export_token')
+      .maybeSingle()
     if (error) throw new Error(`user_settings: ${error.message}`)
+    if (!data || !isHashedCalendarExportToken(data.calendar_export_token)) {
+      throw new Error('A calendar subscription token changed while the migration was running')
+    }
+    hashedCalendarExportTokens += 1
   }
 
   const after = await loadSensitiveDataMigrationStatus(serviceClient)
@@ -125,7 +130,7 @@ export async function migrateLegacySensitiveData(serviceClient: any) {
 
   return {
     encryptedFeeds,
-    invalidatedCalendarExportTokens: legacyTokenUserIds.length,
+    hashedCalendarExportTokens,
     before,
     after,
   }

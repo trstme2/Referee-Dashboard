@@ -202,7 +202,7 @@ export default function AdminPage() {
 
   async function runSensitiveDataMigration() {
     const confirmation = window.prompt(
-      'This encrypts legacy calendar feed URLs and invalidates old calendar subscription links. Type MIGRATE SENSITIVE DATA to continue.',
+      'This encrypts legacy calendar feed URLs and protects existing calendar subscription tokens without changing their URLs. Type MIGRATE SENSITIVE DATA to continue.',
     )
     if (confirmation == null) return
 
@@ -216,12 +216,12 @@ export default function AdminPage() {
       })
       const migration = json.migration as {
         encryptedFeeds: number
-        invalidatedCalendarExportTokens: number
+        hashedCalendarExportTokens: number
         after: SensitiveDataMigrationStatus
       }
       setMigrationStatus(migration.after)
       setMigrationMessage(
-        `Completed: encrypted ${migration.encryptedFeeds} legacy feed URL${migration.encryptedFeeds === 1 ? '' : 's'} and invalidated ${migration.invalidatedCalendarExportTokens} legacy calendar subscription token${migration.invalidatedCalendarExportTokens === 1 ? '' : 's'}.`,
+        `Completed: encrypted ${migration.encryptedFeeds} legacy feed URL${migration.encryptedFeeds === 1 ? '' : 's'} and protected ${migration.hashedCalendarExportTokens} existing calendar subscription token${migration.hashedCalendarExportTokens === 1 ? '' : 's'} without changing any URLs.`,
       )
     } catch (e: any) {
       setMigrationError(String(e?.message ?? e))
@@ -331,7 +331,7 @@ export default function AdminPage() {
                 <HealthRow label="Legacy calendar subscription tokens" value={migrationStatus.legacyCalendarExportTokens} />
                 <HealthRow label="Hashed calendar subscription tokens" value={migrationStatus.hashedCalendarExportTokens} />
               </div>
-              <p className="small">Before running this, set <code>FEED_URL_ENCRYPTION_KEY</code> in Vercel Production. Existing calendar subscriptions using a legacy URL will stop working; each affected referee can get a new subscription URL from Settings.</p>
+              <p className="small">Before running this, set <code>FEED_URL_ENCRYPTION_KEY</code> in Vercel Production. Existing calendar subscription URLs remain valid. For privacy, Settings cannot display an already protected URL again; users can regenerate one later if they need to copy it.</p>
               <div className="btnbar">
                 <button
                   className="btn primary"

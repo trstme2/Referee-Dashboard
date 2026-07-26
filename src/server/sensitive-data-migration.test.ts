@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { summarizeSensitiveDataMigration } from './sensitive-data-migration.js'
+import { calendarExportTokenLookupValues } from './calendar-export-utils.js'
+import { isHashedCalendarExportToken } from './personal-data-security.js'
+import { migrateLegacySensitiveData, summarizeSensitiveDataMigration } from './sensitive-data-migration.js'
 
 const originalKey = process.env.FEED_URL_ENCRYPTION_KEY
 
@@ -30,5 +32,54 @@ describe('sensitive data migration inventory', () => {
       hashedCalendarExportTokens: 1,
       missingCalendarExportTokens: 1,
     })
+  })
+
+  it('hashes a legacy subscription token without changing the calendar URL that uses it', async () => {
+    const token = 'c'.repeat(64)
+    const state = {
+      feeds: [] as Array<{ id: string; feed_url: string | null }>,
+      settings: [{ user_id: 'user-1', calendar_export_token: token }],
+    }
+    process.env.FEED_URL_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString('base64')
+
+    const client = {
+      from(table: string) {
+        if (table === 'calendar_feeds') {
+          return {
+            select: () => ({ limit: async () => ({ data: state.feeds, error: null }) }),
+          }
+        }
+
+        return {
+          select: () => ({ limit: async () => ({ data: state.settings, error: null }) }),
+          update(values: Record<string, string>) {
+            const matches: Array<[string, unknown]> = []
+            const query = {
+              eq(column: string, value: unknown) {
+                matches.push([column, value])
+                return query
+              },
+              select() {
+                return {
+                  maybeSingle: async () => {
+                    const setting = state.settings.find((candidate) => matches.every(([column, value]) => candidate[column as keyof typeof candidate] === value))
+                    if (!setting) return { data: null, error: null }
+                    Object.assign(setting, values)
+                    return { data: { calendar_export_token: setting.calendar_export_token }, error: null }
+                  },
+                }
+              },
+            }
+            return query
+          },
+        }
+      },
+    }
+
+    const migration = await migrateLegacySensitiveData(client)
+
+    expect(migration.hashedCalendarExportTokens).toBe(1)
+    expect(isHashedCalendarExportToken(state.settings[0].calendar_export_token)).toBe(true)
+    expect(calendarExportTokenLookupValues(token)).toContain(state.settings[0].calendar_export_token)
   })
 })

@@ -577,13 +577,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const migration = await migrateLegacySensitiveData(serviceClient)
       await recordAppEvent(serviceClient, profile.userId, 'sensitive_data_migration_completed', 'server', {
         encryptedFeeds: migration.encryptedFeeds,
-        invalidatedCalendarExportTokens: migration.invalidatedCalendarExportTokens,
+        hashedCalendarExportTokens: migration.hashedCalendarExportTokens,
       })
       logApiDone(route, requestStartedAtMs, {
         status: 200,
         action: 'migrate-sensitive-data',
         encryptedFeeds: migration.encryptedFeeds,
-        invalidatedCalendarExportTokens: migration.invalidatedCalendarExportTokens,
+        hashedCalendarExportTokens: migration.hashedCalendarExportTokens,
       })
       return res.status(200).json({ migration })
     }

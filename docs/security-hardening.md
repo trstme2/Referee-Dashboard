@@ -31,9 +31,9 @@ Before running it:
 3. Sign in as the owner and open `/admin`.
 4. Confirm the status shows `Encryption key ready`, then select **Protect legacy data** and type `MIGRATE SENSITIVE DATA` exactly.
 
-The migration preflights the configured key against existing encrypted feed values, encrypts and verifies each remaining plaintext feed URL, and clears legacy calendar-export tokens. It is idempotent: if an interruption occurs, rerun it and it resumes with the rows that remain.
+The migration preflights the configured key against existing encrypted feed values, encrypts and verifies each remaining plaintext feed URL, and converts legacy calendar-export tokens into one-way hashes. It is idempotent: if an interruption occurs, rerun it and it resumes with the rows that remain.
 
-Clearing a legacy calendar-export token intentionally invalidates its old unauthenticated calendar URL. Affected users can open Settings after the migration to receive a new subscription URL. Treat that URL like a password.
+Hashing retains the exact existing calendar subscription URL, so Google Calendar, Apple Calendar, and Outlook subscriptions continue working without being removed or recreated. For privacy, Settings cannot display an already protected URL again; a user can explicitly regenerate a new URL later if they need to copy it. Treat copied subscription URLs like passwords.
 
 ## Manual QA
 
