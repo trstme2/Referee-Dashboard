@@ -24,6 +24,15 @@ type RequirementTemplate = Pick<RequirementDefinition, 'name' | 'frequency' | 'r
   governingBody?: string
 }
 
+type RequirementContext = {
+  sport: string
+  competitionLevel: string
+  governingBody: string
+  seasonName: string
+  year: string
+  dueDate: string
+}
+
 const requirementTemplates: RequirementTemplate[] = [
   { id: 'registration', name: 'Registration', frequency: 'Season', requiredCount: 1, evidenceType: 'Document', notes: 'Track annual or seasonal registration confirmation.' },
   { id: 'dues', name: 'Dues / Payment', frequency: 'Season', requiredCount: 1, evidenceType: 'Document', notes: 'Track association, chapter, league, or platform dues.' },
@@ -75,10 +84,6 @@ function replaceYearText(value: string | undefined, fromYear: number | undefined
 
 export default function RequirementsPage() {
   const { db, write, loading, mode, session } = useData()
-  const [selectedDef, setSelectedDef] = useState(db.requirementDefinitions[0]?.id ?? '')
-  const [seasonName, setSeasonName] = useState('Spring 2026')
-  const [year, setYear] = useState(String(new Date().getFullYear()))
-  const [dueDate, setDueDate] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState({
     seasonName: '',
@@ -95,6 +100,19 @@ export default function RequirementsPage() {
   })
   const [duplicateTargets, setDuplicateTargets] = useState<Record<string, { seasonName: string; year: string }>>({})
   const [selectedReadinessKey, setSelectedReadinessKey] = useState<string | null>(null)
+  const [addingRequirement, setAddingRequirement] = useState(false)
+  const [quickAddGroupKey, setQuickAddGroupKey] = useState<string | null>(null)
+  const [quickAddMessage, setQuickAddMessage] = useState('')
+  const [quickAdd, setQuickAdd] = useState<RequirementContext & { templateId: string; customName: string }>({
+    templateId: 'registration',
+    customName: '',
+    sport: 'Soccer',
+    competitionLevel: 'Club',
+    governingBody: '',
+    seasonName: '',
+    year: String(new Date().getFullYear()),
+    dueDate: '',
+  })
 
   const [newDef, setNewDef] = useState({
     name: '',
@@ -108,7 +126,6 @@ export default function RequirementsPage() {
   })
 
   const defs = db.requirementDefinitions
-  const hasDefinitions = defs.length > 0
   const today = yyyyMmDd(new Date())
   const sportOptions = useMemo(
     () => trackedSportsFor(db.settings.trackedSports, defs.map(d => d.sport).filter((sport): sport is string => Boolean(sport && sport !== 'Any'))),
@@ -259,6 +276,11 @@ export default function RequirementsPage() {
     [readinessGroups, selectedReadinessKey]
   )
 
+  const quickAddTargetGroup = useMemo(
+    () => readinessGroups.find(group => group.key === quickAddGroupKey) ?? null,
+    [quickAddGroupKey, readinessGroups]
+  )
+
   const displayedInstances = useMemo(() => {
     if (!selectedReadinessGroup) return instances
     const ids = new Set(selectedReadinessGroup.items.map(({ i }) => i.id))
@@ -342,7 +364,6 @@ export default function RequirementsPage() {
       notes: newDef.notes.trim() || undefined,
     })
     await write(next)
-    setSelectedDef(next.requirementDefinitions[0].id)
     setNewDef({
       name: '',
       governingBody: '',
@@ -370,17 +391,124 @@ export default function RequirementsPage() {
     })
   }
 
-  async function createInstance() {
-    if (!selectedDef) return
-    const next = createRequirementInstanceIn(db, selectedDef, seasonName || undefined, parseOptionalYear(year), dueDate || undefined)
+  function groupRequirementContext(group: (typeof readinessGroups)[number]): RequirementContext {
+    return {
+      sport: group.sport === 'Any sport' ? 'Any' : group.sport,
+      competitionLevel: group.competitionLevel === 'Any level' ? 'Any' : group.competitionLevel,
+      governingBody: group.governingBody === 'Independent' ? '' : group.governingBody,
+      seasonName: group.seasonName ?? '',
+      year: group.year != null ? String(group.year) : '',
+      dueDate: '',
+    }
+  }
+
+  function openQuickAdd(group?: (typeof readinessGroups)[number]) {
+    const target = group ?? selectedReadinessGroup
+    setQuickAdd({
+      templateId: 'registration',
+      customName: '',
+      ...(target
+        ? groupRequirementContext(target)
+        : {
+            sport: sportOptions[0] ?? 'Soccer',
+            competitionLevel: 'Club',
+            governingBody: '',
+            seasonName: '',
+            year: String(new Date().getFullYear()),
+            dueDate: '',
+          }),
+    })
+    setQuickAddGroupKey(target?.key ?? null)
+    setQuickAddMessage('')
+    setAddingRequirement(true)
+    window.setTimeout(() => {
+      document.getElementById('season-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 0)
+  }
+
+  async function createQuickRequirement() {
+    const template = requirementTemplates.find((item) => item.id === quickAdd.templateId)
+    if (!template) return
+
+    const context = quickAddGroupKey
+      ? readinessGroups.find((group) => group.key === quickAddGroupKey)
+      : null
+    const groupContext = context
+      ? { ...groupRequirementContext(context), dueDate: quickAdd.dueDate }
+      : quickAdd
+    const yearValue = parseOptionalYear(groupContext.year)
+    const requirementName = template.id === 'custom' ? quickAdd.customName.trim() : template.name
+
+    if (!requirementName) {
+      setQuickAddMessage('Name your custom requirement before adding it.')
+      return
+    }
+    if (!groupContext.seasonName.trim() || !yearValue) {
+      setQuickAddMessage('Choose a season name and four-digit year before adding a requirement.')
+      return
+    }
+
+    const normalizedGoverningBody = groupContext.governingBody.trim()
+    const normalizedSport = groupContext.sport.trim() || 'Any'
+    const normalizedLevel = groupContext.competitionLevel.trim() || 'Any'
+    const matchingDefinition = defs.find((definition) => (
+      definition.name.trim().toLocaleLowerCase() === requirementName.toLocaleLowerCase()
+      && (definition.governingBody ?? '').trim().toLocaleLowerCase() === normalizedGoverningBody.toLocaleLowerCase()
+      && (definition.sport ?? 'Any') === normalizedSport
+      && (definition.competitionLevel ?? 'Any') === normalizedLevel
+      && definition.frequency === template.frequency
+    ))
+
+    let next = db
+    let definitionId = matchingDefinition?.id
+    if (!definitionId) {
+      next = addRequirementDefinitionIn(next, {
+        name: requirementName,
+        governingBody: normalizedGoverningBody || undefined,
+        sport: normalizedSport as RequirementDefinition['sport'],
+        competitionLevel: normalizedLevel as RequirementDefinition['competitionLevel'],
+        frequency: template.frequency,
+        requiredCount: template.requiredCount,
+        evidenceType: template.evidenceType,
+        notes: template.notes || undefined,
+      })
+      definitionId = next.requirementDefinitions[0].id
+    }
+
+    const duplicate = next.requirementInstances.some((instance) => (
+      instance.definitionId === definitionId
+      && (instance.seasonName ?? '') === groupContext.seasonName.trim()
+      && instance.year === yearValue
+    ))
+    if (duplicate) {
+      setQuickAddMessage(`${requirementName} is already tracked for this season.`)
+      return
+    }
+
+    next = createRequirementInstanceIn(
+      next,
+      definitionId,
+      groupContext.seasonName.trim(),
+      yearValue,
+      groupContext.dueDate || undefined,
+    )
     await write(next)
-    const definition = db.requirementDefinitions.find((item) => item.id === selectedDef)
+    const newGroupKey = [
+      normalizedSport === 'Any' ? 'Any sport' : normalizedSport,
+      normalizedLevel === 'Any' ? 'Any level' : normalizedLevel,
+      normalizedGoverningBody || 'Independent',
+      groupContext.seasonName.trim(),
+      String(yearValue),
+    ].join('::')
+    setSelectedReadinessKey(newGroupKey)
+    setQuickAddGroupKey(newGroupKey)
+    setQuickAddMessage(`${requirementName} is now tracked for ${groupContext.seasonName.trim()} ${yearValue}.`)
     void recordPlatformEvent(session?.access_token, 'readiness_group_created', {
-      action: 'create_tracker',
-      evidenceType: definition?.evidenceType ?? 'unknown',
-      frequency: definition?.frequency ?? 'unknown',
-      hasDueDate: Boolean(dueDate),
-      hasYear: Boolean(parseOptionalYear(year)),
+      action: matchingDefinition ? 'add_to_season' : 'create_requirement_and_tracker',
+      evidenceType: template.evidenceType,
+      frequency: template.frequency,
+      hasDueDate: Boolean(groupContext.dueDate),
+      hasYear: true,
     })
   }
 
@@ -579,14 +707,10 @@ export default function RequirementsPage() {
     }
   }
 
-  function jumpToDefinitionForm() {
-    document.getElementById('requirement-definition-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
   function openReadinessGroup(groupKey: string) {
     setSelectedReadinessKey(groupKey)
     window.setTimeout(() => {
-      document.getElementById('requirement-tracker-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      document.getElementById('season-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 0)
   }
 
@@ -657,7 +781,7 @@ export default function RequirementsPage() {
             <h2>Readiness</h2>
             <p className="sub">Track whether you are ready to officiate by sport, level, governing body, and season.</p>
           </div>
-          <button className="btn primary" onClick={jumpToDefinitionForm}>Add requirement</button>
+          <button className="btn primary" onClick={() => openQuickAdd()}>Add requirement</button>
         </div>
         <div className="kpi compact-kpi requirement-kpi">
           <div className="box">
@@ -701,21 +825,10 @@ export default function RequirementsPage() {
         {readinessGroups.length ? (
           <div className="readiness-group-grid">
             {readinessGroups.map((group) => {
-              const target = duplicateTargetFor(group)
               return (
                 <article
                   key={group.key}
                   className={`readiness-group-card ${selectedReadinessKey === group.key ? 'selected' : ''}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => openReadinessGroup(group.key)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      openReadinessGroup(group.key)
-                    }
-                  }}
-                  aria-label={`Open requirements for ${group.title} ${group.subtitle}`}
                 >
                   <div className="readiness-group-head">
                     <div>
@@ -746,19 +859,9 @@ export default function RequirementsPage() {
                     {group.remaining === 0 ? <p className="small">All tracked items are complete or waived.</p> : null}
                     {group.remaining > 4 ? <p className="small">+{group.remaining - 4} more remaining</p> : null}
                   </div>
-                  <div className="readiness-duplicate-panel" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
-                    <div className="expanded-label">Duplicate this season</div>
-                    <div className="row">
-                      <div className="field">
-                        <label>New season</label>
-                        <input value={target.seasonName} onChange={e => setDuplicateTarget(group.key, { seasonName: e.target.value })} />
-                      </div>
-                      <div className="field">
-                        <label>Year</label>
-                        <input type="number" min={1900} max={2100} step={1} value={target.year} onChange={e => setDuplicateTarget(group.key, { year: e.target.value })} />
-                      </div>
-                    </div>
-                    <button className="btn compact" onClick={() => duplicateReadinessGroup(group)} disabled={loading}>Create next season</button>
+                  <div className="readiness-group-actions">
+                    <button className="btn compact" type="button" onClick={() => openReadinessGroup(group.key)}>View requirements</button>
+                    <button className="btn compact primary" type="button" onClick={() => openQuickAdd(group)}>Add requirement</button>
                   </div>
                 </article>
               )
@@ -768,9 +871,146 @@ export default function RequirementsPage() {
           <div className="empty-state centered requirement-empty-state">
             <h3>No readiness groups yet</h3>
             <p>Add requirement trackers for a sport, level, governing body, and season. Whistle Keeper will turn them into readiness cards automatically.</p>
-            <button className="btn primary" onClick={jumpToDefinitionForm}>Add first requirement</button>
+            <button className="btn primary" onClick={() => openQuickAdd()}>Create your first season</button>
           </div>
         )}
+      </section>
+
+      <section className="card season-workspace-card" id="season-workspace">
+        <div className="page-section-head">
+          <div>
+            <p className="section-kicker">Season workspace</p>
+            <h2>{selectedReadinessGroup ? selectedReadinessGroup.title : 'Choose a season to get started'}</h2>
+            <p className="sub">
+              {selectedReadinessGroup
+                ? `${selectedReadinessGroup.subtitle} | ${groupProgressText(selectedReadinessGroup)}`
+                : 'Open a season above to work through its requirements, or create a new season readiness plan.'}
+            </p>
+          </div>
+          {selectedReadinessGroup ? (
+            <button className="btn" type="button" onClick={() => setSelectedReadinessKey(null)}>Clear selection</button>
+          ) : (
+            <button className="btn primary" type="button" onClick={() => openQuickAdd()}>Create a season</button>
+          )}
+        </div>
+
+        {addingRequirement ? (
+          <div className="quick-requirement-panel">
+            <div className="quick-requirement-heading">
+              <div>
+                <h3>{quickAddTargetGroup ? `Add to ${quickAddTargetGroup.title}` : 'Create a season requirement'}</h3>
+                <p>
+                  {quickAddTargetGroup
+                    ? `This requirement will be added to ${quickAddTargetGroup.subtitle}.`
+                    : 'Set the season context once, then add the first requirement that makes the season trackable.'}
+                </p>
+              </div>
+              {quickAddTargetGroup ? <span className="pill info">Existing season</span> : <span className="pill warn">New season</span>}
+            </div>
+
+            {quickAddTargetGroup ? (
+              <div className="season-context-summary">
+                <span>{quickAddTargetGroup.sport}</span>
+                <span>{quickAddTargetGroup.competitionLevel}</span>
+                <span>{quickAddTargetGroup.governingBody}</span>
+                <span>{quickAddTargetGroup.seasonName} {quickAddTargetGroup.year}</span>
+              </div>
+            ) : (
+              <div className="quick-context-grid">
+                <div className="field">
+                  <label>Sport</label>
+                  <select value={quickAdd.sport} onChange={e => setQuickAdd({ ...quickAdd, sport: e.target.value })}>
+                    <option value="Any">Any sport</option>
+                    {sportOptions.map((sport) => <option key={sport} value={sport}>{sport}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Level</label>
+                  <select value={quickAdd.competitionLevel} onChange={e => setQuickAdd({ ...quickAdd, competitionLevel: e.target.value })}>
+                    <option value="Any">Any level</option>
+                    <option value="High School">High School</option>
+                    <option value="College">College</option>
+                    <option value="Club">Club</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Governing body</label>
+                  <input value={quickAdd.governingBody} onChange={e => setQuickAdd({ ...quickAdd, governingBody: e.target.value })} placeholder="e.g., US Soccer or local association" />
+                </div>
+                <div className="field">
+                  <label>Season</label>
+                  <input value={quickAdd.seasonName} onChange={e => setQuickAdd({ ...quickAdd, seasonName: e.target.value })} placeholder="e.g., Fall" />
+                </div>
+                <div className="field">
+                  <label>Year</label>
+                  <input type="number" min={1900} max={2100} step={1} value={quickAdd.year} onChange={e => setQuickAdd({ ...quickAdd, year: e.target.value })} />
+                </div>
+              </div>
+            )}
+
+            <div className="quick-template-grid" aria-label="Requirement type">
+              {requirementTemplates.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  className={`quick-template-option ${quickAdd.templateId === template.id ? 'selected' : ''}`}
+                  onClick={() => {
+                    setQuickAdd({ ...quickAdd, templateId: template.id })
+                    setQuickAddMessage('')
+                  }}
+                >
+                  <strong>{template.name}</strong>
+                  <span>{template.requiredCount && template.requiredCount > 1 ? `${template.requiredCount} required` : template.frequency}</span>
+                </button>
+              ))}
+            </div>
+
+            {quickAdd.templateId === 'custom' ? (
+              <div className="field quick-custom-name">
+                <label>Requirement name</label>
+                <input value={quickAdd.customName} onChange={e => setQuickAdd({ ...quickAdd, customName: e.target.value })} placeholder="e.g., Regional clinic, membership, background check" autoFocus />
+              </div>
+            ) : null}
+
+            <div className="quick-add-footer">
+              <div className="field quick-due-date">
+                <label>Due date <span className="field-optional">Optional</span></label>
+                <input type="date" value={quickAdd.dueDate} onChange={e => setQuickAdd({ ...quickAdd, dueDate: e.target.value })} />
+              </div>
+              <div className="quick-add-actions">
+                <button className="btn primary" type="button" onClick={createQuickRequirement} disabled={loading}>Add requirement</button>
+                <button className="btn" type="button" onClick={() => { setAddingRequirement(false); setQuickAddMessage('') }} disabled={loading}>Cancel</button>
+              </div>
+            </div>
+            {quickAddMessage ? <p className="quick-add-message" role="status">{quickAddMessage}</p> : null}
+          </div>
+        ) : selectedReadinessGroup ? (
+          <div className="season-workspace-empty">
+            <div>
+              <strong>Add the next item this season requires.</strong>
+              <p>Start from a common requirement, add a due date if you know it, and Whistle Keeper will keep it with this season.</p>
+            </div>
+            <button className="btn primary" type="button" onClick={() => openQuickAdd(selectedReadinessGroup)}>Add requirement</button>
+          </div>
+        ) : null}
+
+        {selectedReadinessGroup ? (
+          <details className="season-rollover">
+            <summary>Plan next season</summary>
+            <p>Copy this season's requirement trackers and shift their due dates forward one year. Activities and uploaded proof are not copied.</p>
+            <div className="row">
+              <div className="field">
+                <label>New season</label>
+                <input value={duplicateTargetFor(selectedReadinessGroup).seasonName} onChange={e => setDuplicateTarget(selectedReadinessGroup.key, { seasonName: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Year</label>
+                <input type="number" min={1900} max={2100} step={1} value={duplicateTargetFor(selectedReadinessGroup).year} onChange={e => setDuplicateTarget(selectedReadinessGroup.key, { year: e.target.value })} />
+              </div>
+            </div>
+            <button className="btn compact" type="button" onClick={() => duplicateReadinessGroup(selectedReadinessGroup)} disabled={loading}>Create next season</button>
+          </details>
+        ) : null}
       </section>
 
       <section className="card requirement-attention-card">
@@ -802,49 +1042,12 @@ export default function RequirementsPage() {
         )}
       </section>
 
-      <section className="grid cols2 requirement-setup-grid">
-        <div className="card">
-          <h2>Add requirement tracker</h2>
-          <p className="sub">Apply a reusable requirement to a specific sport season, certification year, or governing body.</p>
-
-          {hasDefinitions ? (
-            <>
-              <div className="field">
-                <label>Requirement template</label>
-                <select value={selectedDef} onChange={e => setSelectedDef(e.target.value)}>
-                  {defs.map(d => <option key={d.id} value={d.id}>{d.name}{d.governingBody ? ` (${d.governingBody})` : ''}</option>)}
-                </select>
-              </div>
-              <div className="row">
-                <div className="field">
-                  <label>Season</label>
-                  <input value={seasonName} onChange={e => setSeasonName(e.target.value)} />
-                </div>
-                <div className="field">
-                  <label>Year</label>
-                  <input type="number" min={1900} max={2100} step={1} value={year} onChange={e => setYear(e.target.value)} />
-                </div>
-                <div className="field">
-                  <label>Due date</label>
-                  <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                </div>
-              </div>
-              <button className="btn primary" onClick={createInstance} disabled={loading || !selectedDef}>Create tracker</button>
-            </>
-          ) : (
-            <div className="empty-state">
-              <h3>No requirement templates yet</h3>
-              <p>Create a reusable requirement template first, then turn it into a season or annual tracker.</p>
-              <button className="btn primary" onClick={jumpToDefinitionForm}>Create template</button>
-            </div>
-          )}
-        </div>
-
-        <div className="card" id="requirement-definition-form">
-          <h2>Requirement template</h2>
-          <p className="sub">Start from a common official requirement, then customize it for your association or sport.</p>
+      <section className="card requirement-template-manager" id="requirement-definition-form">
+        <details>
+          <summary>Manage custom requirement templates</summary>
+          <p className="sub">Most season requirements can be added above in one step. Use this only when you want a reusable custom template with its own defaults.</p>
           <div className="field">
-            <label>Common template</label>
+            <label>Start with a common template</label>
             <select defaultValue="" onChange={e => applyTemplate(e.target.value)}>
               <option value="" disabled>Choose a template...</option>
               {requirementTemplates.map(template => (
@@ -909,8 +1112,8 @@ export default function RequirementsPage() {
             <label>Notes</label>
             <input value={newDef.notes} onChange={e => setNewDef({ ...newDef, notes: e.target.value })} placeholder="Anything you want to remember about this requirement" />
           </div>
-          <button className="btn primary" onClick={createDefinition} disabled={!newDef.name.trim()}>Create requirement template</button>
-        </div>
+          <button className="btn primary" type="button" onClick={createDefinition} disabled={loading || !newDef.name.trim()}>Save custom template</button>
+        </details>
       </section>
 
       <section className="card requirement-tracker-card" id="requirement-tracker-card">
@@ -1060,15 +1263,11 @@ export default function RequirementsPage() {
             <div className="empty-state centered requirement-empty-state">
               <h3>{selectedReadinessGroup ? 'No requirements in this group' : 'No tracked requirements yet'}</h3>
               <p>
-                {hasDefinitions
-                  ? 'Pick a requirement template above and create your first tracked season so activities and document evidence have a place to live.'
-                  : 'Start by creating a reusable requirement template, then turn it into a tracked season or annual item.'}
+                {selectedReadinessGroup
+                  ? 'Use the season workspace above to add the first item this season requires.'
+                  : 'Choose a season readiness card above, or create a new season plan to begin tracking requirements.'}
               </p>
-              {hasDefinitions ? (
-                <button className="btn primary" onClick={createInstance} disabled={loading || !selectedDef}>Create first tracker</button>
-              ) : (
-                <button className="btn primary" onClick={jumpToDefinitionForm}>Create a template first</button>
-              )}
+              <button className="btn primary" type="button" onClick={() => openQuickAdd(selectedReadinessGroup ?? undefined)} disabled={loading}>Add requirement</button>
             </div>
           )}
         </div>

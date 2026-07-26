@@ -66,6 +66,59 @@ test('games page renders a persisted 7 PM default start time', async ({ page }) 
   await expect(page.locator('body')).toContainText('19:00')
 })
 
+test('requirements can add a common requirement directly to a selected season', async ({ page }) => {
+  await page.addInitScript(() => {
+    const now = '2026-07-26T12:00:00.000Z'
+    window.localStorage.setItem('referee_dashboard_db_v4_local', JSON.stringify({
+      settings: {
+        homeAddress: '',
+        defaultTimezone: 'America/New_York',
+        trackedSports: ['Soccer'],
+        showGamePlatformChips: true,
+        assigningPlatforms: [],
+        leagues: [],
+      },
+      games: [],
+      calendarEvents: [],
+      expenses: [],
+      requirementDefinitions: [{
+        id: 'club-registration',
+        name: 'Registration',
+        governingBody: 'Club Association',
+        sport: 'Soccer',
+        competitionLevel: 'Club',
+        frequency: 'Season',
+        requiredCount: 1,
+        evidenceType: 'Document',
+        createdAt: now,
+        updatedAt: now,
+      }],
+      requirementInstances: [{
+        id: 'club-registration-2026',
+        definitionId: 'club-registration',
+        seasonName: 'Fall',
+        year: 2026,
+        status: 'Not Started',
+        createdAt: now,
+        updatedAt: now,
+      }],
+      requirementActivities: [],
+      csvImports: [],
+      csvImportRows: [],
+    }))
+  })
+
+  await page.goto('/requirements')
+  const seasonCard = page.locator('.readiness-group-card').filter({ hasText: 'Club Association' })
+  await seasonCard.getByRole('button', { name: 'Add requirement' }).click()
+  await expect(page.getByRole('heading', { name: 'Add to Soccer 2026' })).toBeVisible()
+  await page.getByRole('button', { name: 'Dues / Payment' }).click()
+  await page.locator('.quick-requirement-panel input[type="date"]').fill('2026-09-01')
+  await page.locator('.quick-requirement-panel').getByRole('button', { name: 'Add requirement' }).click()
+  await expect(page.locator('#requirement-tracker-card')).toContainText('Dues / Payment')
+  await expect(page.locator('#requirement-tracker-card')).toContainText('Due 2026-09-01')
+})
+
 test('mobile calendar smoke has synchronized controls and no page-level horizontal scroll', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/calendar')

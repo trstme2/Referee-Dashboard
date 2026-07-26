@@ -35,6 +35,10 @@ Use only the headings that apply.
 
 - Added an owner-only, one-time Sensitive Data Migration control in Admin that inventories legacy calendar data without displaying secrets, encrypts legacy feed URLs, and converts legacy plaintext calendar-export tokens into hashes without changing their URLs.
 
+### Changed
+
+- Reworked Requirements into a season-first workspace: each readiness card now has direct View requirements and Add requirement actions, common requirement types can be added to the selected season without managing templates first, and season rollover/template controls are kept secondary to the day-to-day workflow.
+
 ### Fixed
 
 - Made the production security-hardening SQL patch safe to rerun against partially migrated databases: absent base-schema tables are skipped and surfaced by the read-only drift check instead of aborting the transaction.

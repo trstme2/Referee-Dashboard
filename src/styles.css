@@ -2903,14 +2903,214 @@ body {
   white-space: nowrap;
 }
 
-.readiness-duplicate-panel {
-  margin-top: 12px;
+.readiness-group-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid rgba(148, 163, 184, 0.14);
 }
 
-.readiness-duplicate-panel .row {
-  margin: 6px 0 8px;
+.readiness-group-actions .btn {
+  flex: 1 1 0;
+}
+
+.season-workspace-card {
+  border-color: rgba(96, 165, 250, 0.32);
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.1), transparent 30%),
+    rgba(15, 23, 42, 0.78);
+}
+
+.section-kicker {
+  margin: 0 0 5px;
+  color: #93c5fd;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.season-workspace-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 6px;
+  padding: 16px;
+  border: 1px dashed rgba(96, 165, 250, 0.42);
+  border-radius: 12px;
+  background: rgba(37, 99, 235, 0.07);
+}
+
+.season-workspace-empty strong,
+.quick-requirement-heading h3 {
+  color: #f8fbff;
+}
+
+.season-workspace-empty p,
+.quick-requirement-heading p {
+  margin: 5px 0 0;
+  color: #aebcd0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.quick-requirement-panel {
+  display: grid;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid rgba(96, 165, 250, 0.38);
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.32);
+}
+
+.quick-requirement-heading,
+.quick-add-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.quick-requirement-heading h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.season-context-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.season-context-summary span {
+  padding: 6px 9px;
+  border: 1px solid rgba(147, 197, 253, 0.24);
+  border-radius: 999px;
+  color: #dbeafe;
+  background: rgba(37, 99, 235, 0.12);
+  font-size: 12px;
+}
+
+.quick-context-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.quick-context-grid .field:nth-child(3) {
+  grid-column: span 2;
+}
+
+.quick-template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.quick-template-option {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 11px;
+  color: #dbeafe;
+  background: rgba(15, 23, 42, 0.54);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.quick-template-option:hover,
+.quick-template-option:focus-visible {
+  border-color: rgba(96, 165, 250, 0.7);
+  background: rgba(37, 99, 235, 0.14);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.quick-template-option.selected {
+  border-color: rgba(67, 209, 158, 0.78);
+  background: rgba(16, 185, 129, 0.12);
+  box-shadow: 0 0 0 1px rgba(67, 209, 158, 0.16);
+}
+
+.quick-template-option strong {
+  overflow: hidden;
+  color: #f8fbff;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-template-option span {
+  color: #9fb1c8;
+  font-size: 11px;
+}
+
+.quick-custom-name,
+.quick-due-date {
+  margin: 0;
+}
+
+.quick-due-date {
+  min-width: 175px;
+}
+
+.quick-add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.field-optional {
+  color: #8a9bb3;
+  font-weight: 400;
+}
+
+.quick-add-message {
+  margin: -4px 0 0;
+  color: #bfdbfe;
+  font-size: 13px;
+}
+
+.season-rollover {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.season-rollover summary,
+.requirement-template-manager summary {
+  color: #cfe3ff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.season-rollover p {
+  max-width: 760px;
+  margin: 8px 0 12px;
+  color: #9fb1c8;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.season-rollover .row {
+  max-width: 620px;
+  margin-bottom: 10px;
+}
+
+.requirement-template-manager details[open] {
+  display: grid;
+  gap: 12px;
+}
+
+.requirement-template-manager .sub {
+  margin: 0;
 }
 
 .requirement-attention-card {
@@ -3540,6 +3740,30 @@ body {
 
   .requirement-card-head {
     display: grid;
+  }
+
+  .season-workspace-empty,
+  .quick-requirement-heading,
+  .quick-add-footer {
+    display: grid;
+  }
+
+  .quick-context-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-context-grid .field:nth-child(3) {
+    grid-column: span 2;
+  }
+
+  .quick-add-actions,
+  .readiness-group-actions {
+    justify-content: stretch;
+  }
+
+  .quick-add-actions .btn,
+  .season-workspace-empty > .btn {
+    flex: 1 1 0;
   }
 
   .requirement-evidence-actions {
