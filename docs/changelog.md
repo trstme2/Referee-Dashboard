@@ -42,7 +42,7 @@ Use only the headings that apply.
 
 ### Security / Privacy
 
-- Made feed URL encryption mandatory for new Production saves and removed legacy plaintext calendar-token lookup after the controlled migration path is deployed.
+- Made feed URL encryption mandatory for new Production saves. Legacy calendar subscription URLs remain available only until the owner migration clears their plaintext tokens, at which point the raw-token fallback disappears automatically.
 
 ## 2026-07-17
 
