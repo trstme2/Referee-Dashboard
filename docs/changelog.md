@@ -41,6 +41,7 @@ Use only the headings that apply.
 - Fixed the drift check's ownership-policy detector so it recognizes the valid policy SQL Supabase stores in production.
 - Preserved existing calendar subscription URLs during the owner migration, then removed the temporary plaintext-token lookup compatibility path after production conversion completed.
 - Replaced the native Admin migration prompt with an in-page confirmation field so the one-time protection action is clearer and more reliable across browsers.
+- Restored the supported TypeScript 6.x line after a broad Dependabot development-dependency update introduced TypeScript 7, which is incompatible with the project's current `typescript-eslint` release and caused clean CI installs to fail.
 
 ### Security / Privacy
 
