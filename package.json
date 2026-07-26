@@ -23,7 +23,7 @@
     "papaparse": "^5.4.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.17.0",
+    "react-router-dom": "^7.18.1",
     "uuid": "^14.0.0"
   },
   "devDependencies": {
