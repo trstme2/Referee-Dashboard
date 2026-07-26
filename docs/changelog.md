@@ -39,12 +39,12 @@ Use only the headings that apply.
 
 - Made the production security-hardening SQL patch safe to rerun against partially migrated databases: absent base-schema tables are skipped and surfaced by the read-only drift check instead of aborting the transaction.
 - Fixed the drift check's ownership-policy detector so it recognizes the valid policy SQL Supabase stores in production.
-- Kept legacy calendar subscription URLs working during and after the owner migration, and prevented Settings from silently rotating a legacy link merely because the page was opened.
+- Preserved existing calendar subscription URLs during the owner migration, then removed the temporary plaintext-token lookup compatibility path after production conversion completed.
 - Replaced the native Admin migration prompt with an in-page confirmation field so the one-time protection action is clearer and more reliable across browsers.
 
 ### Security / Privacy
 
-- Made feed URL encryption mandatory for new Production saves. Legacy calendar subscription URLs now continue working after their stored plaintext values are converted to hashes.
+- Made feed URL encryption mandatory for new Production saves. Production now stores encrypted feed URLs and one-way hashed calendar subscription tokens only.
 
 ## 2026-07-17
 

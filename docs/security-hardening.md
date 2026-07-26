@@ -35,6 +35,8 @@ The migration preflights the configured key against existing encrypted feed valu
 
 Hashing retains the exact existing calendar subscription URL, so Google Calendar, Apple Calendar, and Outlook subscriptions continue working without being removed or recreated. For privacy, Settings cannot display an already protected URL again; a user can explicitly regenerate a new URL later if they need to copy it. Treat copied subscription URLs like passwords.
 
+After the migration reports zero legacy records, the application uses hashed calendar-token lookup only. Existing subscriptions continue to use the same URL; their raw tokens are no longer retained in the database or accepted by the lookup path.
+
 ## Manual QA
 
 - Add, edit, disable, delete, and sync a calendar feed.

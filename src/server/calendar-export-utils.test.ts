@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { buildIcsCalendar, calendarExportTokenLookupValues, createCalendarExportToken, dedupeCalendarExportRows, ensureCalendarExportToken, isCalendarExportToken, storedCalendarExportToken } from './calendar-export-utils.js'
+import { describe, expect, it } from 'vitest'
+import { buildIcsCalendar, calendarExportTokenLookupValues, createCalendarExportToken, dedupeCalendarExportRows, isCalendarExportToken, storedCalendarExportToken } from './calendar-export-utils.js'
 import { isHashedCalendarExportToken } from './personal-data-security.js'
 
 function block(id: string) {
@@ -59,26 +59,12 @@ describe('calendar export token hardening', () => {
     expect(isCalendarExportToken(`${'a'.repeat(63)}z`)).toBe(false)
   })
 
-  it('stores new subscription tokens as hashes while supporting legacy URLs until migration', () => {
+  it('stores subscription tokens as hashes and looks up only their hashes', () => {
     const token = 'a'.repeat(64)
     const stored = storedCalendarExportToken(token)
 
     expect(stored).not.toBe(token)
     expect(isHashedCalendarExportToken(stored)).toBe(true)
-    expect(calendarExportTokenLookupValues(token)).toEqual([stored, token])
-  })
-
-  it('does not rotate a legacy subscription token merely by loading Settings', async () => {
-    const token = 'c'.repeat(64)
-    const maybeSingle = vi.fn().mockResolvedValue({
-      data: { user_id: 'user-1', calendar_export_token: token },
-      error: null,
-    })
-    const eq = vi.fn().mockReturnValue({ maybeSingle })
-    const select = vi.fn().mockReturnValue({ eq })
-    const from = vi.fn().mockReturnValue({ select })
-
-    await expect(ensureCalendarExportToken({ from }, 'user-1')).resolves.toBe(token)
-    expect(from).toHaveBeenCalledTimes(1)
+    expect(calendarExportTokenLookupValues(token)).toEqual([stored])
   })
 })

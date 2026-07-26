@@ -438,8 +438,7 @@ export function storedCalendarExportToken(token: string): string {
 }
 
 export function calendarExportTokenLookupValues(token: string): string[] {
-  // Legacy rows store the raw token. Keep them available only until the owner migration removes them.
-  return [hashCalendarExportToken(token), token]
+  return [hashCalendarExportToken(token)]
 }
 
 export async function ensureCalendarExportToken(client: any, userId: string) {
@@ -451,7 +450,6 @@ export async function ensureCalendarExportToken(client: any, userId: string) {
   if (readError) throw new Error(`user_settings: ${readError.message}`)
 
   if (isHashedCalendarExportToken(existing?.calendar_export_token)) return null
-  if (isCalendarExportToken(existing?.calendar_export_token)) return existing.calendar_export_token
 
   const token = createCalendarExportToken()
   const storedToken = storedCalendarExportToken(token)
