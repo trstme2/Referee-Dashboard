@@ -46,6 +46,7 @@ Use only the headings that apply.
 ### Security / Privacy
 
 - Made feed URL encryption mandatory for new Production saves. Production now stores encrypted feed URLs and one-way hashed calendar subscription tokens only.
+- Added a fail-closed production dependency audit wrapper. It documents and narrowly accepts the current React Router RSC-only advisory because Whistle Keeper is a browser-only SPA, while continuing to fail CI on every other high or critical production advisory.
 
 ## 2026-07-17
 

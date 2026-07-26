@@ -33,7 +33,7 @@ jobs:
         run: npm run test --if-present
 
       - name: Production dependency audit
-        run: npm audit --omit=dev --audit-level=high
+        run: npm run audit:prod
 
       - name: Lint
         run: npm run lint --if-present
