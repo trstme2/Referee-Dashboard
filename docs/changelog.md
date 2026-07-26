@@ -40,6 +40,7 @@ Use only the headings that apply.
 - Made the production security-hardening SQL patch safe to rerun against partially migrated databases: absent base-schema tables are skipped and surfaced by the read-only drift check instead of aborting the transaction.
 - Fixed the drift check's ownership-policy detector so it recognizes the valid policy SQL Supabase stores in production.
 - Kept legacy calendar subscription URLs working during and after the owner migration, and prevented Settings from silently rotating a legacy link merely because the page was opened.
+- Replaced the native Admin migration prompt with an in-page confirmation field so the one-time protection action is clearer and more reliable across browsers.
 
 ### Security / Privacy
 

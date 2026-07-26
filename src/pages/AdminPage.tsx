@@ -123,6 +123,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false)
   const [reviewingId, setReviewingId] = useState<string | null>(null)
   const [migrationBusy, setMigrationBusy] = useState(false)
+  const [migrationConfirmationOpen, setMigrationConfirmationOpen] = useState(false)
+  const [migrationConfirmation, setMigrationConfirmation] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const [betaErr, setBetaErr] = useState<string | null>(null)
   const [migrationError, setMigrationError] = useState<string | null>(null)
@@ -201,10 +203,10 @@ export default function AdminPage() {
   }
 
   async function runSensitiveDataMigration() {
-    const confirmation = window.prompt(
-      'This encrypts legacy calendar feed URLs and protects existing calendar subscription tokens without changing their URLs. Type MIGRATE SENSITIVE DATA to continue.',
-    )
-    if (confirmation == null) return
+    if (migrationConfirmation !== 'MIGRATE SENSITIVE DATA') {
+      setMigrationError('Type MIGRATE SENSITIVE DATA exactly to authorize this migration.')
+      return
+    }
 
     setMigrationBusy(true)
     setMigrationError(null)
@@ -212,7 +214,7 @@ export default function AdminPage() {
     try {
       const json = await authedJson('/api/platform?action=migrate-sensitive-data', {
         method: 'POST',
-        body: JSON.stringify({ confirmation }),
+        body: JSON.stringify({ confirmation: migrationConfirmation }),
       })
       const migration = json.migration as {
         encryptedFeeds: number
@@ -227,6 +229,8 @@ export default function AdminPage() {
       setMigrationError(String(e?.message ?? e))
     } finally {
       setMigrationBusy(false)
+      setMigrationConfirmationOpen(false)
+      setMigrationConfirmation('')
     }
   }
 
@@ -333,13 +337,49 @@ export default function AdminPage() {
               </div>
               <p className="small">Before running this, set <code>FEED_URL_ENCRYPTION_KEY</code> in Vercel Production. Existing calendar subscription URLs remain valid. For privacy, Settings cannot display an already protected URL again; users can regenerate one later if they need to copy it.</p>
               <div className="btnbar">
-                <button
-                  className="btn primary"
-                  onClick={() => void runSensitiveDataMigration()}
-                  disabled={migrationBusy || !migrationStatus.encryptionConfigured || (migrationStatus.plaintextFeedUrls === 0 && migrationStatus.legacyCalendarExportTokens === 0)}
-                >
-                  {migrationBusy ? 'Protecting legacy data...' : migrationStatus.plaintextFeedUrls === 0 && migrationStatus.legacyCalendarExportTokens === 0 ? 'Migration complete' : 'Protect legacy data'}
-                </button>
+                {migrationConfirmationOpen ? (
+                  <>
+                    <label className="field">
+                      <span>Type <code>MIGRATE SENSITIVE DATA</code> to confirm</span>
+                      <input
+                        value={migrationConfirmation}
+                        onChange={(event) => setMigrationConfirmation(event.target.value)}
+                        autoCapitalize="characters"
+                        autoComplete="off"
+                      />
+                    </label>
+                    <button
+                      className="btn primary"
+                      onClick={() => void runSensitiveDataMigration()}
+                      disabled={migrationBusy || migrationConfirmation !== 'MIGRATE SENSITIVE DATA'}
+                    >
+                      {migrationBusy ? 'Protecting legacy data...' : 'Confirm protection'}
+                    </button>
+                    <button
+                      className="btn"
+                      onClick={() => {
+                        setMigrationConfirmationOpen(false)
+                        setMigrationConfirmation('')
+                        setMigrationError(null)
+                      }}
+                      disabled={migrationBusy}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="btn primary"
+                    onClick={() => {
+                      setMigrationConfirmationOpen(true)
+                      setMigrationConfirmation('')
+                      setMigrationError(null)
+                    }}
+                    disabled={migrationBusy || !migrationStatus.encryptionConfigured || (migrationStatus.plaintextFeedUrls === 0 && migrationStatus.legacyCalendarExportTokens === 0)}
+                  >
+                    {migrationBusy ? 'Protecting legacy data...' : migrationStatus.plaintextFeedUrls === 0 && migrationStatus.legacyCalendarExportTokens === 0 ? 'Migration complete' : 'Protect legacy data'}
+                  </button>
+                )}
               </div>
             </>
           ) : !migrationError ? <p className="small">Loading migration status...</p> : null}
