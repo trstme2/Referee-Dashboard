@@ -54,46 +54,45 @@ export default function Nav({ variant }: NavProps) {
         </button>
       </nav>
 
-      {moreOpen ? <button type="button" className="mobile-nav-scrim" aria-label="Close navigation menu" onClick={() => setMoreOpen(false)} /> : null}
+      {moreOpen ? (
+        <>
+          <button type="button" className="mobile-nav-scrim" aria-label="Close navigation menu" onClick={() => setMoreOpen(false)} />
+          <section id="mobile-nav-more-sheet" className="mobile-nav-sheet open" aria-label="More navigation">
+            <div className="mobile-nav-sheet-handle" />
+            <div className="mobile-nav-sheet-head">
+              <div>
+                <h2>More</h2>
+                <p className="small">Everything outside the core bottom tabs.</p>
+              </div>
+              <button type="button" className="btn compact" onClick={() => setMoreOpen(false)}>Close</button>
+            </div>
 
-      <section
-        id="mobile-nav-more-sheet"
-        className={`mobile-nav-sheet${moreOpen ? ' open' : ''}`}
-        aria-hidden={!moreOpen}
-      >
-        <div className="mobile-nav-sheet-handle" />
-        <div className="mobile-nav-sheet-head">
-          <div>
-            <h2>More</h2>
-            <p className="small">Everything outside the core bottom tabs.</p>
-          </div>
-          <button type="button" className="btn compact" onClick={() => setMoreOpen(false)}>Close</button>
-        </div>
+            <div className="mobile-nav-sheet-grid">
+              {mobileSecondaryNavItems.map(item => (
+                <NavLink key={item.path} to={item.path} className={({ isActive }) => `mobile-sheet-link${isActive ? ' active' : ''}`}>
+                  <strong>{item.label}</strong>
+                  <span>{item.subtitle}</span>
+                </NavLink>
+              ))}
 
-        <div className="mobile-nav-sheet-grid">
-          {mobileSecondaryNavItems.map(item => (
-            <NavLink key={item.path} to={item.path} className={({ isActive }) => `mobile-sheet-link${isActive ? ' active' : ''}`}>
-              <strong>{item.label}</strong>
-              <span>{item.subtitle}</span>
-            </NavLink>
-          ))}
+              {mode === 'supabase' ? (
+                <NavLink to="/auth" className={({ isActive }) => `mobile-sheet-link${isActive ? ' active' : ''}`}>
+                  <strong>Account</strong>
+                  <span>Sign-in, export, and lifecycle controls.</span>
+                </NavLink>
+              ) : null}
+            </div>
 
-          {mode === 'supabase' ? (
-            <NavLink to="/auth" className={({ isActive }) => `mobile-sheet-link${isActive ? ' active' : ''}`}>
-              <strong>Account</strong>
-              <span>Sign-in, export, and lifecycle controls.</span>
-            </NavLink>
-          ) : null}
-        </div>
-
-        {mode === 'supabase' && session ? (
-          <div className="mobile-nav-sheet-foot">
-            <button type="button" className="btn danger" onClick={() => void signOut()}>
-              {loading ? 'Syncing...' : 'Sign out'}
-            </button>
-          </div>
-        ) : null}
-      </section>
+            {mode === 'supabase' && session ? (
+              <div className="mobile-nav-sheet-foot">
+                <button type="button" className="btn danger" onClick={() => void signOut()}>
+                  {loading ? 'Syncing...' : 'Sign out'}
+                </button>
+              </div>
+            ) : null}
+          </section>
+        </>
+      ) : null}
     </>
   )
 }

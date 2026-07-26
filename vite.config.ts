@@ -1,5 +1,23 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import type { IncomingMessage } from 'node:http'
+
+async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = []
+  let totalBytes = 0
+
+  for await (const chunk of request) {
+    const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    totalBytes += value.length
+    if (totalBytes > 4_096) throw new Error('Request body is too large')
+    chunks.push(value)
+  }
+
+  const text = Buffer.concat(chunks).toString('utf8').trim()
+  if (!text) return {}
+  const parsed = JSON.parse(text)
+  return parsed && typeof parsed === 'object' ? parsed : {}
+}
 
 export default defineConfig({
   plugins: [
@@ -9,9 +27,16 @@ export default defineConfig({
       configureServer(server) {
         server.middlewares.use('/api/distance', async (req, res) => {
           try {
-            const url = new URL(req.url || '', 'http://localhost')
-            const origin = (url.searchParams.get('origin') || '').trim()
-            const destination = (url.searchParams.get('destination') || '').trim()
+            if (req.method !== 'POST') {
+              res.statusCode = 405
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ error: 'Method not allowed' }))
+              return
+            }
+
+            const body = await readJsonBody(req)
+            const origin = String(body.origin || '').trim()
+            const destination = String(body.destination || '').trim()
             if (!origin || !destination) {
               res.statusCode = 400
               res.setHeader('Content-Type', 'application/json')

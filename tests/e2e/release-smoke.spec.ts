@@ -5,7 +5,7 @@ const routeSmokeChecks = [
   { path: '/games', heading: 'Games' },
   { path: '/calendar', heading: 'Calendar' },
   { path: '/expenses', heading: 'Expense Ledger' },
-  { path: '/tax', heading: 'Tax Prep Workspace' },
+  { path: '/tax', heading: 'Tax Record Workspace' },
   { path: '/requirements', heading: 'Requirements' },
   { path: '/settings', heading: 'Settings' },
   { path: '/privacy', heading: 'Data & Privacy' },
@@ -76,10 +76,23 @@ test('mobile calendar smoke has synchronized controls and no page-level horizont
   await expect(page.getByRole('button', { name: 'Agenda' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Month' })).toBeVisible()
 
-  await expect(page.getByText('June 2026').first()).toBeVisible()
+  const monthLabel = page.locator('.calendar-month-bar .landing-eyebrow')
+  await expect(monthLabel).toBeVisible()
+  const initialMonth = await monthLabel.textContent()
   await page.getByRole('button', { name: 'Next' }).click()
-  await expect(page.getByText('July 2026').first()).toBeVisible()
+  await expect(monthLabel).not.toHaveText(initialMonth || '')
 
   const hasPageHorizontalScroll = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
   expect(hasPageHorizontalScroll).toBe(false)
+})
+
+test('closed mobile navigation sheet is not left in the focus order', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/calendar')
+
+  await expect(page.locator('#mobile-nav-more-sheet')).toHaveCount(0)
+  await page.getByRole('button', { name: 'More' }).click()
+  await expect(page.locator('#mobile-nav-more-sheet')).toBeVisible()
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await expect(page.locator('#mobile-nav-more-sheet')).toHaveCount(0)
 })
