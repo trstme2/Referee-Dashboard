@@ -343,8 +343,8 @@ findings as (
     and p.policyname = ep.policy_name
   where upper(p.cmd) <> ep.expected_command
     or not ('authenticated' = any(p.roles))
-    or (ep.expected_command in ('SELECT', 'UPDATE', 'DELETE') and coalesce(p.qual, '') !~ 'auth\\.uid')
-    or (ep.expected_command in ('INSERT', 'UPDATE') and coalesce(p.with_check, '') !~ 'auth\\.uid')
+    or (ep.expected_command in ('SELECT', 'UPDATE', 'DELETE') and position('auth.uid' in coalesce(p.qual, '')) = 0)
+    or (ep.expected_command in ('INSERT', 'UPDATE') and position('auth.uid' in coalesce(p.with_check, '')) = 0)
 
   union all
 

@@ -29,6 +29,21 @@ Use short, dated entries:
 
 Use only the headings that apply.
 
+## 2026-07-26
+
+### Added
+
+- Added an owner-only, one-time Sensitive Data Migration control in Admin that inventories legacy calendar data without displaying secrets, encrypts legacy feed URLs, and invalidates legacy plaintext calendar-export tokens.
+
+### Fixed
+
+- Made the production security-hardening SQL patch safe to rerun against partially migrated databases: absent base-schema tables are skipped and surfaced by the read-only drift check instead of aborting the transaction.
+- Fixed the drift check's ownership-policy detector so it recognizes the valid policy SQL Supabase stores in production.
+
+### Security / Privacy
+
+- Made feed URL encryption mandatory for new Production saves and removed legacy plaintext calendar-token lookup after the controlled migration path is deployed.
+
 ## 2026-07-17
 
 ### Changed

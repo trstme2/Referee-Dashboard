@@ -16,10 +16,23 @@ function feedEncryptionKey(): Buffer | null {
   throw new Error('FEED_URL_ENCRYPTION_KEY must be a 32-byte base64 value or 64-character hex value')
 }
 
+export function isFeedUrlEncrypted(value: unknown): boolean {
+  return String(value || '').startsWith(FEED_URL_PREFIX)
+}
+
+export function isFeedUrlEncryptionConfigured(): boolean {
+  return feedEncryptionKey() !== null
+}
+
 export function protectFeedUrl(url: string): string {
   if (url.startsWith(FEED_URL_PREFIX)) return url
   const key = feedEncryptionKey()
-  if (!key) return url
+  if (!key) {
+    if (process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production') {
+      throw new Error('FEED_URL_ENCRYPTION_KEY must be configured in production before saving calendar feeds')
+    }
+    return url
+  }
 
   const iv = randomBytes(12)
   const cipher = createCipheriv('aes-256-gcm', key, iv)

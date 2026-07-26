@@ -69,6 +69,16 @@ export async function requireAdminProfile(serviceClient: any, user: User): Promi
   return profile
 }
 
+export async function requireOwnerProfile(serviceClient: any, user: User): Promise<PlatformProfile> {
+  const profile = await ensurePlatformProfile(serviceClient, user)
+  if (profile.role !== 'owner') {
+    const err = new Error('Owner access required')
+    ;(err as any).statusCode = 403
+    throw err
+  }
+  return profile
+}
+
 export function sanitizeEventMetadata(input: unknown): Record<string, string | number | boolean | null> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return {}
   const out: Record<string, string | number | boolean | null> = {}

@@ -74,6 +74,19 @@ type BetaAccessRequest = {
   updatedAt: string
 }
 
+type AdminProfile = {
+  role: string
+}
+
+type SensitiveDataMigrationStatus = {
+  encryptionConfigured: boolean
+  plaintextFeedUrls: number
+  encryptedFeedUrls: number
+  legacyCalendarExportTokens: number
+  hashedCalendarExportTokens: number
+  missingCalendarExportTokens: number
+}
+
 function MiniBarList({ values }: { values: Record<string, number> }) {
   const entries = Object.entries(values).sort((a, b) => b[1] - a[1])
   const max = Math.max(1, ...entries.map(([, value]) => value))
@@ -104,11 +117,16 @@ function HealthRow({ label, value, detail }: { label: string; value: string | nu
 export default function AdminPage() {
   const { mode, session } = useData()
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null)
+  const [profile, setProfile] = useState<AdminProfile | null>(null)
   const [betaRequests, setBetaRequests] = useState<BetaAccessRequest[]>([])
+  const [migrationStatus, setMigrationStatus] = useState<SensitiveDataMigrationStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [reviewingId, setReviewingId] = useState<string | null>(null)
+  const [migrationBusy, setMigrationBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [betaErr, setBetaErr] = useState<string | null>(null)
+  const [migrationError, setMigrationError] = useState<string | null>(null)
+  const [migrationMessage, setMigrationMessage] = useState<string | null>(null)
 
   async function authedJson(path: string, options: RequestInit = {}) {
     if (mode !== 'supabase' || !session?.access_token) return
@@ -129,11 +147,28 @@ export default function AdminPage() {
     setLoading(true)
     setErr(null)
     setBetaErr(null)
+    setMigrationError(null)
     try {
       const json = await authedJson('/api/platform?action=metrics')
       setMetrics(json.metrics as AdminMetrics)
+      const loadedProfile = json.profile as AdminProfile
+      setProfile(loadedProfile)
+
+      if (loadedProfile?.role === 'owner') {
+        try {
+          const migrationJson = await authedJson('/api/platform?action=sensitive-data-migration-status')
+          setMigrationStatus(migrationJson.status as SensitiveDataMigrationStatus)
+        } catch (e: any) {
+          setMigrationStatus(null)
+          setMigrationError(String(e?.message ?? e))
+        }
+      } else {
+        setMigrationStatus(null)
+      }
     } catch (e: any) {
       setMetrics(null)
+      setProfile(null)
+      setMigrationStatus(null)
       setErr(String(e?.message ?? e))
     }
 
@@ -162,6 +197,36 @@ export default function AdminPage() {
       setBetaErr(String(e?.message ?? e))
     } finally {
       setReviewingId(null)
+    }
+  }
+
+  async function runSensitiveDataMigration() {
+    const confirmation = window.prompt(
+      'This encrypts legacy calendar feed URLs and invalidates old calendar subscription links. Type MIGRATE SENSITIVE DATA to continue.',
+    )
+    if (confirmation == null) return
+
+    setMigrationBusy(true)
+    setMigrationError(null)
+    setMigrationMessage(null)
+    try {
+      const json = await authedJson('/api/platform?action=migrate-sensitive-data', {
+        method: 'POST',
+        body: JSON.stringify({ confirmation }),
+      })
+      const migration = json.migration as {
+        encryptedFeeds: number
+        invalidatedCalendarExportTokens: number
+        after: SensitiveDataMigrationStatus
+      }
+      setMigrationStatus(migration.after)
+      setMigrationMessage(
+        `Completed: encrypted ${migration.encryptedFeeds} legacy feed URL${migration.encryptedFeeds === 1 ? '' : 's'} and invalidated ${migration.invalidatedCalendarExportTokens} legacy calendar subscription token${migration.invalidatedCalendarExportTokens === 1 ? '' : 's'}.`,
+      )
+    } catch (e: any) {
+      setMigrationError(String(e?.message ?? e))
+    } finally {
+      setMigrationBusy(false)
     }
   }
 
@@ -244,6 +309,42 @@ export default function AdminPage() {
           <p className="small">No beta requests yet.</p>
         ) : null}
       </section>
+
+      {profile?.role === 'owner' ? (
+        <section className="card">
+          <div className="page-section-head">
+            <div>
+              <h2>Sensitive Data Migration</h2>
+              <p className="sub">One-time protection for legacy calendar feed URLs and calendar subscription tokens. This control never displays the underlying values.</p>
+            </div>
+            <span className={`pill ${migrationStatus?.encryptionConfigured ? 'ok' : 'bad'}`}>
+              {migrationStatus?.encryptionConfigured ? 'Encryption key ready' : 'Encryption key unavailable'}
+            </span>
+          </div>
+          {migrationError ? <p className="small"><span className="pill bad">{migrationError}</span></p> : null}
+          {migrationMessage ? <p className="small"><span className="pill ok">{migrationMessage}</span></p> : null}
+          {migrationStatus ? (
+            <>
+              <div className="admin-health-list">
+                <HealthRow label="Plaintext feed URLs" value={migrationStatus.plaintextFeedUrls} />
+                <HealthRow label="Encrypted feed URLs" value={migrationStatus.encryptedFeedUrls} />
+                <HealthRow label="Legacy calendar subscription tokens" value={migrationStatus.legacyCalendarExportTokens} />
+                <HealthRow label="Hashed calendar subscription tokens" value={migrationStatus.hashedCalendarExportTokens} />
+              </div>
+              <p className="small">Before running this, set <code>FEED_URL_ENCRYPTION_KEY</code> in Vercel Production. Existing calendar subscriptions using a legacy URL will stop working; each affected referee can get a new subscription URL from Settings.</p>
+              <div className="btnbar">
+                <button
+                  className="btn primary"
+                  onClick={() => void runSensitiveDataMigration()}
+                  disabled={migrationBusy || !migrationStatus.encryptionConfigured || (migrationStatus.plaintextFeedUrls === 0 && migrationStatus.legacyCalendarExportTokens === 0)}
+                >
+                  {migrationBusy ? 'Protecting legacy data...' : migrationStatus.plaintextFeedUrls === 0 && migrationStatus.legacyCalendarExportTokens === 0 ? 'Migration complete' : 'Protect legacy data'}
+                </button>
+              </div>
+            </>
+          ) : !migrationError ? <p className="small">Loading migration status...</p> : null}
+        </section>
+      ) : null}
 
       {metrics ? (
         <>

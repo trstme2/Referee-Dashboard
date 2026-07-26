@@ -438,7 +438,7 @@ export function storedCalendarExportToken(token: string): string {
 }
 
 export function calendarExportTokenLookupValues(token: string): string[] {
-  return [hashCalendarExportToken(token), token]
+  return [hashCalendarExportToken(token)]
 }
 
 export async function ensureCalendarExportToken(client: any, userId: string) {
@@ -449,7 +449,6 @@ export async function ensureCalendarExportToken(client: any, userId: string) {
     .maybeSingle()
   if (readError) throw new Error(`user_settings: ${readError.message}`)
 
-  if (isCalendarExportToken(existing?.calendar_export_token)) return String(existing.calendar_export_token)
   if (isHashedCalendarExportToken(existing?.calendar_export_token)) return null
 
   const token = createCalendarExportToken()

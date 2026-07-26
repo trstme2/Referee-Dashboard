@@ -1,10 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { checkDurableRateLimit, checkRateLimit, createAuthedSupabase, createServiceSupabase, getBearerToken, sendRateLimited, setApiSecurityHeaders, toJsonBody } from '../src/server/auth-utils.js'
 import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
-import { ensurePlatformProfile, isAdminRole, isMissingPlatformTableError, recordAppEvent, requireAdminProfile, sanitizeEventMetadata } from '../src/server/platform-auth.js'
+import { ensurePlatformProfile, isAdminRole, isMissingPlatformTableError, recordAppEvent, requireAdminProfile, requireOwnerProfile, sanitizeEventMetadata } from '../src/server/platform-auth.js'
 import { appUrl, escapeEmailHtml, sendTransactionalEmail, supportEmail } from '../src/server/email.js'
 import { upsertUserSettingsCompat } from '../src/lib/userSettingsCompat.js'
 import { BetaAccessRequestInput, validateBetaAccessRequest } from '../src/lib/betaAccess.js'
+import { loadSensitiveDataMigrationStatus, migrateLegacySensitiveData } from '../src/server/sensitive-data-migration.js'
 
 const allowedEventTypes = new Set([
   'account_exported',
@@ -551,6 +552,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const requests = await listBetaAccessRequests(serviceClient)
       logApiDone(route, requestStartedAtMs, { status: 200, action: 'beta-requests' })
       return res.status(200).json({ requests })
+    }
+
+    if (req.method === 'GET' && action === 'sensitive-data-migration-status') {
+      await requireOwnerProfile(serviceClient, authData.user)
+      const status = await loadSensitiveDataMigrationStatus(serviceClient)
+      logApiDone(route, requestStartedAtMs, { status: 200, action: 'sensitive-data-migration-status' })
+      return res.status(200).json({ status })
+    }
+
+    if (req.method === 'POST' && action === 'migrate-sensitive-data') {
+      const profile = await requireOwnerProfile(serviceClient, authData.user)
+      const body = toJsonBody(req)
+      if (String(body.confirmation || '') !== 'MIGRATE SENSITIVE DATA') {
+        const err = new Error('Type MIGRATE SENSITIVE DATA to authorize this one-time security migration')
+        ;(err as any).statusCode = 400
+        throw err
+      }
+      const migrationRate = await checkDurableRateLimit(req, 'sensitive-data-migration', { limit: 3, windowMs: 60 * 60 * 1000 }, profile.userId)
+      if (!migrationRate.allowed) {
+        logApiDone(route, requestStartedAtMs, { status: 429, action: 'migrate-sensitive-data' })
+        return sendRateLimited(res, migrationRate.retryAfterSeconds)
+      }
+      const migration = await migrateLegacySensitiveData(serviceClient)
+      await recordAppEvent(serviceClient, profile.userId, 'sensitive_data_migration_completed', 'server', {
+        encryptedFeeds: migration.encryptedFeeds,
+        invalidatedCalendarExportTokens: migration.invalidatedCalendarExportTokens,
+      })
+      logApiDone(route, requestStartedAtMs, {
+        status: 200,
+        action: 'migrate-sensitive-data',
+        encryptedFeeds: migration.encryptedFeeds,
+        invalidatedCalendarExportTokens: migration.invalidatedCalendarExportTokens,
+      })
+      return res.status(200).json({ migration })
     }
 
     if (req.method === 'POST' && action === 'beta-request-review') {

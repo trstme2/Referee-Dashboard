@@ -1,5 +1,6 @@
 -- Whistle Keeper security hardening, July 17, 2026.
 -- Run once in the Supabase SQL Editor after deploying the matching application code.
+-- Missing base-schema tables are skipped here and reported by the drift check.
 
 begin;
 
@@ -14,6 +15,9 @@ begin
     'requirement_instances', 'requirement_activities', 'csv_imports', 'csv_import_rows'
   ]
   loop
+    if to_regclass(format('public.%I', t)) is null then
+      continue;
+    end if;
     execute format('drop policy if exists "select_own_%1$s" on public.%1$s;', t);
     execute format('create policy "select_own_%1$s" on public.%1$s for select to authenticated using ((select auth.uid()) = user_id);', t);
     execute format('drop policy if exists "insert_own_%1$s" on public.%1$s;', t);
@@ -25,12 +29,20 @@ begin
   end loop;
 end $$;
 
-drop policy if exists "select_own_user_profiles" on public.user_profiles;
-create policy "select_own_user_profiles" on public.user_profiles for select to authenticated using ((select auth.uid()) = user_id);
-drop policy if exists "select_own_app_events" on public.app_events;
-create policy "select_own_app_events" on public.app_events for select to authenticated using ((select auth.uid()) = user_id);
-drop policy if exists "delete_own_app_events" on public.app_events;
-create policy "delete_own_app_events" on public.app_events for delete to authenticated using ((select auth.uid()) = user_id);
+do $$
+begin
+  if to_regclass('public.user_profiles') is not null then
+    execute 'drop policy if exists "select_own_user_profiles" on public.user_profiles;';
+    execute 'create policy "select_own_user_profiles" on public.user_profiles for select to authenticated using ((select auth.uid()) = user_id);';
+  end if;
+
+  if to_regclass('public.app_events') is not null then
+    execute 'drop policy if exists "select_own_app_events" on public.app_events;';
+    execute 'create policy "select_own_app_events" on public.app_events for select to authenticated using ((select auth.uid()) = user_id);';
+    execute 'drop policy if exists "delete_own_app_events" on public.app_events;';
+    execute 'create policy "delete_own_app_events" on public.app_events for delete to authenticated using ((select auth.uid()) = user_id);';
+  end if;
+end $$;
 
 create table if not exists public.api_rate_limit_buckets (
   bucket text not null,
@@ -51,6 +63,9 @@ declare
 begin
   foreach t in array array['calendar_feeds', 'calendar_feed_sync_runs', 'calendar_sync_jobs', 'beta_access_requests', 'api_rate_limit_buckets']
   loop
+    if to_regclass(format('public.%I', t)) is null then
+      continue;
+    end if;
     execute format('alter table public.%1$s enable row level security;', t);
     for policy_name in
       select policyname from pg_policies where schemaname = 'public' and tablename = t
@@ -60,7 +75,17 @@ begin
   end loop;
 end $$;
 
-revoke all privileges on table public.calendar_feeds, public.calendar_feed_sync_runs, public.calendar_sync_jobs, public.beta_access_requests, public.api_rate_limit_buckets from anon, authenticated;
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['calendar_feeds', 'calendar_feed_sync_runs', 'calendar_sync_jobs', 'beta_access_requests', 'api_rate_limit_buckets']
+  loop
+    if to_regclass(format('public.%I', t)) is not null then
+      execute format('revoke all privileges on table public.%I from anon, authenticated;', t);
+    end if;
+  end loop;
+end $$;
 
 -- Durable, hashed-subject rate-limit buckets. This table has no browser policies;
 -- only the server's Supabase secret key calls the function below.

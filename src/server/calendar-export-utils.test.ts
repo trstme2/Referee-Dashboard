@@ -59,12 +59,12 @@ describe('calendar export token hardening', () => {
     expect(isCalendarExportToken(`${'a'.repeat(63)}z`)).toBe(false)
   })
 
-  it('stores new subscription tokens as hashes while supporting legacy lookup', () => {
+  it('stores new subscription tokens as hashes and does not accept legacy plaintext storage', () => {
     const token = 'a'.repeat(64)
     const stored = storedCalendarExportToken(token)
 
     expect(stored).not.toBe(token)
     expect(isHashedCalendarExportToken(stored)).toBe(true)
-    expect(calendarExportTokenLookupValues(token)).toEqual([stored, token])
+    expect(calendarExportTokenLookupValues(token)).toEqual([stored])
   })
 })
