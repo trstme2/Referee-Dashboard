@@ -22,8 +22,8 @@
     "@supabase/supabase-js": "^2.110.7",
     "node-ical": "^0.26.1",
     "papaparse": "^5.5.4",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.1",
     "uuid": "^14.0.1"
   },
