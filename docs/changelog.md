@@ -29,6 +29,16 @@ Use short, dated entries:
 
 Use only the headings that apply.
 
+## 2026-08-08
+
+### Fixed
+
+- Prevented DragonFly from creating duplicate games when the same assignment appears more than once in a single calendar-feed response with different provider event IDs. Exact duplicate game slots now collapse before matching or creating records, while assignments with a different role, matchup, time, or location remain separate.
+
+### QA / Release
+
+- Added a regression test for repeated DragonFly game events with separate provider IDs.
+
 ## 2026-07-26
 
 ### Added
