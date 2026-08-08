@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks, inferCompetitionLevelForPlatform, looksLikeAvailabilityBlock, looksLikeDragonFlyAdministrativeEvent, parseRefQuestTeamsFromText } from './sync-ics-utils.js'
+import { cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeDragonFlyFeedEvents, dedupeFeedBlocks, inferCompetitionLevelForPlatform, looksLikeAvailabilityBlock, looksLikeDragonFlyAdministrativeEvent, parseRefQuestTeamsFromText } from './sync-ics-utils.js'
 
 describe('sync ICS utilities', () => {
   it('removes shifted DragonFly timestamps from availability block titles', () => {
@@ -58,6 +58,26 @@ describe('sync ICS utilities', () => {
       { ...block, uid: 'game-1', eventType: 'Game' },
       { ...block, uid: 'game-2', eventType: 'Game' },
     ]).map(event => event.uid)).toEqual(['block-1', 'game-1', 'game-2'])
+  })
+
+  it('deduplicates repeated DragonFly games with separate provider IDs', () => {
+    const game = {
+      eventType: 'Game',
+      start: new Date('2026-08-08T19:00:00.000Z'),
+      end: new Date('2026-08-08T21:00:00.000Z'),
+      allDay: false,
+      title: 'Center: Reynoldsburg vs Worthington Kilbourne',
+      location: 'Worthington Kilbourne High School',
+      role: 'Center',
+      homeTeam: 'Worthington Kilbourne',
+      awayTeam: 'Reynoldsburg',
+    }
+
+    expect(dedupeDragonFlyFeedEvents([
+      { ...game, uid: 'dragonfly-1' },
+      { ...game, uid: 'dragonfly-2' },
+      { ...game, uid: 'dragonfly-3', role: 'AR1', title: 'AR1: Reynoldsburg vs Worthington Kilbourne' },
+    ]).map(event => event.uid)).toEqual(['dragonfly-1', 'dragonfly-3'])
   })
 
   it('returns every date touched by a multi-day block', () => {
