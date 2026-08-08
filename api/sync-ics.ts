@@ -7,7 +7,7 @@ import { fetchCalendarFeedTextWithRetry } from '../src/server/feed-fetch.js'
 import { logApiDone, logApiError, logApiStart } from '../src/server/observability.js'
 import { revealFeedUrl } from '../src/server/personal-data-security.js'
 import { enqueueFeedSyncJobs, loadSyncJobsForUser, processDueSyncJobs, type SyncJobResult } from '../src/server/sync-jobs.js'
-import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeFeedBlocks, inferCompetitionLevelForPlatform, looksLikeAvailabilityBlock, looksLikeDragonFlyAdministrativeEvent, parseRefQuestTeamsFromText } from '../src/server/sync-ics-utils.js'
+import { blockSlotKey, cleanupDragonFlyBlockTitle, dateKeysTouched, dedupeDragonFlyFeedEvents, inferCompetitionLevelForPlatform, looksLikeAvailabilityBlock, looksLikeDragonFlyAdministrativeEvent, parseRefQuestTeamsFromText } from '../src/server/sync-ics-utils.js'
 import { buildSyncedGameRow } from '../src/server/sync-merge.js'
 import { assertSyncEventCount, chunkSyncValues, isWithinSyncWindow, MAX_AUTO_MILEAGE_LOOKUPS_PER_SYNC, mileageLookupCandidates } from '../src/server/sync-safety.js'
 
@@ -610,7 +610,7 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
       startTime,
     }
   }).filter((n) => !feed.import_start_date || n.gameDate >= feed.import_start_date)
-  const normalizedWithinImportRange = feed.platform === 'DragonFly' ? dedupeFeedBlocks(normalizedRows) : normalizedRows
+  const normalizedWithinImportRange = feed.platform === 'DragonFly' ? dedupeDragonFlyFeedEvents(normalizedRows) : normalizedRows
   const normalized = normalizedWithinImportRange.filter((n) => isWithinSyncWindow(n.start))
 
   if (!normalized.length) {
