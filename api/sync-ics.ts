@@ -560,7 +560,8 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
   const icsEvents = Object.values(parsed).filter((x: any) => x?.type === 'VEVENT' && x?.uid && x?.start)
   if (!icsEvents.length) {
     await client.from('calendar_feeds').update({ last_synced_at: now, updated_at: now }).eq('id', feed.id).eq('user_id', feed.user_id)
-    return await finish('success')
+    errors.push(`${feed.name}: calendar contained no events. Existing records were kept unchanged.`)
+    return await finish('partial')
   }
   try {
     assertSyncEventCount(icsEvents.length)

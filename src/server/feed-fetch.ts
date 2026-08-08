@@ -144,7 +144,9 @@ export async function fetchCalendarFeedText(rawUrl: string, fetchImpl: typeof fe
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       if (!isAllowedContentType(response.headers.get('content-type'))) throw new Error('feed content type is not allowed')
-      return await responseTextWithLimit(response)
+      const text = await responseTextWithLimit(response)
+      if (!text.trim()) throw new Error('feed returned no calendar data')
+      return text
     } finally {
       clearTimeout(timeout)
     }
@@ -157,7 +159,8 @@ function retryableFeedError(error: unknown): boolean {
   const message = String((error as any)?.message || error || '')
   return (
     /aborted|timeout|network|fetch failed/i.test(message) ||
-    /HTTP (408|429|5\d\d)/i.test(message)
+    /HTTP (408|429|5\d\d)/i.test(message) ||
+    /no calendar data/i.test(message)
   )
 }
 
