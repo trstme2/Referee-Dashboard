@@ -29,6 +29,17 @@ Use short, dated entries:
 
 Use only the headings that apply.
 
+## 2026-08-11
+
+### Changed
+
+- Reworked Games into a current-workflow schedule: the next assignment and recent completed games are now immediately available above the full schedule, and the full schedule is ordered around today instead of beginning with the furthest future assignment.
+- Added a mobile schedule switch for Upcoming, Recent, and Full schedule views so an iPhone shows one focused assignment list at a time.
+
+### QA / Release
+
+- Added schedule-ordering tests for nearest upcoming games, recent completed games, and canceled-game placement.
+
 ## 2026-08-08
 
 ### Fixed
