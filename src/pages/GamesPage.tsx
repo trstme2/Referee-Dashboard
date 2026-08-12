@@ -504,7 +504,204 @@ export default function GamesPage() {
         <div className="btnbar games-actions">
           <button className="btn primary" onClick={startNew}>Add game</button>
           <button className="btn" onClick={() => navigate('/sync')}>Sync calendars</button>
-          <button className="btn" onClick={() => navigat…2577 tokens truncated…                                  {g.homeTeam || g.awayTeam ? `${g.homeTeam || 'TBD'} vs ${g.awayTeam || 'TBD'}` : 'Teams not entered yet'}
+          <button className="btn" onClick={() => navigate('/import')}>Import CSV</button>
+        </div>
+
+        <section className="games-workspace" aria-label="Current game workspace">
+          <article className="games-focus-card games-next-up">
+            <div className="games-focus-head">
+              <div>
+                <div className="eyebrow">Next up</div>
+                <h3>{nextUp ? gameTitle(nextUp) : 'No upcoming assignment'}</h3>
+              </div>
+              {nextUp ? <span className={`pill ${gameStatusTone(nextUp.status)}`}>{nextUp.status}</span> : null}
+            </div>
+            {nextUp ? (
+              <>
+                <div className="games-focus-date">{gameDateLabel(nextUp)}</div>
+                <div className="small">{[nextUp.levelDetail || nextUp.competitionLevel, nextUp.league, nextUp.role].filter(Boolean).join(' | ')}</div>
+                <div className="games-focus-location">{nextUp.locationAddress || 'No location entered'}</div>
+                <div className="games-focus-actions">
+                  {statusQuickActions(nextUp)}
+                  <button className="btn compact" onClick={() => edit(nextUp.id)}>View details</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="small">Add a game or sync an assigning platform to keep your next assignment here.</p>
+                <div className="btnbar">
+                  <button className="btn compact primary" onClick={startNew}>Add game</button>
+                  <button className="btn compact" onClick={() => navigate('/sync')}>Sync calendars</button>
+                </div>
+              </>
+            )}
+          </article>
+
+          <article className="games-focus-card games-recent-preview">
+            <div className="games-focus-head">
+              <div>
+                <div className="eyebrow">Recent work</div>
+                <h3>{recentCompleted.length ? 'Follow up on completed games' : 'No recent completed games'}</h3>
+              </div>
+              {recentCompleted.length ? <button className="btn compact" onClick={() => setMobileView('recent')}>View recent</button> : null}
+            </div>
+            {recentCompleted.length ? (
+              <div className="games-recent-list">
+                {recentCompleted.map((game) => (
+                  <button key={game.id} className="games-recent-row" onClick={() => edit(game.id)}>
+                    <span>
+                      <strong>{gameTitle(game)}</strong>
+                      <small>{gameDateLabel(game)}</small>
+                    </span>
+                    <span className={`pill ${paymentBadge(game).tone}`}>{paymentBadge(game).label}</span>
+                  </button>
+                ))}
+              </div>
+            ) : <p className="small">Completed games will appear here for pay and mileage follow-up.</p>}
+          </article>
+        </section>
+
+        <div className="games-platform-manager">
+          <div>
+            <strong>Tracked platforms for blocks and confirmations</strong>
+            <p className="small">Choose which assigning platforms should appear as block-tracking chips on this page. Remove any platform you do not use.</p>
+          </div>
+          <div className="platform-row">
+            {assigningPlatforms.map((platform) => (
+              <button key={platform} className="platform-chip on platform-manager-chip" onClick={() => removeTrackedPlatform(platform)}>
+                {platform} <span aria-hidden="true">x</span>
+              </button>
+            ))}
+            {assigningPlatforms.length === 0 ? <span className="small">No tracked platforms yet.</span> : null}
+          </div>
+          <div className="games-platform-manager-add">
+            <input
+              value={trackedPlatformInput}
+              onChange={(event) => setTrackedPlatformInput(event.target.value)}
+              placeholder="Add another platform"
+            />
+            <button className="btn" onClick={() => void addTrackedPlatform(trackedPlatformInput)} disabled={!trackedPlatformInput.trim()}>
+              Add platform
+            </button>
+          </div>
+          <div className="platform-row">
+            {commonPlatformSuggestions
+              .filter((platform) => !assigningPlatforms.some((existing) => existing.toLowerCase() === platform.toLowerCase()))
+              .map((platform) => (
+                <button key={platform} className="platform-chip off platform-suggestion-chip" onClick={() => void addTrackedPlatform(platform)}>
+                  Add {platform}
+                </button>
+              ))}
+          </div>
+        </div>
+
+        <div className="page-section-head games-schedule-head">
+          <div>
+            <div className="eyebrow">Schedule</div>
+            <h3>Full schedule</h3>
+            <p className="sub">Upcoming assignments appear first, followed by recent history. Canceled games stay at the end.</p>
+          </div>
+        </div>
+
+        <div className="games-mobile-view-switch" role="tablist" aria-label="Game schedule view">
+          <button type="button" role="tab" aria-selected={mobileView === 'upcoming'} className={mobileView === 'upcoming' ? 'active' : ''} onClick={() => setMobileView('upcoming')}>
+            Upcoming ({getUpcomingGames(rows, today).length})
+          </button>
+          <button type="button" role="tab" aria-selected={mobileView === 'recent'} className={mobileView === 'recent' ? 'active' : ''} onClick={() => setMobileView('recent')}>
+            Recent ({getRecentCompletedGames(rows, today).length})
+          </button>
+          <button type="button" role="tab" aria-selected={mobileView === 'schedule'} className={mobileView === 'schedule' ? 'active' : ''} onClick={() => setMobileView('schedule')}>
+            Full schedule
+          </button>
+        </div>
+
+        <div className="row games-schedule-filters">
+          <div className="field">
+            <label>Status filter</label>
+            <select value={filter} onChange={e => setFilter(e.target.value as any)}>
+              <option>All</option>
+              {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Year filter</label>
+            <select value={yearFilter} onChange={e => setYearFilter(e.target.value)}>
+              <option value="All years">All years</option>
+              {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Search</label>
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="date, league, location, teams..." />
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th></th><th>Date</th><th>Sport</th><th>Level</th><th>Level detail</th><th>League</th>{showPlatformChips ? <th>Platforms</th> : null}<th>Roundtrip mi</th><th>Pay</th><th>Paid</th><th>Location</th><th>Status</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(g => {
+                const isExpanded = expandedGameId === g.id
+                const payBadge = paymentBadge(g)
+                return (
+                  <Fragment key={g.id}>
+                    <tr
+                      className={`expandable-row${isExpanded ? ' expanded' : ''}`}
+                      onClick={() => toggleExpanded(g.id)}
+                    >
+                      <td className="expander-cell" aria-label={isExpanded ? 'Collapse row' : 'Expand row'}>
+                        {isExpanded ? '−' : '+'}
+                      </td>
+                      <td>{g.gameDate}{g.startTime ? ` ${g.startTime}` : ''}</td>
+                      <td>{g.sport}</td>
+                      <td>{g.competitionLevel}</td>
+                      <td>{(g as any).levelDetail ?? ''}</td>
+                      <td>{g.league ?? ''}</td>
+                      {showPlatformChips ? (
+                        <td>
+                          <div className="platform-row">
+                            {assigningPlatforms.map(p => (
+                              <span key={p} className={'platform-chip ' + (g.platformConfirmations?.[p] ? 'on' : 'off')}>
+                                {p}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      ) : null}
+                      <td>{(g as any).roundtripMiles != null ? Number((g as any).roundtripMiles).toFixed(0) : ''}</td>
+                      <td>{(g as any).gameFee != null ? `$${Number((g as any).gameFee).toFixed(0)}` : ''}</td>
+                      <td><span className={`pill ${payBadge.tone}`}>{payBadge.label}</span></td>
+                      <td>
+                        {g.locationAddress}
+                        {g.distanceMiles != null ? (
+                          <div className="small">
+                            {g.distanceMiles.toFixed(1)} mi one-way from {g.mileageOrigin === 'other' ? 'secondary mileage origin' : 'primary mileage origin'}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td>
+                        {statusQuickActions(g)}
+                      </td>
+                      <td>
+                        <div className="btnbar" onClick={e => e.stopPropagation()}>
+                          <button className="btn" onClick={() => edit(g.id)}>Edit</button>
+                          <button className="btn danger" onClick={() => del(g.id)}>Delete</button>
+                        </div>
+                      </td>
+                    </tr>
+                    {isExpanded ? (
+                      <tr className="expanded">
+                        <td colSpan={gameTableColSpan}>
+                          <div className="expanded-panel">
+                            <div className="expanded-grid">
+                              <div className="expanded-block">
+                                <div className="expanded-label">Teams</div>
+                                <div className="expanded-value">
+                                  {g.homeTeam || g.awayTeam ? `${g.homeTeam || 'TBD'} vs ${g.awayTeam || 'TBD'}` : 'Teams not entered yet'}
                                 </div>
                               </div>
                               <div className="expanded-block">
@@ -515,7 +712,7 @@ export default function GamesPage() {
                                 <div className="expanded-label">Pay</div>
                                 <div className="expanded-value">
                                   {(g as any).gameFee != null ? `$${Number((g as any).gameFee).toFixed(2)}` : 'No fee entered'}
-                                  {' Â· '}
+                                  {' · '}
                                   <span className={`pill ${payBadge.tone}`}>{payBadge.label}</span>
                                 </div>
                               </div>
@@ -527,7 +724,7 @@ export default function GamesPage() {
                                     : g.distanceMiles != null
                                       ? `${(g.distanceMiles * 2).toFixed(1)} estimated roundtrip mi`
                                       : 'No mileage logged'}
-                                  {' Â· '}
+                                  {' · '}
                                   {g.mileageOrigin === 'other' ? 'from secondary mileage origin' : 'from primary mileage origin'}
                                 </div>
                               </div>
@@ -876,6 +1073,5 @@ export default function GamesPage() {
     </div>
   )
 }
-
 
 
