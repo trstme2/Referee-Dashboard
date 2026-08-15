@@ -31,8 +31,13 @@ Use only the headings that apply.
 
 ## 2026-08-15
 
-### Fixed
+### Changed
+- Reworked Games follow-up handling so played but unpaid games are grouped separately from past scheduled games that still need a status update.
+- Renamed the mobile Recent view to Follow-up, preserving a focused three-tab layout while making payment follow-up easy to find.
+- Stopped labeling scheduled future games as unpaid; payment status now appears only after a game is played or paid.
 
+### Fixed
+- Made quick status changes keep the paid confirmation and paid date in sync when marking a game paid or returning it to scheduled.
 - Kept past games that are still marked Scheduled in the Games page Recent view, so officials can mark a game played or paid without hunting through the full schedule. Scheduled games dated today remain in Upcoming until their status changes.
 
 ### QA / Release

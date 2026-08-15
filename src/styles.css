@@ -931,6 +931,39 @@ button, input, select, textarea { font: inherit; }
   display: none;
 }
 
+.games-follow-up-group {
+  display: grid;
+  gap: 10px;
+}
+
+.games-follow-up-group + .games-follow-up-group {
+  margin-top: 8px;
+}
+
+.games-follow-up-group header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 2px 0;
+}
+
+.games-follow-up-group h4,
+.games-follow-up-group p {
+  margin: 0;
+}
+
+.games-follow-up-group h4 {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.games-follow-up-group p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .game-card {
   border: 1px solid var(--border);
   border-radius: 10px;

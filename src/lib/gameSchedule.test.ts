@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { getRecentGames, getUpcomingGames, sortGamesAroundToday } from './gameSchedule'
+import {
+  getPaymentFollowUpGames,
+  getRecentGames,
+  getStatusFollowUpGames,
+  getUpcomingGames,
+  isGamePaid,
+  sortGamesAroundToday,
+} from './gameSchedule'
 import type { Game } from './types'
 
 function game(id: string, gameDate: string, startTime: string | undefined, status: Game['status']): Game {
@@ -40,6 +47,16 @@ describe('game schedule helpers', () => {
       'recent-unpaid',
       'recent-paid',
     ])
+  })
+
+  it('separates payment follow-up from games that still need a status update', () => {
+    expect(getPaymentFollowUpGames(games, today).map((item) => item.id)).toEqual(['recent-unpaid'])
+    expect(getStatusFollowUpGames(games, today).map((item) => item.id)).toEqual(['needs-follow-up'])
+  })
+
+  it('treats a paid confirmation as paid even if an older record has not been marked complete', () => {
+    expect(isGamePaid({ status: 'Played', paidConfirmed: true })).toBe(true)
+    expect(isGamePaid({ status: 'Played', paidConfirmed: false })).toBe(false)
   })
 
   it('sorts the full schedule around today and keeps canceled games last', () => {

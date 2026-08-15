@@ -29,6 +29,26 @@ export function getRecentGames(games: Game[], today: string): Game[] {
     .sort(compareDescending)
 }
 
+export function isGamePaid(game: Pick<Game, 'paidConfirmed' | 'status'>): boolean {
+  return game.paidConfirmed || game.status === 'Paid / Complete'
+}
+
+export function getPaymentFollowUpGames(games: Game[], today: string): Game[] {
+  return games
+    .filter((game) => (
+      game.gameDate <= today &&
+      game.status === 'Played' &&
+      !isGamePaid(game)
+    ))
+    .sort(compareDescending)
+}
+
+export function getStatusFollowUpGames(games: Game[], today: string): Game[] {
+  return games
+    .filter((game) => game.status === 'Scheduled' && game.gameDate < today)
+    .sort(compareDescending)
+}
+
 export function sortGamesAroundToday(games: Game[], today: string): Game[] {
   return [...games].sort((a, b) => {
     const aCanceled = a.status === 'Canceled'
