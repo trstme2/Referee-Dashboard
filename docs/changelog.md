@@ -29,6 +29,16 @@ Use short, dated entries:
 
 Use only the headings that apply.
 
+## 2026-08-15
+
+### Fixed
+
+- Kept past games that are still marked Scheduled in the Games page Recent view, so officials can mark a game played or paid without hunting through the full schedule. Scheduled games dated today remain in Upcoming until their status changes.
+
+### QA / Release
+
+- Added coverage for past scheduled games needing follow-up and same-day scheduled games remaining in Upcoming.
+
 ## 2026-08-11
 
 ### Changed

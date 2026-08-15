@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getRecentCompletedGames, getUpcomingGames, sortGamesAroundToday } from './gameSchedule'
+import { getRecentGames, getUpcomingGames, sortGamesAroundToday } from './gameSchedule'
 import type { Game } from './types'
 
 function game(id: string, gameDate: string, startTime: string | undefined, status: Game['status']): Game {
@@ -25,25 +25,32 @@ describe('game schedule helpers', () => {
     game('recent-paid', '2026-08-10', '19:00', 'Paid / Complete'),
     game('next-up', '2026-08-12', '17:00', 'Scheduled'),
     game('recent-unpaid', '2026-08-10', '20:00', 'Played'),
+    game('needs-follow-up', '2026-08-10', '21:00', 'Scheduled'),
+    game('tonight', '2026-08-11', '19:00', 'Scheduled'),
     game('canceled', '2026-08-09', '17:00', 'Canceled'),
   ]
 
   it('puts the nearest scheduled assignments first', () => {
-    expect(getUpcomingGames(games, today).map((item) => item.id)).toEqual(['next-up', 'future-late'])
+    expect(getUpcomingGames(games, today).map((item) => item.id)).toEqual(['tonight', 'next-up', 'future-late'])
   })
 
-  it('shows recent completed assignments newest first', () => {
-    expect(getRecentCompletedGames(games, today).map((item) => item.id)).toEqual(['recent-unpaid', 'recent-paid'])
+  it('keeps past scheduled games visible for follow-up', () => {
+    expect(getRecentGames(games, today).map((item) => item.id)).toEqual([
+      'needs-follow-up',
+      'recent-unpaid',
+      'recent-paid',
+    ])
   })
 
   it('sorts the full schedule around today and keeps canceled games last', () => {
     expect(sortGamesAroundToday(games, today).map((item) => item.id)).toEqual([
+      'tonight',
       'next-up',
       'future-late',
+      'needs-follow-up',
       'recent-unpaid',
       'recent-paid',
       'canceled',
     ])
   })
 })
-

@@ -9,7 +9,7 @@ import { getDrivingDistanceMiles } from '../lib/distance'
 import { formatMoney, isWithinNextDays, yyyyMmDd } from '../lib/utils'
 import { recordPlatformEvent } from '../lib/platformEvents'
 import { IRS_MILEAGE_ORIGIN_LINKS } from '../lib/taxReview'
-import { getRecentCompletedGames, getUpcomingGames, sortGamesAroundToday } from '../lib/gameSchedule'
+import { getRecentGames, getUpcomingGames, sortGamesAroundToday } from '../lib/gameSchedule'
 
 const levels: CompetitionLevel[] = ['High School', 'College', 'Club']
 const statuses: GameStatus[] = ['Scheduled', 'Played', 'Paid / Complete', 'Canceled']
@@ -215,10 +215,10 @@ export default function GamesPage() {
     return sortGamesAroundToday(list, today)
   }, [db.games, filter, q, today, yearFilter])
   const nextUp = useMemo(() => getUpcomingGames(db.games, today)[0] ?? null, [db.games, today])
-  const recentCompleted = useMemo(() => getRecentCompletedGames(db.games, today).slice(0, 2), [db.games, today])
+  const recentGames = useMemo(() => getRecentGames(db.games, today).slice(0, 2), [db.games, today])
   const mobileRows = useMemo(() => {
     if (mobileView === 'upcoming') return getUpcomingGames(rows, today).filter((game) => game.id !== nextUp?.id)
-    if (mobileView === 'recent') return getRecentCompletedGames(rows, today)
+    if (mobileView === 'recent') return getRecentGames(rows, today)
     return rows
   }, [mobileView, nextUp?.id, rows, today])
   const strip = useMemo(() => {
@@ -450,7 +450,7 @@ export default function GamesPage() {
         ? 'No more upcoming assignments'
         : 'No upcoming assignments'
       : mobileView === 'recent'
-        ? 'No recent completed games'
+        ? 'No recent games to follow up'
         : noGamesYet
           ? 'No games yet'
           : 'No games match those filters'
@@ -459,7 +459,7 @@ export default function GamesPage() {
         ? 'Your next assignment is shown above.'
         : 'Your next scheduled assignment will appear here.'
       : mobileView === 'recent'
-        ? 'Played and paid games will appear here after you update their status.'
+        ? 'Past scheduled games and completed games appear here so you can update status, pay, mileage, or details.'
         : noGamesYet
           ? 'Sync an assigning platform, import a CSV, or add your first assignment to start your working schedule.'
           : 'Try adjusting the filters or search to bring more assignments into view.'
@@ -541,13 +541,13 @@ export default function GamesPage() {
             <div className="games-focus-head">
               <div>
                 <div className="eyebrow">Recent work</div>
-                <h3>{recentCompleted.length ? 'Follow up on completed games' : 'No recent completed games'}</h3>
+                <h3>{recentGames.length ? 'Follow up on recent games' : 'No recent games to follow up'}</h3>
               </div>
-              {recentCompleted.length ? <button className="btn compact" onClick={() => setMobileView('recent')}>View recent</button> : null}
+              {recentGames.length ? <button className="btn compact" onClick={() => setMobileView('recent')}>View recent</button> : null}
             </div>
-            {recentCompleted.length ? (
+            {recentGames.length ? (
               <div className="games-recent-list">
-                {recentCompleted.map((game) => (
+                {recentGames.map((game) => (
                   <button key={game.id} className="games-recent-row" onClick={() => edit(game.id)}>
                     <span>
                       <strong>{gameTitle(game)}</strong>
@@ -557,7 +557,7 @@ export default function GamesPage() {
                   </button>
                 ))}
               </div>
-            ) : <p className="small">Completed games will appear here for pay and mileage follow-up.</p>}
+            ) : <p className="small">Past scheduled games and completed games will appear here for follow-up.</p>}
           </article>
         </section>
 
@@ -608,7 +608,7 @@ export default function GamesPage() {
             Upcoming ({getUpcomingGames(rows, today).length})
           </button>
           <button type="button" role="tab" aria-selected={mobileView === 'recent'} className={mobileView === 'recent' ? 'active' : ''} onClick={() => setMobileView('recent')}>
-            Recent ({getRecentCompletedGames(rows, today).length})
+            Recent ({getRecentGames(rows, today).length})
           </button>
           <button type="button" role="tab" aria-selected={mobileView === 'schedule'} className={mobileView === 'schedule' ? 'active' : ''} onClick={() => setMobileView('schedule')}>
             Full schedule

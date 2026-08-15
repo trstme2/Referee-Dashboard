@@ -18,11 +18,13 @@ export function getUpcomingGames(games: Game[], today: string): Game[] {
     .sort(compareAscending)
 }
 
-export function getRecentCompletedGames(games: Game[], today: string): Game[] {
+export function getRecentGames(games: Game[], today: string): Game[] {
   return games
     .filter((game) =>
-      (game.status === 'Played' || game.status === 'Paid / Complete') &&
-      game.gameDate <= today
+      game.status !== 'Canceled' && (
+        game.gameDate < today ||
+        (game.gameDate === today && (game.status === 'Played' || game.status === 'Paid / Complete'))
+      )
     )
     .sort(compareDescending)
 }
@@ -39,4 +41,3 @@ export function sortGamesAroundToday(games: Game[], today: string): Game[] {
     return aUpcoming ? compareAscending(a, b) : compareDescending(a, b)
   })
 }
-
