@@ -10,6 +10,7 @@ import { formatMoney, isWithinNextDays, yyyyMmDd } from '../lib/utils'
 import { recordPlatformEvent } from '../lib/platformEvents'
 import { IRS_MILEAGE_ORIGIN_LINKS } from '../lib/taxReview'
 import {
+  getFollowUpGames,
   getPaymentFollowUpGames,
   getStatusFollowUpGames,
   getUpcomingGames,
@@ -228,10 +229,7 @@ export default function GamesPage() {
   const nextUp = useMemo(() => getUpcomingGames(db.games, today)[0] ?? null, [db.games, today])
   const paymentFollowUpGames = useMemo(() => getPaymentFollowUpGames(rows, today), [rows, today])
   const statusFollowUpGames = useMemo(() => getStatusFollowUpGames(rows, today), [rows, today])
-  const followUpGames = useMemo(
-    () => [...paymentFollowUpGames, ...statusFollowUpGames],
-    [paymentFollowUpGames, statusFollowUpGames]
-  )
+  const followUpGames = useMemo(() => getFollowUpGames(rows, today), [rows, today])
   const followUpPreviewGames = useMemo(() => followUpGames.slice(0, 2), [followUpGames])
   const mobileRows = useMemo(() => {
     if (mobileView === 'upcoming') return getUpcomingGames(rows, today)
@@ -849,18 +847,6 @@ export default function GamesPage() {
         <div className="game-card-list">
           {mobileView === 'follow-up' ? (
             <>
-              {paymentFollowUpGames.length > 0 ? (
-                <section className="games-follow-up-group" aria-labelledby="payment-follow-up-heading">
-                  <header>
-                    <div>
-                      <h4 id="payment-follow-up-heading">Payment follow-up</h4>
-                      <p>Played games that have not been marked paid.</p>
-                    </div>
-                    <span className="pill warn">{paymentFollowUpGames.length}</span>
-                  </header>
-                  {paymentFollowUpGames.map(renderMobileGameCard)}
-                </section>
-              ) : null}
               {statusFollowUpGames.length > 0 ? (
                 <section className="games-follow-up-group" aria-labelledby="status-follow-up-heading">
                   <header>
@@ -871,6 +857,18 @@ export default function GamesPage() {
                     <span className="pill info">{statusFollowUpGames.length}</span>
                   </header>
                   {statusFollowUpGames.map(renderMobileGameCard)}
+                </section>
+              ) : null}
+              {paymentFollowUpGames.length > 0 ? (
+                <section className="games-follow-up-group" aria-labelledby="payment-follow-up-heading">
+                  <header>
+                    <div>
+                      <h4 id="payment-follow-up-heading">Payment follow-up</h4>
+                      <p>Played games that have not been marked paid.</p>
+                    </div>
+                    <span className="pill warn">{paymentFollowUpGames.length}</span>
+                  </header>
+                  {paymentFollowUpGames.map(renderMobileGameCard)}
                 </section>
               ) : null}
             </>

@@ -49,6 +49,13 @@ export function getStatusFollowUpGames(games: Game[], today: string): Game[] {
     .sort(compareDescending)
 }
 
+export function getFollowUpGames(games: Game[], today: string): Game[] {
+  return [
+    ...getStatusFollowUpGames(games, today),
+    ...getPaymentFollowUpGames(games, today),
+  ]
+}
+
 export function sortGamesAroundToday(games: Game[], today: string): Game[] {
   return [...games].sort((a, b) => {
     const aCanceled = a.status === 'Canceled'

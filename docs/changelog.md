@@ -35,6 +35,7 @@ Use only the headings that apply.
 - Reworked Games follow-up handling so played but unpaid games are grouped separately from past scheduled games that still need a status update.
 - Renamed the mobile Recent view to Follow-up, preserving a focused three-tab layout while making payment follow-up easy to find.
 - Stopped labeling scheduled future games as unpaid; payment status now appears only after a game is played or paid.
+- Prioritized past games needing a status update ahead of payment follow-up, matching an official's normal post-game workflow.
 
 ### Fixed
 - Made quick status changes keep the paid confirmation and paid date in sync when marking a game paid or returning it to scheduled.

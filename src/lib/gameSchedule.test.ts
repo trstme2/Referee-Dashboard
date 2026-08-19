@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   getPaymentFollowUpGames,
   getRecentGames,
+  getFollowUpGames,
   getStatusFollowUpGames,
   getUpcomingGames,
   isGamePaid,
@@ -52,6 +53,10 @@ describe('game schedule helpers', () => {
   it('separates payment follow-up from games that still need a status update', () => {
     expect(getPaymentFollowUpGames(games, today).map((item) => item.id)).toEqual(['recent-unpaid'])
     expect(getStatusFollowUpGames(games, today).map((item) => item.id)).toEqual(['needs-follow-up'])
+    expect(getFollowUpGames(games, today).map((item) => item.id)).toEqual([
+      'needs-follow-up',
+      'recent-unpaid',
+    ])
   })
 
   it('treats a paid confirmation as paid even if an older record has not been marked complete', () => {
