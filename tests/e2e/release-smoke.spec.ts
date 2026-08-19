@@ -66,6 +66,50 @@ test('games page renders a persisted 7 PM default start time', async ({ page }) 
   await expect(page.locator('body')).toContainText('19:00')
 })
 
+test('mobile upcoming includes the featured next assignment', async ({ page }) => {
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const createdAt = now.toISOString()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.addInitScript(({ today, createdAt }) => {
+    window.localStorage.setItem('referee_dashboard_db_v4_local', JSON.stringify({
+      settings: {
+        homeAddress: '',
+        defaultTimezone: 'America/New_York',
+        trackedSports: [],
+        showGamePlatformChips: true,
+        assigningPlatforms: [],
+        leagues: [],
+      },
+      games: [{
+        id: 'today-featured-game',
+        sport: 'Soccer',
+        competitionLevel: 'High School',
+        gameDate: today,
+        startTime: '19:00',
+        locationAddress: 'Tonight Test Stadium, Columbus, OH',
+        status: 'Scheduled',
+        paidConfirmed: false,
+        platformConfirmations: {},
+        createdAt,
+        updatedAt: createdAt,
+      }],
+      calendarEvents: [],
+      expenses: [],
+      requirementDefinitions: [],
+      requirementInstances: [],
+      requirementActivities: [],
+      csvImports: [],
+      csvImportRows: [],
+    }))
+  }, { today, createdAt })
+
+  await page.goto('/games')
+  await expect(page.getByRole('tab', { name: 'Upcoming (1)' })).toBeVisible()
+  await expect(page.locator('.game-card-list')).toContainText('Tonight Test Stadium, Columbus, OH')
+})
+
 test('requirements can add a common requirement directly to a selected season', async ({ page }) => {
   await page.addInitScript(() => {
     const now = '2026-07-26T12:00:00.000Z'

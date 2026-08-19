@@ -39,6 +39,7 @@ Use only the headings that apply.
 ### Fixed
 - Made quick status changes keep the paid confirmation and paid date in sync when marking a game paid or returning it to scheduled.
 - Kept past games that are still marked Scheduled in the Games page Recent view, so officials can mark a game played or paid without hunting through the full schedule. Scheduled games dated today remain in Upcoming until their status changes.
+- Fixed the mobile Upcoming list so it includes the featured next assignment and always matches its displayed count.
 
 ### QA / Release
 

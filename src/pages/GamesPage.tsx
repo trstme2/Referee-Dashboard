@@ -234,10 +234,10 @@ export default function GamesPage() {
   )
   const followUpPreviewGames = useMemo(() => followUpGames.slice(0, 2), [followUpGames])
   const mobileRows = useMemo(() => {
-    if (mobileView === 'upcoming') return getUpcomingGames(rows, today).filter((game) => game.id !== nextUp?.id)
+    if (mobileView === 'upcoming') return getUpcomingGames(rows, today)
     if (mobileView === 'follow-up') return followUpGames
     return rows
-  }, [followUpGames, mobileView, nextUp?.id, rows, today])
+  }, [followUpGames, mobileView, rows, today])
   const strip = useMemo(() => {
     const activeRows = rows.filter(g => g.status !== 'Canceled')
     const mileageRows = activeRows.filter(g => g.status === 'Played' || g.status === 'Paid / Complete')
