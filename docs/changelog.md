@@ -29,11 +29,53 @@ Use short, dated entries:
 
 Use only the headings that apply.
 
+## 2026-08-15
+
+### Changed
+- Reworked Games follow-up handling so played but unpaid games are grouped separately from past scheduled games that still need a status update.
+- Renamed the mobile Recent view to Follow-up, preserving a focused three-tab layout while making payment follow-up easy to find.
+- Stopped labeling scheduled future games as unpaid; payment status now appears only after a game is played or paid.
+- Prioritized past games needing a status update ahead of payment follow-up, matching an official's normal post-game workflow.
+
+### Fixed
+- Made quick status changes keep the paid confirmation and paid date in sync when marking a game paid or returning it to scheduled.
+- Kept past games that are still marked Scheduled in the Games page Recent view, so officials can mark a game played or paid without hunting through the full schedule. Scheduled games dated today remain in Upcoming until their status changes.
+- Fixed the mobile Upcoming list so it includes the featured next assignment and always matches its displayed count.
+
+### QA / Release
+
+- Added coverage for past scheduled games needing follow-up and same-day scheduled games remaining in Upcoming.
+
+## 2026-08-11
+
+### Changed
+
+- Reworked Games into a current-workflow schedule: the next assignment and recent completed games are now immediately available above the full schedule, and the full schedule is ordered around today instead of beginning with the furthest future assignment.
+- Added a mobile schedule switch for Upcoming, Recent, and Full schedule views so an iPhone shows one focused assignment list at a time.
+
+### QA / Release
+
+- Added schedule-ordering tests for nearest upcoming games, recent completed games, and canceled-game placement.
+
+## 2026-08-08
+
+### Fixed
+
+- Prevented DragonFly from creating duplicate games when the same assignment appears more than once in a single calendar-feed response with different provider event IDs. Exact duplicate game slots now collapse before matching or creating records, while assignments with a different role, matchup, time, or location remain separate.
+
+### QA / Release
+
+- Added a regression test for repeated DragonFly game events with separate provider IDs.
+
 ## 2026-07-26
 
 ### Added
 
 - Added an owner-only, one-time Sensitive Data Migration control in Admin that inventories legacy calendar data without displaying secrets, encrypts legacy feed URLs, and converts legacy plaintext calendar-export tokens into hashes without changing their URLs.
+
+### Changed
+
+- Reworked Requirements into a season-first workspace: each readiness card now has direct View requirements and Add requirement actions, common requirement types can be added to the selected season without managing templates first, and season rollover/template controls are kept secondary to the day-to-day workflow.
 
 ### Fixed
 
@@ -41,10 +83,14 @@ Use only the headings that apply.
 - Fixed the drift check's ownership-policy detector so it recognizes the valid policy SQL Supabase stores in production.
 - Preserved existing calendar subscription URLs during the owner migration, then removed the temporary plaintext-token lookup compatibility path after production conversion completed.
 - Replaced the native Admin migration prompt with an in-page confirmation field so the one-time protection action is clearer and more reliable across browsers.
+- Restored the supported TypeScript 6.x line after a broad Dependabot development-dependency update introduced TypeScript 7, which is incompatible with the project's current `typescript-eslint` release and caused clean CI installs to fail.
+- Split application pages into on-demand route bundles, added a recoverable screen-level error boundary, kept closed mobile navigation controls out of keyboard focus, and aligned the local distance API with the production POST request contract.
+- Removed the deprecated `@types/uuid` stub package because `uuid` ships its own TypeScript definitions.
 
 ### Security / Privacy
 
 - Made feed URL encryption mandatory for new Production saves. Production now stores encrypted feed URLs and one-way hashed calendar subscription tokens only.
+- Added a fail-closed production dependency audit wrapper. It documents and narrowly accepts the current React Router RSC-only advisory because Whistle Keeper is a browser-only SPA, while continuing to fail CI on every other high or critical production advisory.
 
 ## 2026-07-17
 

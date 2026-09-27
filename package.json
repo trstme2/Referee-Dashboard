@@ -10,6 +10,7 @@
     "typecheck:all": "npm run typecheck && npm run typecheck:api",
     "test": "vitest run src",
     "test:sync": "vitest run src/server/sync-merge.test.ts src/server/sync-ics-utils.test.ts src/server/feed-fetch.test.ts src/lib/calendarFeedInput.test.ts src/lib/calendarEvents.test.ts src/lib/mobileDashboard.test.ts",
+    "audit:prod": "node scripts/audit-production-dependencies.mjs",
     "test:e2e": "node scripts/run-playwright-smoke.mjs",
     "qa:smoke": "node scripts/run-playwright-smoke.mjs",
     "qa:release": "npm run typecheck:all && npm test && npm run lint && npm run build && npm run qa:smoke",
@@ -18,12 +19,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.110.7",
-    "node-ical": "^0.26.1",
+    "@supabase/supabase-js": "^2.111.0",
+    "node-ical": "^0.27.1",
     "papaparse": "^5.5.4",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "react-router-dom": "^7.18.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.2",
     "uuid": "^14.0.1"
   },
   "devDependencies": {
@@ -31,19 +32,18 @@
     "@playwright/test": "^1.61.1",
     "@types/node": "^26.1.1",
     "@types/papaparse": "^5.3.14",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@types/uuid": "^11.0.0",
-    "@vercel/node": "^5.8.26",
-    "@vitejs/plugin-react": "^6.0.3",
-    "eslint": "^10.6.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vercel/node": "^5.10.2",
+    "@vitejs/plugin-react": "^6.1.1",
+    "eslint": "^10.9.1",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.3",
+    "eslint-plugin-react-refresh": "^0.5.6",
     "globals": "^17.7.0",
-    "typescript": "^7.0.2",
-    "typescript-eslint": "^8.62.1",
-    "vite": "^8.1.4",
-    "vitest": "^4.1.10"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.69.0",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "@vercel/static-config": {

@@ -3,12 +3,20 @@ import HelpTip from '../components/HelpTip'
 import { useNavigate } from 'react-router-dom'
 import { useData } from '../lib/DataContext'
 import { trackedSportsFor } from '../lib/preferences'
-import type { CompetitionLevel, GameStatus, Role, SoccerRole, LacrosseRole, MileageOrigin } from '../lib/types'
+import type { CompetitionLevel, Game, GameStatus, Role, SoccerRole, LacrosseRole, MileageOrigin } from '../lib/types'
 import { upsertGameIn, deleteGameIn } from '../lib/mutate'
 import { getDrivingDistanceMiles } from '../lib/distance'
-import { formatMoney, isWithinNextDays } from '../lib/utils'
+import { formatMoney, isWithinNextDays, yyyyMmDd } from '../lib/utils'
 import { recordPlatformEvent } from '../lib/platformEvents'
 import { IRS_MILEAGE_ORIGIN_LINKS } from '../lib/taxReview'
+import {
+  getFollowUpGames,
+  getPaymentFollowUpGames,
+  getStatusFollowUpGames,
+  getUpcomingGames,
+  isGamePaid,
+  sortGamesAroundToday,
+} from '../lib/gameSchedule'
 
 const levels: CompetitionLevel[] = ['High School', 'College', 'Club']
 const statuses: GameStatus[] = ['Scheduled', 'Played', 'Paid / Complete', 'Canceled']
@@ -19,6 +27,7 @@ const DEFAULT_GAME_START_TIME = '19:00'
 const commonStartTimes = ['16:00', '17:00', '18:00', '19:00', '19:30', '20:00']
 
 type Meridiem = 'AM' | 'PM'
+type GamesMobileView = 'upcoming' | 'follow-up' | 'schedule'
 type GameFormState = {
   id: string
   sport: string
@@ -92,10 +101,15 @@ function timeLabel(time: string): string {
 }
 
 function paymentBadge(game: { paidConfirmed: boolean; status: GameStatus }) {
-  if (game.paidConfirmed || game.status === 'Paid / Complete') return { label: 'Paid', tone: 'ok' }
+  if (isGamePaid(game)) return { label: 'Paid', tone: 'ok' }
   if (game.status === 'Canceled') return { label: 'Canceled', tone: 'bad' }
   if (game.status === 'Played') return { label: 'Unpaid', tone: 'warn' }
-  return { label: 'Unpaid', tone: 'warn' }
+  return null
+}
+
+function followUpBadge(game: Game) {
+  if (game.status === 'Played' && !isGamePaid(game)) return { label: 'Unpaid', tone: 'warn' }
+  return { label: 'Mark played', tone: 'info' }
 }
 
 function gameStatusTone(status: GameStatus) {
@@ -149,6 +163,7 @@ export default function GamesPage() {
   const [filter, setFilter] = useState<'All' | GameStatus>('All')
   const [q, setQ] = useState<string>('')
   const [yearFilter, setYearFilter] = useState<string>('All years')
+  const [mobileView, setMobileView] = useState<GamesMobileView>('upcoming')
   const [expandedGameId, setExpandedGameId] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [trackedPlatformInput, setTrackedPlatformInput] = useState('')
@@ -194,6 +209,7 @@ export default function GamesPage() {
     )).sort((a, b) => Number(b) - Number(a))
   }, [db.games])
 
+  const today = yyyyMmDd(new Date())
   const rows = useMemo(() => {
     let list = [...db.games]
     if (filter !== 'All') list = list.filter(g => g.status === filter)
@@ -208,16 +224,18 @@ export default function GamesPage() {
         g.gameDate.includes(s)
       )
     }
-    return list.sort((a, b) => {
-      if (a.gameDate !== b.gameDate) {
-        return a.gameDate < b.gameDate ? 1 : -1
-      }
-      const timeA = a.startTime ?? ''
-      const timeB = b.startTime ?? ''
-      if (timeA === timeB) return 0
-      return timeA < timeB ? 1 : -1
-    })
-  }, [db.games, filter, q, yearFilter])
+    return sortGamesAroundToday(list, today)
+  }, [db.games, filter, q, today, yearFilter])
+  const nextUp = useMemo(() => getUpcomingGames(db.games, today)[0] ?? null, [db.games, today])
+  const paymentFollowUpGames = useMemo(() => getPaymentFollowUpGames(rows, today), [rows, today])
+  const statusFollowUpGames = useMemo(() => getStatusFollowUpGames(rows, today), [rows, today])
+  const followUpGames = useMemo(() => getFollowUpGames(rows, today), [rows, today])
+  const followUpPreviewGames = useMemo(() => followUpGames.slice(0, 2), [followUpGames])
+  const mobileRows = useMemo(() => {
+    if (mobileView === 'upcoming') return getUpcomingGames(rows, today)
+    if (mobileView === 'follow-up') return followUpGames
+    return rows
+  }, [followUpGames, mobileView, rows, today])
   const strip = useMemo(() => {
     const activeRows = rows.filter(g => g.status !== 'Canceled')
     const mileageRows = activeRows.filter(g => g.status === 'Played' || g.status === 'Paid / Complete')
@@ -227,7 +245,7 @@ export default function GamesPage() {
       .filter(g => g.paidConfirmed || g.status === 'Paid / Complete')
       .reduce((sum, g) => sum + Number(g.gameFee ?? 0), 0)
     const unpaidAmount = activeRows
-      .filter(g => !(g.paidConfirmed || g.status === 'Paid / Complete'))
+      .filter(g => g.status === 'Played' && !isGamePaid(g))
       .reduce((sum, g) => sum + Number(g.gameFee ?? 0), 0)
     const milesLogged = mileageRows.reduce((sum, g) => sum + Number(g.roundtripMiles ?? (g.distanceMiles != null ? g.distanceMiles * 2 : 0)), 0)
     return { gamesThisWeek, totalExpectedPay, paidAmount, unpaidAmount, milesLogged }
@@ -333,10 +351,13 @@ export default function GamesPage() {
   async function updateStatus(id: string, nextStatus: GameStatus) {
     const g = db.games.find(x => x.id === id)
     if (!g) return
+    const paidConfirmed = nextStatus === 'Paid / Complete'
     const next = upsertGameIn(db, {
       ...g,
       id: g.id,
       status: nextStatus,
+      paidConfirmed,
+      paidDate: paidConfirmed ? (g.paidDate ?? g.gameDate) : undefined,
     })
     await write(next)
     if (form.id === id) {
@@ -373,7 +394,7 @@ export default function GamesPage() {
     setForm(prev => ({ ...prev, startTime: shiftTimeByMinutes(prev.startTime || DEFAULT_GAME_START_TIME, delta) }))
   }
 
-  function statusQuickActions(g: typeof rows[number]) {
+  function statusQuickActions(g: Game) {
     const nextAction = nextGameStatusAction(g.status)
     return (
       <div className="game-status-actions" onClick={event => event.stopPropagation()}>
@@ -431,6 +452,87 @@ export default function GamesPage() {
     }
   }
 
+  function gameTitle(g: Game): string {
+    return g.homeTeam || g.awayTeam
+      ? `${g.homeTeam || 'TBD'} vs ${g.awayTeam || 'TBD'}`
+      : `${g.sport} (${g.competitionLevel})`
+  }
+
+  function gameDateLabel(g: Game): string {
+    return `${g.gameDate}${g.startTime ? ` at ${timeLabel(g.startTime)}` : ''}`
+  }
+
+  function renderMobileGameCard(g: Game) {
+    const payBadge = paymentBadge(g)
+    return (
+      <article key={g.id} className="game-card">
+        <div className="game-card-head">
+          <div>
+            <div className="game-card-date">{g.gameDate}{g.startTime ? ` at ${g.startTime}` : ''}</div>
+            <div className="game-card-title">{gameTitle(g)}</div>
+          </div>
+          <span className={`pill ${gameStatusTone(g.status)}`}>{g.status}</span>
+        </div>
+        <div className="game-card-meta">
+          <span>{g.levelDetail || g.competitionLevel}</span>
+          <span>{g.league || 'No league'}</span>
+          <span>{g.roundtripMiles != null ? `${Number(g.roundtripMiles).toFixed(0)} mi` : 'No mileage'}</span>
+          <span>{g.gameFee != null ? `$${Number(g.gameFee).toFixed(0)}` : 'No pay'}</span>
+        </div>
+        <div className="small">{g.locationAddress || 'No location entered'}</div>
+        {statusQuickActions(g)}
+        <div className="game-card-foot">
+          {payBadge ? <span className={`pill ${payBadge.tone}`}>{payBadge.label}</span> : null}
+          {showPlatformChips ? (
+            <div className="platform-row">
+              {assigningPlatforms.map(p => (
+                <span key={p} className={'platform-chip ' + (g.platformConfirmations?.[p] ? 'on' : 'off')}>
+                  {p}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <button className="btn compact" onClick={() => edit(g.id)}>Edit</button>
+        </div>
+      </article>
+    )
+  }
+
+  function renderMobileEmptyState() {
+    const heading = mobileView === 'upcoming'
+      ? nextUp
+        ? 'No more upcoming assignments'
+        : 'No upcoming assignments'
+      : mobileView === 'follow-up'
+        ? 'No games need follow-up'
+        : noGamesYet
+          ? 'No games yet'
+          : 'No games match those filters'
+    const description = mobileView === 'upcoming'
+      ? nextUp
+        ? 'Your next assignment is shown above.'
+        : 'Your next scheduled assignment will appear here.'
+      : mobileView === 'follow-up'
+        ? 'Played games that still need payment and past scheduled games appear here.'
+        : noGamesYet
+          ? 'Sync an assigning platform, import a CSV, or add your first assignment to start your working schedule.'
+          : 'Try adjusting the filters or search to bring more assignments into view.'
+
+    return (
+      <div className="empty-state centered games-mobile-empty">
+        <h3>{heading}</h3>
+        <p>{description}</p>
+        <div className="btnbar">
+          {noGamesYet || (mobileView === 'upcoming' && !nextUp) ? <button className="btn primary" onClick={startNew}>Add game</button> : null}
+          {noGamesYet ? <button className="btn" onClick={() => navigate('/sync')}>Sync calendars</button> : null}
+          {mobileView !== 'schedule' && !noGamesYet ? (
+            <button className="btn" onClick={() => setMobileView('schedule')}>View full schedule</button>
+          ) : null}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="grid games-page">
       <section className="card accent-frame">
@@ -458,6 +560,65 @@ export default function GamesPage() {
           <button className="btn" onClick={() => navigate('/sync')}>Sync calendars</button>
           <button className="btn" onClick={() => navigate('/import')}>Import CSV</button>
         </div>
+
+        <section className="games-workspace" aria-label="Current game workspace">
+          <article className="games-focus-card games-next-up">
+            <div className="games-focus-head">
+              <div>
+                <div className="eyebrow">Next up</div>
+                <h3>{nextUp ? gameTitle(nextUp) : 'No upcoming assignment'}</h3>
+              </div>
+              {nextUp ? <span className={`pill ${gameStatusTone(nextUp.status)}`}>{nextUp.status}</span> : null}
+            </div>
+            {nextUp ? (
+              <>
+                <div className="games-focus-date">{gameDateLabel(nextUp)}</div>
+                <div className="small">{[nextUp.levelDetail || nextUp.competitionLevel, nextUp.league, nextUp.role].filter(Boolean).join(' | ')}</div>
+                <div className="games-focus-location">{nextUp.locationAddress || 'No location entered'}</div>
+                <div className="games-focus-actions">
+                  {statusQuickActions(nextUp)}
+                  <button className="btn compact" onClick={() => edit(nextUp.id)}>View details</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="small">Add a game or sync an assigning platform to keep your next assignment here.</p>
+                <div className="btnbar">
+                  <button className="btn compact primary" onClick={startNew}>Add game</button>
+                  <button className="btn compact" onClick={() => navigate('/sync')}>Sync calendars</button>
+                </div>
+              </>
+            )}
+          </article>
+
+          <article className="games-focus-card games-recent-preview">
+            <div className="games-focus-head">
+              <div>
+                <div className="eyebrow">Follow-up</div>
+                <h3>{followUpGames.length ? `${followUpGames.length} game${followUpGames.length === 1 ? '' : 's'} need attention` : 'Nothing needs follow-up'}</h3>
+              </div>
+            </div>
+            {followUpPreviewGames.length ? (
+              <div className="games-recent-list">
+                {followUpPreviewGames.map((game) => {
+                  const badge = followUpBadge(game)
+                  return (
+                  <button key={game.id} className="games-recent-row" onClick={() => edit(game.id)}>
+                    <span>
+                      <strong>{gameTitle(game)}</strong>
+                      <small>{gameDateLabel(game)}</small>
+                    </span>
+                    <span className={`pill ${badge.tone}`}>{badge.label}</span>
+                  </button>
+                  )
+                })}
+                {followUpGames.length > followUpPreviewGames.length ? (
+                  <p className="small">Showing {followUpPreviewGames.length} of {followUpGames.length} games that need attention.</p>
+                ) : null}
+              </div>
+            ) : <p className="small">Played games needing payment and past scheduled games will appear here.</p>}
+          </article>
+        </section>
 
         <div className="games-platform-manager">
           <div>
@@ -493,7 +654,27 @@ export default function GamesPage() {
           </div>
         </div>
 
-        <div className="row">
+        <div className="page-section-head games-schedule-head">
+          <div>
+            <div className="eyebrow">Schedule</div>
+            <h3>Full schedule</h3>
+            <p className="sub">Upcoming assignments appear first, followed by recent history. Canceled games stay at the end.</p>
+          </div>
+        </div>
+
+        <div className="games-mobile-view-switch" role="tablist" aria-label="Game schedule view">
+          <button type="button" role="tab" aria-selected={mobileView === 'upcoming'} className={mobileView === 'upcoming' ? 'active' : ''} onClick={() => setMobileView('upcoming')}>
+            Upcoming ({getUpcomingGames(rows, today).length})
+          </button>
+          <button type="button" role="tab" aria-selected={mobileView === 'follow-up'} className={mobileView === 'follow-up' ? 'active' : ''} onClick={() => setMobileView('follow-up')}>
+            Follow-up ({followUpGames.length})
+          </button>
+          <button type="button" role="tab" aria-selected={mobileView === 'schedule'} className={mobileView === 'schedule' ? 'active' : ''} onClick={() => setMobileView('schedule')}>
+            Full schedule
+          </button>
+        </div>
+
+        <div className="row games-schedule-filters">
           <div className="field">
             <label>Status filter</label>
             <select value={filter} onChange={e => setFilter(e.target.value as any)}>
@@ -552,7 +733,7 @@ export default function GamesPage() {
                       ) : null}
                       <td>{(g as any).roundtripMiles != null ? Number((g as any).roundtripMiles).toFixed(0) : ''}</td>
                       <td>{(g as any).gameFee != null ? `$${Number((g as any).gameFee).toFixed(0)}` : ''}</td>
-                      <td><span className={`pill ${payBadge.tone}`}>{payBadge.label}</span></td>
+                      <td>{payBadge ? <span className={`pill ${payBadge.tone}`}>{payBadge.label}</span> : ''}</td>
                       <td>
                         {g.locationAddress}
                         {g.distanceMiles != null ? (
@@ -591,7 +772,7 @@ export default function GamesPage() {
                                 <div className="expanded-value">
                                   {(g as any).gameFee != null ? `$${Number((g as any).gameFee).toFixed(2)}` : 'No fee entered'}
                                   {' · '}
-                                  <span className={`pill ${payBadge.tone}`}>{payBadge.label}</span>
+                                  {payBadge ? <span className={`pill ${payBadge.tone}`}>{payBadge.label}</span> : 'Payment not due'}
                                 </div>
                               </div>
                               <div className="expanded-block">
@@ -664,43 +845,35 @@ export default function GamesPage() {
         </div>
 
         <div className="game-card-list">
-          {rows.map(g => {
-            const payBadge = paymentBadge(g)
-            return (
-              <article key={g.id} className="game-card">
-                <div className="game-card-head">
-                  <div>
-                    <div className="game-card-date">{g.gameDate}{g.startTime ? ` at ${g.startTime}` : ''}</div>
-                    <div className="game-card-title">
-                      {g.homeTeam || g.awayTeam ? `${g.homeTeam || 'TBD'} vs ${g.awayTeam || 'TBD'}` : `${g.sport} (${g.competitionLevel})`}
+          {mobileView === 'follow-up' ? (
+            <>
+              {statusFollowUpGames.length > 0 ? (
+                <section className="games-follow-up-group" aria-labelledby="status-follow-up-heading">
+                  <header>
+                    <div>
+                      <h4 id="status-follow-up-heading">Needs game status</h4>
+                      <p>Past assignments that are still marked scheduled.</p>
                     </div>
-                  </div>
-                  <span className={`pill ${gameStatusTone(g.status)}`}>{g.status}</span>
-                </div>
-                <div className="game-card-meta">
-                  <span>{g.levelDetail || g.competitionLevel}</span>
-                  <span>{g.league || 'No league'}</span>
-                  <span>{g.roundtripMiles != null ? `${Number(g.roundtripMiles).toFixed(0)} mi` : 'No mileage'}</span>
-                  <span>{g.gameFee != null ? `$${Number(g.gameFee).toFixed(0)}` : 'No pay'}</span>
-                </div>
-                <div className="small">{g.locationAddress || 'No location entered'}</div>
-                {statusQuickActions(g)}
-                <div className="game-card-foot">
-                  <span className={`pill ${payBadge.tone}`}>{payBadge.label}</span>
-                  {showPlatformChips ? (
-                    <div className="platform-row">
-                      {assigningPlatforms.map(p => (
-                        <span key={p} className={'platform-chip ' + (g.platformConfirmations?.[p] ? 'on' : 'off')}>
-                          {p}
-                        </span>
-                      ))}
+                    <span className="pill info">{statusFollowUpGames.length}</span>
+                  </header>
+                  {statusFollowUpGames.map(renderMobileGameCard)}
+                </section>
+              ) : null}
+              {paymentFollowUpGames.length > 0 ? (
+                <section className="games-follow-up-group" aria-labelledby="payment-follow-up-heading">
+                  <header>
+                    <div>
+                      <h4 id="payment-follow-up-heading">Payment follow-up</h4>
+                      <p>Played games that have not been marked paid.</p>
                     </div>
-                  ) : null}
-                  <button className="btn compact" onClick={() => edit(g.id)}>Edit</button>
-                </div>
-              </article>
-            )
-          })}
+                    <span className="pill warn">{paymentFollowUpGames.length}</span>
+                  </header>
+                  {paymentFollowUpGames.map(renderMobileGameCard)}
+                </section>
+              ) : null}
+            </>
+          ) : mobileRows.map(renderMobileGameCard)}
+          {mobileRows.length === 0 ? renderMobileEmptyState() : null}
         </div>
       </section>
 

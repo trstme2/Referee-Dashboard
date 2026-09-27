@@ -1,28 +1,41 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import Nav from './components/Nav'
-import HomePage from './pages/HomePage'
-import GamesPage from './pages/GamesPage'
-import CalendarPage from './pages/CalendarPage'
-import ExpensesPage from './pages/ExpensesPage'
-import RequirementsPage from './pages/RequirementsPage'
-import ImportPage from './pages/ImportPage'
-import SettingsPage from './pages/SettingsPage'
-import AuthPage from './pages/AuthPage'
-import AuthCallbackPage from './pages/AuthCallbackPage'
-import SyncPage from './pages/SyncPage'
-import TaxPage from './pages/TaxPage'
-import LandingPage from './pages/LandingPage'
-import RequestAccessPage from './pages/RequestAccessPage'
-import OnboardingPage from './pages/OnboardingPage'
-import DataPrivacyPage from './pages/DataPrivacyPage'
-import AdminPage from './pages/AdminPage'
+import AppErrorBoundary from './components/AppErrorBoundary'
 import { useData } from './lib/DataContext'
 import { shouldStartOnboarding } from './lib/onboarding'
 import { routeMetaForPath } from './lib/navigation'
 import { errorMetadata, recordPlatformEvent, safeRoutePath } from './lib/platformEvents'
 import logo from './assets/logo.png'
+
+const HomePage = lazy(() => import('./pages/HomePage'))
+const GamesPage = lazy(() => import('./pages/GamesPage'))
+const CalendarPage = lazy(() => import('./pages/CalendarPage'))
+const ExpensesPage = lazy(() => import('./pages/ExpensesPage'))
+const RequirementsPage = lazy(() => import('./pages/RequirementsPage'))
+const ImportPage = lazy(() => import('./pages/ImportPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const AuthPage = lazy(() => import('./pages/AuthPage'))
+const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'))
+const SyncPage = lazy(() => import('./pages/SyncPage'))
+const TaxPage = lazy(() => import('./pages/TaxPage'))
+const LandingPage = lazy(() => import('./pages/LandingPage'))
+const RequestAccessPage = lazy(() => import('./pages/RequestAccessPage'))
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
+const DataPrivacyPage = lazy(() => import('./pages/DataPrivacyPage'))
+const AdminPage = lazy(() => import('./pages/AdminPage'))
+
+function RouteLoadingFallback() {
+  return (
+    <div className="grid" role="status" aria-live="polite">
+      <section className="card app-route-loading">
+        <h2>Loading workspace</h2>
+        <p className="small">Getting your referee tools ready...</p>
+      </section>
+    </div>
+  )
+}
 
 export default function App() {
   const { mode, session, authReady, hydrating, error, db, loading } = useData()
@@ -123,7 +136,18 @@ export default function App() {
       )}
 
       <div key={location.pathname} className={`route-shell${showAppShell ? ' app-route-shell' : ''}`}>
-        <Routes>
+        <AppErrorBoundary
+          resetKey={location.pathname}
+          onError={(caughtError) => {
+            if (!session?.access_token || authMissing) return
+            void recordPlatformEvent(session.access_token, 'client_error', errorMetadata(caughtError, {
+              route: safeRoutePath(location.pathname),
+              kind: 'render_error',
+            }))
+          }}
+        >
+          <Suspense fallback={<RouteLoadingFallback />}>
+            <Routes>
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/request-access" element={<RequestAccessPage />} />
@@ -142,8 +166,10 @@ export default function App() {
           <Route path="/privacy" element={protectedElement(<DataPrivacyPage />)} />
           <Route path="/admin" element={protectedElement(<AdminPage />)} />
 
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </Suspense>
+        </AppErrorBoundary>
       </div>
 
       {showAppShell ? <Nav key={`mobile-${location.pathname}`} variant="mobile" /> : null}

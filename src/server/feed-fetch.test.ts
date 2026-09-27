@@ -36,6 +36,15 @@ describe('calendar feed fetch hardening', () => {
     await expect(fetchCalendarFeedText('https://8.8.8.8/calendar.ics', fetchImpl as any)).rejects.toThrow(/content type/i)
   })
 
+  it('rejects empty provider responses instead of treating them as a healthy feed', async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, {
+      status: 204,
+      headers: { 'content-type': 'text/calendar' },
+    }))
+
+    await expect(fetchCalendarFeedText('https://8.8.8.8/calendar.ics', fetchImpl as any)).rejects.toThrow(/no calendar data/i)
+  })
+
   it('retries transient feed fetch failures', async () => {
     const fetchImpl = vi
       .fn()
@@ -49,6 +58,21 @@ describe('calendar feed fetch hardening', () => {
 
     expect(result.attempts).toBe(2)
     expect(result.text).toContain('BEGIN:VCALENDAR')
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries an empty provider response before reporting a failure', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response('BEGIN:VCALENDAR\nEND:VCALENDAR', {
+        status: 200,
+        headers: { 'content-type': 'text/calendar' },
+      }))
+
+    const result = await fetchCalendarFeedTextWithRetry('https://8.8.8.8/calendar.ics', fetchImpl as any)
+
+    expect(result.attempts).toBe(2)
     expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 

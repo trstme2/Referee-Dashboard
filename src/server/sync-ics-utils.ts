@@ -7,6 +7,11 @@ type FeedEventSlot = {
   start: Date
   end: Date
   allDay: boolean
+  title?: string | null
+  location?: string | null
+  role?: string | null
+  homeTeam?: string | null
+  awayTeam?: string | null
 }
 
 type CompetitionLevel = 'High School' | 'College' | 'Club'
@@ -94,6 +99,43 @@ export function dedupeFeedBlocks<T extends FeedEventSlot>(events: T[]): T[] {
     const key = blockSlotKey(event)
     if (blockSlots.has(key)) return false
     blockSlots.add(key)
+    return true
+  })
+}
+
+function normalizedSlotText(value: string | null | undefined): string {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function dragonFlyGameSlotKey(event: FeedEventSlot): string {
+  return [
+    event.start.toISOString(),
+    event.end.toISOString(),
+    event.allDay,
+    normalizedSlotText(event.title),
+    normalizedSlotText(event.location),
+    normalizedSlotText(event.role),
+    normalizedSlotText(event.homeTeam),
+    normalizedSlotText(event.awayTeam),
+  ].join('|')
+}
+
+export function dedupeDragonFlyFeedEvents<T extends FeedEventSlot>(events: T[]): T[] {
+  const blockSlots = new Set<string>()
+  const gameSlots = new Set<string>()
+
+  return events.filter((event) => {
+    if (event.eventType === 'Block') {
+      const key = blockSlotKey(event)
+      if (blockSlots.has(key)) return false
+      blockSlots.add(key)
+      return true
+    }
+
+    if (event.eventType !== 'Game') return true
+    const key = dragonFlyGameSlotKey(event)
+    if (gameSlots.has(key)) return false
+    gameSlots.add(key)
     return true
   })
 }

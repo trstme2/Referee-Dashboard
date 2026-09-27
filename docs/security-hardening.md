@@ -37,6 +37,10 @@ Hashing retains the exact existing calendar subscription URL, so Google Calendar
 
 After the migration reports zero legacy records, the application uses hashed calendar-token lookup only. Existing subscriptions continue to use the same URL; their raw tokens are no longer retained in the database or accepted by the lookup path.
 
+## Production Dependency Audit
+
+CI runs `npm run audit:prod` and fails on every high or critical production dependency advisory. The one temporary exception is `GHSA-qwww-vcr4-c8h2`, a React Router issue limited to React Server Components mode. Whistle Keeper is a Vite single-page application using `BrowserRouter`; it does not use React Router RSC, server actions, or server-side rendering. The exception must be removed when React Router publishes a non-vulnerable compatible release or if the application adopts an RSC-capable routing architecture.
+
 ## Manual QA
 
 - Add, edit, disable, delete, and sync a calendar feed.

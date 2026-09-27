@@ -73,6 +73,7 @@ export type ProcessSyncJobsSummary = {
 
 const ACTIVE_JOB_STATUSES = ['queued', 'running'] as const
 const FINAL_JOB_STATUSES = ['succeeded', 'partial', 'failed'] as const
+const IMMEDIATELY_DUE_LEEWAY_MS = 5_000
 
 export function isSyncJobTableMissing(error: any): boolean {
   const message = String(error?.message ?? error ?? '')
@@ -85,6 +86,10 @@ export function isSyncJobTableMissing(error: any): boolean {
 
 function nowIso() {
   return new Date().toISOString()
+}
+
+export function immediatelyDueRunAfter(now = new Date()) {
+  return new Date(now.getTime() - IMMEDIATELY_DUE_LEEWAY_MS).toISOString()
 }
 
 function addMs(value: string, ms: number) {
@@ -156,7 +161,8 @@ export async function enqueueFeedSyncJobs(
       priority: trigger === 'manual' ? 20 : 10,
       attempts: 0,
       max_attempts: options.maxAttempts ?? 3,
-      run_after: options.runAfter ?? nowIso(),
+      // Make newly queued work visible to the processor in this same request.
+      run_after: options.runAfter ?? immediatelyDueRunAfter(),
     }))
 
   if (!rows.length) {
