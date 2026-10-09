@@ -16,6 +16,24 @@ function sameTeam(a: string | null | undefined, b: string | null | undefined): b
   return aa === bb || aa.includes(bb) || bb.includes(aa)
 }
 
+function knownTeam(value: string | null | undefined): boolean {
+  const text = normText(value)
+  return Boolean(text && !/^(tbd|tba|unknown|to be determined|to be announced)$/.test(text))
+}
+
+// Only used for heuristic matching. Stable source links handle actual reschedules.
+function compatibleIdentity(g: any, n: any): boolean {
+  if (g.sport && n.sport && normText(g.sport) !== normText(n.sport)) return false
+  const homeKnown = knownTeam(g.home_team) && knownTeam(n.homeTeam)
+  const awayKnown = knownTeam(g.away_team) && knownTeam(n.awayTeam)
+  const homeMatches = homeKnown && sameTeam(g.home_team, n.homeTeam)
+  const awayMatches = awayKnown && sameTeam(g.away_team, n.awayTeam)
+  if ((homeKnown && !homeMatches) || (awayKnown && !awayMatches)) return false
+  if (normText(g.location_address) && normText(n.location) &&
+      !sameLocation(g.location_address, n.location) && !(homeMatches && awayMatches)) return false
+  return true
+}
+
 function minutesBetween(a: string | null | undefined, b: string | null | undefined): number | null {
   if (!a || !b) return null
   const [ah, am] = String(a).slice(0, 5).split(':').map(Number)
@@ -26,7 +44,7 @@ function minutesBetween(a: string | null | undefined, b: string | null | undefin
 
 function manualCandidateScore(g: any, n: any): number {
   if (String(g.game_date) !== n.gameDate) return 0
-  if (g.status === 'Canceled') return 0
+  if (g.status === 'Canceled' || !compatibleIdentity(g, n)) return 0
 
   let score = 0
   const gameStart = g.start_time ? String(g.start_time).slice(0, 5) : null

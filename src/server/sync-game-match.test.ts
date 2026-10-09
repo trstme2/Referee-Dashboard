@@ -11,7 +11,7 @@ const game = {
   location_address: 'Pickerington North High School',
 }
 
-function match(games: object[], event = incoming) {
+function match(games: object[], event: typeof incoming & { homeTeam?: string; awayTeam?: string } = incoming) {
   return findManualMatch(games, new Set(games.map(g => String((g as { id: string }).id))), event)
 }
 
@@ -36,5 +36,41 @@ describe('feed game matching', () => {
   it('does not match a different date or a game over thirty minutes away', () => {
     expect(match([{ ...game, game_date: '2026-09-11' }]).match).toBeNull()
     expect(match([{ ...game, start_time: '20:00' }]).match).toBeNull()
+  })
+})
+
+describe('replacement assignments', () => {
+  const old = { ...game, id: 'carlow', game_date: '2026-10-07', start_time: '19:00',
+    competition_level: 'College', status: 'Scheduled',
+    home_team: 'Marietta', away_team: 'Carlow', location_address: 'Marietta College' }
+  const replacement = { ...incoming, gameDate: '2026-10-07', startTime: '19:00',
+    competitionLevel: 'College', homeTeam: 'Muskingum (OH)', awayTeam: 'Otterbein',
+    location: 'Muskingum University (OH)' }
+
+  it('does not absorb Otterbein at Muskingum into Carlow at Marietta', () => {
+    expect(match([old], replacement)).toEqual({ match: null, ambiguous: false })
+    expect(match([{ ...old, status: 'Canceled' }], replacement).match).toBeNull()
+  })
+
+  it('rejects a changed opponent even at the same venue', () => {
+    expect(match([old], { ...replacement, homeTeam: 'Marietta', location: 'Marietta College' }).match).toBeNull()
+  })
+
+  it('does not accept a conflicting venue just because the slot is unique', () => {
+    expect(match([{ ...old, home_team: null, away_team: null }], replacement).match).toBeNull()
+  })
+
+  it('allows venue corrections when both teams agree', () => {
+    expect(match([old], { ...replacement, homeTeam: 'Marietta', awayTeam: 'Carlow' }).match?.id).toBe('carlow')
+  })
+
+  it('keeps missing and TBD team names from becoming false conflicts', () => {
+    expect(match([{ ...old, away_team: 'TBD' }],
+      { ...replacement, homeTeam: 'Marietta', location: 'Marietta College' }).match?.id).toBe('carlow')
+  })
+
+  it('cannot claim an existing source-linked game reserved for another event', () => {
+    const event = { ...replacement, homeTeam: 'Marietta', awayTeam: 'Carlow', location: 'Marietta College' }
+    expect(findManualMatch([old], new Set(), event).match).toBeNull()
   })
 })
