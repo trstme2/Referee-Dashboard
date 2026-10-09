@@ -523,8 +523,36 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
   const manualMatchByExternalRef = new Map<string, any>()
   const manualMatchMetaByExternalRef = new Map<string, { topScore?: number; competingScore?: number }>()
 
+
+  const refPrefixes = [`${feed.platform}:feed:${stableFeedKey(feed)}:`, `${feed.platform}:${feed.id}:`]
+  const existingEventsById = new Map<string, any>()
+  for (const refPrefix of refPrefixes) {
+    const { data, error: evLookupErr } = await client
+      .from('calendar_events')
+      .select('id,event_type,title,start_ts,end_ts,all_day,external_ref,linked_game_id,created_at,timezone,location_address,notes,platform_confirmations,status')
+      .eq('user_id', feed.user_id)
+      .like('external_ref', `${refPrefix}%`)
+    if (evLookupErr) throw new Error(`calendar_events lookup: ${evLookupErr.message}`)
+    for (const event of data ?? []) existingEventsById.set(String(event.id), event)
+  }
+  const existingEvents = Array.from(existingEventsById.values())
+  const existingByRef = new Map<string, any>()
+  for (const e of existingEvents ?? []) {
+    existingByRef.set(String(e.external_ref), e)
+  }
+  // Reserve linked games before heuristics so another event cannot steal their identity.
   for (const n of normalized) {
-    if (n.eventType !== 'Game') continue
+    const event = existingByRef.get(n.externalRef) ?? existingByRef.get(n.legacyExternalRef)
+    if (!event) continue
+    for (const game of dayGames ?? []) {
+      if (String(game.calendar_event_id) === String(event.id) || String(game.id) === String(event.linked_game_id)) {
+        unusedGameIds.delete(String(game.id))
+      }
+    }
+  }
+
+  for (const n of normalized) {
+    if (n.eventType !== 'Game' || existingByRef.has(n.externalRef) || existingByRef.has(n.legacyExternalRef)) continue
     const candidate = findManualMatch(dayGames ?? [], unusedGameIds, n)
     if (candidate.match) {
       manualMatchByExternalRef.set(n.externalRef, candidate.match)
@@ -546,22 +574,7 @@ export async function syncFeed(client: any, feed: Feed, options: SyncFeedOptions
     }
   }
 
-  const refPrefixes = [`${feed.platform}:feed:${stableFeedKey(feed)}:`, `${feed.platform}:${feed.id}:`]
-  const existingEventsById = new Map<string, any>()
-  for (const refPrefix of refPrefixes) {
-    const { data, error: evLookupErr } = await client
-      .from('calendar_events')
-      .select('id,event_type,title,start_ts,end_ts,all_day,external_ref,linked_game_id,created_at,timezone,location_address,notes,platform_confirmations,status')
-      .eq('user_id', feed.user_id)
-      .like('external_ref', `${refPrefix}%`)
-    if (evLookupErr) throw new Error(`calendar_events lookup: ${evLookupErr.message}`)
-    for (const event of data ?? []) existingEventsById.set(String(event.id), event)
-  }
-  const existingEvents = Array.from(existingEventsById.values())
-  const existingByRef = new Map<string, any>()
-  for (const e of existingEvents ?? []) {
-    existingByRef.set(String(e.external_ref), e)
-  }
+
   const refsAlreadySeen = new Set<string>()
   for (const n of normalized) {
     if (existingByRef.has(n.externalRef) || existingByRef.has(n.legacyExternalRef)) {
