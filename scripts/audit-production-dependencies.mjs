@@ -25,6 +25,13 @@ const acceptedAdvisoryUrls = new Set([
   'https://github.com/advisories/GHSA-qwww-vcr4-c8h2',
 ])
 
+// An unavailable registry or malformed report must never turn the CI gate green.
+if (!report || report.error || !report.metadata?.vulnerabilities || !report.vulnerabilities
+  || ![0, 1].includes(audit.status)) {
+  console.error('npm audit failed to produce a complete vulnerability report.')
+  process.exit(1)
+}
+
 const severityRank = { low: 1, moderate: 2, high: 3, critical: 4 }
 
 function isAcceptedArchitectureSpecificFinding(vulnerability) {

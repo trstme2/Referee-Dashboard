@@ -1,5 +1,8 @@
 import dns from 'node:dns/promises'
 import net from 'node:net'
+import { Agent, fetch as undiciFetch } from 'undici'
+
+const defaultFetch = undiciFetch as unknown as typeof fetch
 
 const MAX_FEED_BYTES = 2 * 1024 * 1024
 const FEED_TIMEOUT_MS = 8_000
@@ -45,12 +48,13 @@ function isPrivateIpv4(ip: string): boolean {
 }
 
 function isPrivateIpv6(ip: string): boolean {
-  const value = ip.toLowerCase()
-  if (value === '::1' || value === '::') return true
-  if (value.startsWith('fc') || value.startsWith('fd')) return true
-  if (value.startsWith('fe8') || value.startsWith('fe9') || value.startsWith('fea') || value.startsWith('feb')) return true
-  const mapped = value.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/)
-  return mapped ? isPrivateIpv4(mapped[1]) : false
+  // URL canonicalization also normalizes expanded and IPv4-mapped forms.
+  const value = new URL(`https://[${ip}]/`).hostname.slice(1, -1)
+  const [first, second] = value.split(':').map(part => parseInt(part || '0', 16))
+  // Only global unicast; exclude special-purpose, documentation and 6to4 ranges.
+  return first < 0x2000 || first > 0x3fff
+    || (first === 0x2001 && (second < 0x200 || second === 0xdb8))
+    || first === 0x2002 || first === 0x3fff
 }
 
 function isBlockedIp(ip: string): boolean {
@@ -76,18 +80,31 @@ export function validateFeedUrl(raw: unknown): string {
   return url.toString()
 }
 
-async function assertPublicHost(url: URL): Promise<void> {
-  const host = url.hostname.toLowerCase().replace(/\.$/, '')
+async function createFeedDispatcher(url: URL, signal: AbortSignal): Promise<Agent> {
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
   if (!host || host === 'localhost' || host.endsWith('.localhost')) throw new Error('feed host is not allowed')
 
-  if (net.isIP(host)) {
-    if (isBlockedIp(host)) throw new Error('feed host is not allowed')
-    return
-  }
-
-  const results = await dns.lookup(host, { all: true, verbatim: true })
+  const results = net.isIP(host)
+    ? [{ address: host, family: net.isIP(host) }]
+    : await new Promise<Awaited<ReturnType<typeof dns.lookup>>[]>((resolve, reject) => {
+      const onAbort = () => reject(new Error('feed DNS lookup timeout'))
+      signal.addEventListener('abort', onAbort, { once: true })
+      if (signal.aborted) { onAbort(); return }
+      dns.lookup(host, { all: true, verbatim: true }).then(resolve, reject)
+        .finally(() => signal.removeEventListener('abort', onAbort))
+    })
   if (!results.length) throw new Error('feed host could not be resolved')
   if (results.some((result) => isBlockedIp(result.address))) throw new Error('feed host is not allowed')
+  // Pin the connection to these checked addresses, preserving the URL's Host/SNI
+  // and normal certificate validation. Never resolve this hostname a second time.
+  return new Agent({
+    connect: {
+      lookup: (_hostname, options, callback) => {
+        if (options.all) callback(null, results)
+        else callback(null, results[0].address, results[0].family)
+      },
+    },
+  })
 }
 
 function isAllowedContentType(value: string | null): boolean {
@@ -108,32 +125,40 @@ async function responseTextWithLimit(response: Response): Promise<string> {
   let total = 0
   let text = ''
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    total += value.byteLength
-    if (total > MAX_FEED_BYTES) throw new Error('feed is too large')
-    text += decoder.decode(value, { stream: true })
-  }
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > MAX_FEED_BYTES) throw new Error('feed is too large')
+      text += decoder.decode(value, { stream: true })
+    }
 
-  text += decoder.decode()
-  return text
+    text += decoder.decode()
+    return text
+  } finally {
+    await reader.cancel().catch(() => {})
+    reader.releaseLock()
+  }
 }
 
-export async function fetchCalendarFeedText(rawUrl: string, fetchImpl: typeof fetch = fetch): Promise<string> {
+export async function fetchCalendarFeedText(rawUrl: string, fetchImpl: typeof fetch = defaultFetch): Promise<string> {
   let current = new URL(validateFeedUrl(rawUrl))
 
   for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
-    await assertPublicHost(current)
-
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS)
+    let dispatcher: Agent | undefined
+    let response: Response | undefined
     try {
-      const response = await fetchImpl(current.toString(), {
+      dispatcher = await createFeedDispatcher(current, controller.signal)
+      const options: RequestInit & { dispatcher: Agent } = {
+        dispatcher,
         redirect: 'manual',
         signal: controller.signal,
         headers: { Accept: 'text/calendar,text/plain,application/calendar,*/*;q=0.1' },
-      })
+      }
+      response = await fetchImpl(current.toString(), options)
 
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get('location')
@@ -149,6 +174,8 @@ export async function fetchCalendarFeedText(rawUrl: string, fetchImpl: typeof fe
       return text
     } finally {
       clearTimeout(timeout)
+      await response?.body?.cancel().catch(() => {})
+      await dispatcher?.destroy()
     }
   }
 
@@ -168,7 +195,7 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export async function fetchCalendarFeedTextWithRetry(rawUrl: string, fetchImpl: typeof fetch = fetch, maxAttempts = DEFAULT_RETRY_ATTEMPTS): Promise<{ text: string; attempts: number }> {
+export async function fetchCalendarFeedTextWithRetry(rawUrl: string, fetchImpl: typeof fetch = defaultFetch, maxAttempts = DEFAULT_RETRY_ATTEMPTS): Promise<{ text: string; attempts: number }> {
   const attempts = Math.max(1, maxAttempts)
   let lastError: unknown = null
 
